@@ -36,7 +36,10 @@ npm run check    # Typprüfung (UI und DOM-freier Kern)
 npm run build    # erzeugt dist/index.html
 npm run verify   # alles zusammen: Typprüfung, Tests, Build (vor jedem Commit)
 npm run release  # verify + release/netzwerk-simulator.html neu erzeugen und offline prüfen
+npm run e2e      # Oberflächentests (Playwright) gegen den Build
 ```
+
+Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den installierten: unter Windows Edge, sonst Chrome (anderer Kanal mit `PW_CHANNEL`, z.B. `PW_CHANNEL=chromium` nach `npx playwright install chromium`).
 
 `npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält oder die CSP fehlt. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
 
