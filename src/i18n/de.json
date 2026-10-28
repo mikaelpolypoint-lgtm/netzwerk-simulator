@@ -166,7 +166,7 @@
   "address.pending": "wird bezogen …",
   "address.server": "DHCP-Server",
   "address.lease": "Lease gültig noch",
-  "config.dhcpExplain": "Beim Start der Simulation fragt das Gerät per Broadcast nach einem DHCP-Server und erhält Adresse, Maske, Gateway und DNS-Server zugewiesen. Der Server muss im selben Netz stehen (Router leiten DHCP nicht weiter).",
+  "config.dhcpExplain": "Beim Start der Simulation fragt das Gerät per Broadcast nach einem DHCP-Server und erhält Adresse, Maske, Gateway und DNS-Server zugewiesen. Der Server muss im selben Netz stehen, ausser ein Router ist als DHCP-Relay eingerichtet.",
 
   "dhcpServer.title": "DHCP-Server",
   "dhcpServer.enable": "DHCP-Server-Dienst auf diesem Rechner",
@@ -806,5 +806,9 @@
   "taskForm.text.http": "{from} ruft {url} ab.",
   "taskForm.text.dhcpLease": "{device} erhält eine Adresse per DHCP.",
   "taskForm.text.mail": "{from} kann eine E-Mail an {to} senden.",
-  "taskForm.text.packetSeen": "Du hast selbst ein {protocol}-Paket ausgelöst."
+  "taskForm.text.packetSeen": "Du hast selbst ein {protocol}-Paket ausgelöst.",
+
+  "key.ctrl": "Strg",
+  "key.delete": "Entf",
+  "toolbar.language": "Sprache"
 }

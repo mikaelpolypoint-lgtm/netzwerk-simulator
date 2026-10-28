@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '../../i18n';
+  import { LOCALES, locale, setLocale, t, type Locale } from '../../i18n';
   import { editor, type Mode } from '../state/editor.svelte';
 
   let { onopen, onsave }: { onopen: () => void; onsave: () => void } = $props();
@@ -12,15 +12,15 @@
 
   <div class="group" role="group">
     <button disabled={!editor.editable} onclick={() => editor.clear()}>{t('toolbar.new')}</button>
-    <button disabled={!editor.editable} onclick={onopen} title="{t('toolbar.open')} (Strg+O)">{t('toolbar.open')}</button>
-    <button onclick={onsave} title="{t('toolbar.save')} (Strg+S)">{t('toolbar.save')}</button>
+    <button disabled={!editor.editable} onclick={onopen} title="{t('toolbar.open')} ({t('key.ctrl')}+O)">{t('toolbar.open')}</button>
+    <button onclick={onsave} title="{t('toolbar.save')} ({t('key.ctrl')}+S)">{t('toolbar.save')}</button>
   </div>
 
   <div class="group" role="group">
-    <button disabled={!editor.canUndo} onclick={() => editor.undo()} title="{t('toolbar.undo')} (Strg+Z)">
+    <button disabled={!editor.canUndo} onclick={() => editor.undo()} title="{t('toolbar.undo')} ({t('key.ctrl')}+Z)">
       {t('toolbar.undo')}
     </button>
-    <button disabled={!editor.canRedo} onclick={() => editor.redo()} title="{t('toolbar.redo')} (Strg+Y)">
+    <button disabled={!editor.canRedo} onclick={() => editor.redo()} title="{t('toolbar.redo')} ({t('key.ctrl')}+Y)">
       {t('toolbar.redo')}
     </button>
   </div>
@@ -54,6 +54,15 @@
       </button>
     {/each}
   </div>
+
+  <label class="language">
+    <span class="visually-hidden">{t('toolbar.language')}</span>
+    <select value={locale()} onchange={(e) => setLocale(e.currentTarget.value as Locale)} title={t('toolbar.language')}>
+      {#each LOCALES as code (code)}
+        <option value={code}>{code.toUpperCase()}</option>
+      {/each}
+    </select>
+  </label>
 </header>
 
 <style>
@@ -65,6 +74,14 @@
     padding: 8px 12px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+  }
+  .language select {
+    font: inherit;
+    padding: 2px 4px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
   }
   h1 {
     margin: 0 8px 0 0;

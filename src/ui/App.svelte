@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { parseProject, serializeProject } from '../core';
-  import { t } from '../i18n';
+  import { locale, t } from '../i18n';
   import Canvas from './components/Canvas.svelte';
   import Desktop from './components/Desktop.svelte';
   import SimControls from './components/SimControls.svelte';
@@ -19,6 +19,12 @@
   import { simStore } from './state/sim.svelte';
 
   let fileInput: HTMLInputElement;
+
+  // Sprache der Seite für Vorlesehilfen und Silbentrennung.
+  $effect(() => {
+    document.documentElement.lang = locale();
+    document.title = t('app.title');
+  });
 
   // Im Aktionsmodus läuft die Simulation, beim Zurückwechseln pausiert sie (Zustände bleiben).
   $effect(() => {

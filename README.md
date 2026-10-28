@@ -48,7 +48,7 @@ Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/i
 src/
   core/   Simulationskern und Dateiformat: reines TypeScript, ohne DOM
   ui/     Svelte-Oberfläche (Editor, Palette, Inspektor)
-  i18n/   Sprachdateien (de.json; weitere Sprachen mit denselben Schlüsseln)
+  i18n/   Sprachdateien (de.json, fr.json; ein Test prüft gleiche Schlüssel)
 docs/     Konzept-Spezifikation
 ```
 

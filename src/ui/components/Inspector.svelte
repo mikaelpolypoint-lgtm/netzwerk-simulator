@@ -148,7 +148,7 @@
     <h3>{t('inspector.shortcuts')}</h3>
     <dl class="shortcuts">
       {#each shortcuts as [keys, label] (label)}
-        <dt><kbd>{keys}</kbd></dt>
+        <dt><kbd>{keys.replaceAll('Strg', t('key.ctrl')).replace('Entf', t('key.delete'))}</kbd></dt>
         <dd>{t(label)}</dd>
       {/each}
     </dl>
