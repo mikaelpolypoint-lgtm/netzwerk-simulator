@@ -23,4 +23,14 @@ describe('Beispielprojekte', () => {
     const codes = sim.getDeviceState('d1').console.map((l) => l.code);
     expect(codes.filter((c) => c === 'ping.reply')).toHaveLength(4);
   });
+
+  it('dhcp.json: alle drei Clients erhalten eine Adresse', () => {
+    const sim = new Simulation(load('dhcp.json'));
+    sim.runUntil(10_000);
+    expect(['d3', 'd4', 'd5'].map((id) => sim.getDeviceState(id).address?.ip)).toEqual([
+      '192.168.10.100',
+      '192.168.10.101',
+      '192.168.10.102',
+    ]);
+  });
 });

@@ -2,7 +2,9 @@
   import { DEVICE_SPECS, parseMask, type Device } from '../../core';
   import { t } from '../../i18n';
   import { typeLabel } from '../labels';
+  import { openDesktop } from '../state/desktop.svelte';
   import { editor } from '../state/editor.svelte';
+  import { simStore } from '../state/sim.svelte';
   import DeviceIcon from './DeviceIcon.svelte';
 
   let {
@@ -15,12 +17,17 @@
 
   const selected = $derived(editor.selection?.kind === 'device' && editor.selection.id === device.id);
   const isSource = $derived(editor.cableSource === device.id);
-  /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche. */
+  const isEndpoint = $derived(DEVICE_SPECS[device.type].role === 'endpoint');
+
+  /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche; per DHCP bezogene erst im Aktionsmodus. */
   const ip = $derived.by(() => {
-    const iface = device.interfaces[0];
-    if (DEVICE_SPECS[device.type].role !== 'endpoint' || !iface?.ip) return '';
-    const prefix = iface.mask ? parseMask(iface.mask) : null;
-    return prefix === null ? iface.ip : `${iface.ip}/${prefix}`;
+    if (!isEndpoint) return '';
+    const live = device.dhcp && !editor.editable ? (simStore.tick, simStore.sim?.getDeviceState(device.id).address) : undefined;
+    const address = device.dhcp ? live?.ip : device.interfaces[0]?.ip;
+    const mask = device.dhcp ? live?.mask : device.interfaces[0]?.mask;
+    if (!address) return device.dhcp ? t('canvas.dhcp') : '';
+    const prefix = mask ? parseMask(mask) : null;
+    return prefix === null ? address : `${address}/${prefix}`;
   });
 
   function onkeydown(event: KeyboardEvent) {
@@ -29,6 +36,11 @@
     event.stopPropagation();
     if (editor.tool === 'cable') editor.cableClick(device.id);
     else editor.select({ kind: 'device', id: device.id });
+  }
+
+  /** Doppelklick im Aktionsmodus öffnet den Desktop des Endgeräts. */
+  function ondblclick() {
+    if (!editor.editable && isEndpoint) openDesktop(device.id);
   }
 </script>
 
@@ -44,6 +56,7 @@
   onpointerdown={(e) => onpointerdown(e, device)}
   onfocus={() => editor.tool === 'select' && editor.select({ kind: 'device', id: device.id })}
   {onkeydown}
+  {ondblclick}
 >
   <rect class="hit" x="-36" y="-30" width="72" height="60" rx="10" />
   <DeviceIcon type={device.type} />

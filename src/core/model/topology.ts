@@ -1,8 +1,19 @@
+import { checkDhcpServer, normalizeDhcpServer } from '../net/dhcp';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, normalizeRoute } from '../net/routing';
 import { DEVICE_SPECS } from './devices';
 import { macFor } from './mac';
-import type { Cable, Device, DeviceType, Endpoint, NetInterface, Point, StaticRoute, Topology } from './types';
+import type {
+  Cable,
+  Device,
+  DeviceType,
+  DhcpServerConfig,
+  Endpoint,
+  NetInterface,
+  Point,
+  StaticRoute,
+  Topology,
+} from './types';
 
 export const MAX_NAME_LENGTH = 32;
 
@@ -28,7 +39,14 @@ export type ErrorCode =
   | 'unknownRoute'
   | 'networkHasHostBits'
   | 'routeNeedsTarget'
-  | 'duplicateRoute';
+  | 'duplicateRoute'
+  | 'dhcpServerNeedsStatic'
+  | 'notAServer'
+  | 'dhcpServerNeedsAddress'
+  | 'dhcpRangeOutsideSubnet'
+  | 'dhcpRangeOrder'
+  | 'dhcpRangeReserved'
+  | 'dhcpLeaseTime';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -260,25 +278,44 @@ export function configureHost(t: Topology, id: string, input: HostConfigInput): 
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
   if (DEVICE_SPECS[device.type].role !== 'endpoint') return fail('notAnEndpoint');
+  if (input.dhcp && device.dhcpServer) return fail('dhcpServerNeedsStatic');
   const { errors } = checkHostConfig(input);
   const first = errors[0];
   if (first) return { ok: false, error: { code: first.code as ErrorCode, params: first.params, field: first.field } };
 
-  const gateway = input.gateway?.trim() ?? '';
-  const dns = input.dns?.trim() ?? '';
+  // Per DHCP kommen Adresse, Maske, Gateway und DNS vom Server: statische Werte entfallen.
+  const gateway = input.dhcp ? '' : (input.gateway?.trim() ?? '');
+  const dns = input.dhcp ? '' : (input.dns?.trim() ?? '');
   return ok(
     updateDevice(t, id, (d) => {
-      const { gateway: _g, dns: _d, ...rest } = d;
+      const { gateway: _g, dns: _d, dhcp: _dhcp, ...rest } = d;
       return {
         ...rest,
         interfaces: d.interfaces.map((i, n) => {
           if (n !== 0) return i;
           const { ip: _ip, mask: _mask, ...base } = i;
-          return { ...base, ...normalized(input.ip, input.mask) };
+          return input.dhcp ? base : { ...base, ...normalized(input.ip, input.mask) };
         }),
         ...(gateway ? { gateway } : {}),
         ...(dns ? { dns } : {}),
+        ...(input.dhcp ? { dhcp: true } : {}),
       };
+    }),
+  );
+}
+
+/** Richtet den DHCP-Server-Dienst eines Rechners ein oder entfernt ihn (`null`). */
+export function setDhcpServer(t: Topology, id: string, config: DhcpServerConfig | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (config) {
+    const issue = checkDhcpServer(device, config);
+    if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  }
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { dhcpServer: _s, ...rest } = d;
+      return config ? { ...rest, dhcpServer: normalizeDhcpServer(config) } : rest;
     }),
   );
 }

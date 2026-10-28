@@ -3,7 +3,9 @@
   import { getDevice, isDeviceType, type Device, type Point } from '../../core';
   import { t } from '../../i18n';
   import { DEVICE_MIME } from '../dnd';
+  import { protocolOf } from '../packets';
   import { GRID, editor } from '../state/editor.svelte';
+  import { simStore } from '../state/sim.svelte';
   import CableLine from './CableLine.svelte';
   import DeviceNode from './DeviceNode.svelte';
 
@@ -41,6 +43,27 @@
       return a && b ? [{ cable, a, b }] : [];
     }),
   );
+
+  /** Rahmen unterwegs als Punkte, die vom Sender zum Empfänger wandern. */
+  const dots = $derived.by(() => {
+    void simStore.tick;
+    const sim = simStore.sim;
+    if (editor.editable || !sim) return [];
+    return sim.getInFlight().flatMap((entry) => {
+      const from = getDevice(editor.topology, entry.from.device);
+      const to = getDevice(editor.topology, entry.to.device);
+      if (!from || !to) return [];
+      const progress = Math.min(1, Math.max(0, (sim.now - entry.sent) / (entry.arrives - entry.sent)));
+      return [
+        {
+          id: entry.id,
+          x: from.position.x + (to.position.x - from.position.x) * progress,
+          y: from.position.y + (to.position.y - from.position.y) * progress,
+          protocol: protocolOf(entry.frame).toLowerCase(),
+        },
+      ];
+    });
+  });
 
   function local(event: { clientX: number; clientY: number }): Point {
     const rect = svg.getBoundingClientRect();
@@ -149,6 +172,9 @@
       {#each editor.topology.devices as device (device.id)}
         <DeviceNode {device} onpointerdown={onDevicePointerDown} />
       {/each}
+      {#each dots as dot (dot.id)}
+        <circle class="dot-packet dot-{dot.protocol}" cx={dot.x} cy={dot.y} r="7" />
+      {/each}
     </g>
   </svg>
 
@@ -185,6 +211,21 @@
   }
   .dot {
     fill: var(--grid);
+  }
+  .dot-packet {
+    fill: var(--dot, var(--accent));
+    stroke: var(--bg);
+    stroke-width: 2;
+    pointer-events: none;
+  }
+  .dot-arp {
+    --dot: var(--dot-arp);
+  }
+  .dot-icmp {
+    --dot: var(--dot-icmp);
+  }
+  .dot-dhcp {
+    --dot: var(--dot-dhcp);
   }
   .rubber {
     stroke: var(--accent);

@@ -12,10 +12,12 @@ import {
   removeDevice,
   removeStaticRoute,
   renameDevice,
+  setDhcpServer,
   setInterfaceAddress,
   setInterfaceCount,
   suggestName,
   type DeviceType,
+  type DhcpServerConfig,
   type HostConfigInput,
   type Point,
   type Result,
@@ -224,6 +226,10 @@ class Editor {
 
   setInterfaceAddress(id: string, index: number, ip: string, mask: string): TopologyError | null {
     return this.#applyForm(setInterfaceAddress(this.topology, id, index, ip, mask));
+  }
+
+  setDhcpServer(id: string, config: DhcpServerConfig | null): TopologyError | null {
+    return this.#applyForm(setDhcpServer(this.topology, id, config));
   }
 
   addStaticRoute(id: string, route: StaticRoute): TopologyError | null {

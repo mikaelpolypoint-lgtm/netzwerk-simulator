@@ -4,6 +4,7 @@
   import { protocolOf, toRow } from '../packets';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
+  import PacketDetails from './PacketDetails.svelte';
 
   /** Mehr Zeilen machen die Tabelle träge; ältere bleiben in der Simulation erhalten. */
   const MAX_ROWS = 500;
@@ -14,11 +15,14 @@
   let scroller: HTMLDivElement;
   let followTail = true;
 
+  let selectedId = $state<number | null>(null);
+
   const log = $derived((simStore.tick, [...(simStore.sim?.getPacketLog() ?? [])]));
-  const protocols = $derived([...new Set(log.map(protocolOf))].sort());
+  const protocols = $derived([...new Set(log.map((e) => protocolOf(e.frame)))].sort());
+  const selected = $derived(selectedId === null ? undefined : log.find((e) => e.id === selectedId));
   const filtered = $derived(
     log.filter((entry) => {
-      if (protocol && protocolOf(entry) !== protocol) return false;
+      if (protocol && protocolOf(entry.frame) !== protocol) return false;
       if (!device) return true;
       if (direction === 'sent') return entry.from.device === device;
       if (direction === 'received') return entry.to.device === device;
@@ -26,7 +30,6 @@
     }),
   );
   const rows = $derived(filtered.slice(-MAX_ROWS).map((entry) => toRow(editor.topology, entry)));
-  const clock = $derived((simStore.tick, ((simStore.sim?.now ?? 0) / 1000).toFixed(1)));
 
   // Neue Zeilen nur dann ins Bild holen, wenn man ohnehin unten war.
   $effect.pre(() => {
@@ -69,15 +72,16 @@
         <option value="received">{t('packets.received')}</option>
       </select>
     </label>
-    <span class="clock" aria-live="off">{t('packets.clock', { time: clock })}</span>
-    <button onclick={() => simStore.clearPacketLog()} disabled={log.length === 0}>{t('packets.clear')}</button>
+    <button class="clear" onclick={() => simStore.clearPacketLog()} disabled={log.length === 0}>{t('packets.clear')}</button>
   </header>
 
+  <div class="body">
   <div class="scroller" bind:this={scroller}>
     {#if rows.length === 0}
       <p class="muted empty">{t('packets.empty')}</p>
     {:else}
-      <table>
+      <table aria-describedby="packets-hint">
+        <caption id="packets-hint" class="visually-hidden">{t('packets.selectHint')}</caption>
         <thead>
           <tr>
             <th scope="col" class="num">{t('packets.no')}</th>
@@ -91,7 +95,20 @@
         </thead>
         <tbody>
           {#each rows as row (row.id)}
-            <tr class="proto-{row.protocol.toLowerCase()}" class:lost={row.lost}>
+            <tr
+              class="proto-{row.protocol.toLowerCase()}"
+              class:lost={row.lost}
+              class:selected={row.id === selectedId}
+              tabindex="0"
+              aria-selected={row.id === selectedId}
+              onclick={() => (selectedId = row.id)}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectedId = row.id;
+                }
+              }}
+            >
               <td class="num">{row.id}</td>
               <td class="num">{row.time}</td>
               <td>{row.route}</td>
@@ -104,6 +121,12 @@
         </tbody>
       </table>
     {/if}
+  </div>
+  {#if selected}
+    <div class="detail-pane">
+      <PacketDetails entry={selected} onclose={() => (selectedId = null)} />
+    </div>
+  {/if}
   </div>
 </section>
 
@@ -142,15 +165,35 @@
     border: 1px solid var(--border);
     border-radius: 4px;
   }
-  .clock {
+  .clear {
     margin-left: auto;
-    font-variant-numeric: tabular-nums;
-    color: var(--muted);
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
   }
   .scroller {
     flex: 1;
-    min-height: 0;
+    min-width: 0;
     overflow: auto;
+  }
+  .detail-pane {
+    width: min(360px, 45%);
+    flex-shrink: 0;
+  }
+  tbody tr {
+    cursor: pointer;
+  }
+  tbody tr:hover td {
+    background: var(--hover);
+  }
+  tbody tr.selected td {
+    background: var(--selected-soft);
+  }
+  tbody tr:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
   }
   .empty {
     padding: 12px;
@@ -200,6 +243,9 @@
   }
   .proto-icmp {
     --proto: var(--proto-icmp);
+  }
+  .proto-dhcp {
+    --proto: var(--proto-dhcp);
   }
   .lost td {
     color: var(--danger);

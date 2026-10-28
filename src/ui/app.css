@@ -22,6 +22,10 @@
   --console-text: #e3e9f0;
   --proto-arp: #f5e3b3;
   --proto-icmp: #d6e4fb;
+  --proto-dhcp: #d3f2e5;
+  --dot-arp: #c27c0e;
+  --dot-icmp: #1d5fd6;
+  --dot-dhcp: #067a52;
 
   --endpoint: #1d5fd6;
   --endpoint-soft: #dde8fc;
@@ -54,6 +58,10 @@
     --console-text: #d7dee7;
     --proto-arp: #4a3c14;
     --proto-icmp: #1c3252;
+    --proto-dhcp: #123a2c;
+    --dot-arp: #f5b041;
+    --dot-icmp: #6aa5ff;
+    --dot-dhcp: #3ccf96;
 
     --endpoint: #6aa5ff;
     --endpoint-soft: #1c3252;
@@ -112,6 +120,15 @@ button[aria-pressed='true'] {
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 1px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Farbe markiert die Rolle eines Geräts (Konzept, Abschnitt 8). */

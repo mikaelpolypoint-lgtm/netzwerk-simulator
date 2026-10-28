@@ -3,6 +3,8 @@
   import { parseProject, serializeProject } from '../core';
   import { t } from '../i18n';
   import Canvas from './components/Canvas.svelte';
+  import Desktop from './components/Desktop.svelte';
+  import SimControls from './components/SimControls.svelte';
   import Inspector from './components/Inspector.svelte';
   import PacketList from './components/PacketList.svelte';
   import Palette from './components/Palette.svelte';
@@ -12,6 +14,7 @@
   import { downloadText, projectFilename } from './persist/files';
   import { loadAutosave, saveAutosave } from './persist/storage';
   import { editor } from './state/editor.svelte';
+  import { closeDesktop } from './state/desktop.svelte';
   import { simStore } from './state/sim.svelte';
 
   let fileInput: HTMLInputElement;
@@ -19,7 +22,11 @@
   // Im Aktionsmodus läuft die Simulation, beim Zurückwechseln pausiert sie (Zustände bleiben).
   $effect(() => {
     const { mode, topology, generation } = editor;
-    untrack(() => (mode === 'action' ? simStore.activate(topology, generation) : simStore.deactivate()));
+    untrack(() => {
+      if (mode === 'action') return simStore.activate(topology, generation);
+      simStore.deactivate();
+      closeDesktop();
+    });
   });
   let restored = $state(false);
 
@@ -144,13 +151,14 @@
   <Palette />
   <main>
     {#if !editor.editable}
-      <p class="mode-hint">{t('mode.actionHint')}</p>
+      <SimControls />
     {/if}
     <Canvas />
     {#if !editor.editable}
       <div class="packet-panel">
         <PacketList />
       </div>
+      <Desktop />
     {/if}
   </main>
   <Inspector />
@@ -190,13 +198,6 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-  }
-  .mode-hint {
-    margin: 0;
-    padding: 8px 12px;
-    background: var(--selected-soft);
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
   }
   main > :global(.canvas) {
     flex: 1;

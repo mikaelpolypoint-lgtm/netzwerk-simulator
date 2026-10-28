@@ -2,7 +2,7 @@ import { DEVICE_SPECS, isDeviceType } from '../model/devices';
 import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
 import { MAX_NAME_LENGTH, deviceSeq, findSwitchLoop } from '../model/topology';
-import type { Cable, Device, Endpoint, NetInterface, StaticRoute, Topology } from '../model/types';
+import type { Cable, Device, DhcpServerConfig, Endpoint, NetInterface, StaticRoute, Topology } from '../model/types';
 
 export const FORMAT_ID = 'netzwerk-simulator';
 export const FORMAT_VERSION = 1;
@@ -179,6 +179,20 @@ function readDevice(v: unknown, path: string): Device {
   const device: Device = { id, type, name, position, interfaces };
   if (o.gateway !== undefined) device.gateway = ip(o.gateway, `${path}.gateway`);
   if (o.dns !== undefined) device.dns = ip(o.dns, `${path}.dns`);
+  if (o.dhcp !== undefined) {
+    if (typeof o.dhcp !== 'boolean') throw new Invalid(`${path}.dhcp`);
+    if (o.dhcp) device.dhcp = true;
+  }
+  if (o.dhcpServer !== undefined) {
+    const p = `${path}.dhcpServer`;
+    const s = obj(o.dhcpServer, p);
+    const leaseTime = int(s.leaseTime, `${p}.leaseTime`);
+    if (leaseTime < 1) throw new Invalid(`${p}.leaseTime`);
+    const server: DhcpServerConfig = { start: ip(s.start, `${p}.start`), end: ip(s.end, `${p}.end`), leaseTime };
+    if (s.gateway !== undefined) server.gateway = ip(s.gateway, `${p}.gateway`);
+    if (s.dns !== undefined) server.dns = ip(s.dns, `${p}.dns`);
+    device.dhcpServer = server;
+  }
   if (o.routes !== undefined) {
     device.routes = arr(o.routes, `${path}.routes`).map((raw, i): StaticRoute => {
       const p = `${path}.routes[${i}]`;

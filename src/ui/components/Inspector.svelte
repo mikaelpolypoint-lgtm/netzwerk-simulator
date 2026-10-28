@@ -3,6 +3,7 @@
   import { t } from '../../i18n';
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import DhcpServerForm from './DhcpServerForm.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
   import HostPanel from './HostPanel.svelte';
   import NetDevicePanel from './NetDevicePanel.svelte';
@@ -80,6 +81,9 @@
     {#if spec.role === 'endpoint'}
       {#if editor.editable}
         <HostConfigForm {device} />
+        {#if device.type === 'pc'}
+          <DhcpServerForm {device} />
+        {/if}
       {:else}
         <HostPanel {device} />
       {/if}

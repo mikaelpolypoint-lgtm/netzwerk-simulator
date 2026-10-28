@@ -1,6 +1,15 @@
+import type { Device } from '../model/types';
 import { LIMITED_BROADCAST, broadcastOf, formatIp, parseIp } from '../net/ipv4';
 import { buildRoutes, interfaceAddresses, lookupRoute, type IfaceAddress, type Route } from '../net/routing';
-import { BROADCAST_MAC, ZERO_MAC, type ArpPacket, type EthernetFrame, type IcmpMessage, type Ipv4Packet } from './frames';
+import {
+  BROADCAST_MAC,
+  ZERO_MAC,
+  type ArpPacket,
+  type EthernetFrame,
+  type IcmpMessage,
+  type Ipv4Packet,
+  type UdpDatagram,
+} from './frames';
 import type { NodeContext, SimNode } from './simulation';
 
 export const ARP_TIMEOUT = 1000;
@@ -8,11 +17,6 @@ export const ARP_ATTEMPTS = 2;
 /** Lebensdauer eines ARP-Eintrags (5 Minuten virtuelle Zeit). */
 export const ARP_TTL = 300_000;
 export const DEFAULT_TTL = 64;
-
-export const PING_COUNT = 4;
-export const PING_INTERVAL = 1000;
-export const PING_TIMEOUT = 3000;
-export const PING_SIZE = 32;
 
 export interface ArpEntry {
   ip: string;
@@ -35,46 +39,66 @@ interface PendingResolution {
 /** Fehler, die schon beim Absender auffallen. */
 export type SendError = 'noRoute' | 'hostUnreachable' | 'gatewayUnreachable';
 
+export interface SendOptions {
+  src?: string;
+  ttl?: number;
+}
+
 const isLoopback = (ip: number) => ip >>> 24 === 127;
-const isIcmpError = (icmp: IcmpMessage) => icmp.type === 'destUnreachable' || icmp.type === 'timeExceeded';
+export const isIcmpError = (icmp: IcmpMessage) => icmp.type === 'destUnreachable' || icmp.type === 'timeExceeded';
 
 /**
- * IPv4-Teilnehmer mit ARP und ICMP. Endgeräte nutzen ihn direkt;
- * Vermittlungsrechner (`RouterNode`) leiten zusätzlich weiter.
+ * IPv4-Teilnehmer mit ARP und ICMP-Echo. Endgeräte (`HostNode`) ergänzen
+ * Anwendungen, Vermittlungsrechner (`RouterNode`) die Weiterleitung.
  */
 export class IpNode implements SimNode {
   protected readonly forwarding: boolean = false;
   #arp = new Map<string, ArpEntry>();
   #pending = new Map<string, PendingResolution>();
   #ipId = 0;
-  #icmpId = 0;
-  #ping: PingRun | null = null;
 
-  constructor(protected readonly ctx: NodeContext) {}
+  constructor(readonly ctx: NodeContext) {}
 
-  protected interfaces(): IfaceAddress[] {
-    const device = this.ctx.device();
+  /** Gerät mit der tatsächlich wirksamen Konfiguration (Endgeräte: ggf. per DHCP bezogen). */
+  protected effectiveDevice(): Device | undefined {
+    return this.ctx.device();
+  }
+
+  interfaces(): IfaceAddress[] {
+    const device = this.effectiveDevice();
     return device ? interfaceAddresses(device) : [];
   }
 
-  protected routes(): Route[] {
-    const device = this.ctx.device();
+  routes(): Route[] {
+    const device = this.effectiveDevice();
     return device ? buildRoutes(device).routes : [];
   }
 
-  state() {
+  arpEntries(): ArpEntry[] {
     const now = this.ctx.now;
-    const arp = [...this.#arp.values()]
+    return [...this.#arp.values()]
       .filter((e) => e.expires > now)
       .sort((a, b) => (parseIp(a.ip) ?? 0) - (parseIp(b.ip) ?? 0));
-    return { arp };
+  }
+
+  clearArp() {
+    this.#arp.clear();
+  }
+
+  state(): object {
+    return { arp: this.arpEntries() };
   }
 
   receive(index: number, frame: EthernetFrame) {
     const mac = this.ctx.device()?.interfaces[index]?.mac;
     if (!mac || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
     if (frame.payload.kind === 'arp') this.#onArp(index, frame.payload);
-    else this.#onIp(index, frame.payload);
+    else this.#onIp(index, frame.payload, frame.src);
+  }
+
+  /** Nachbarn auch ohne ARP bekannt machen, z.B. den DHCP-Server aus seinem Ack. */
+  learnNeighbor(ip: string, mac: string, iface: number) {
+    this.#learn(ip, mac, iface);
   }
 
   // --- ARP -----------------------------------------------------------------
@@ -158,16 +182,16 @@ export class IpNode implements SimNode {
 
   // --- IPv4 ----------------------------------------------------------------
 
-  #isOwn(ip: number): boolean {
+  isOwn(ip: number): boolean {
     return isLoopback(ip) || this.interfaces().some((i) => i.ip === ip);
   }
 
-  #onIp(index: number, packet: Ipv4Packet) {
+  #onIp(index: number, packet: Ipv4Packet, srcMac: string) {
     const dst = parseIp(packet.dst);
     if (dst === null) return;
     const iface = this.interfaces().find((i) => i.index === index);
     const broadcast = dst === LIMITED_BROADCAST || (iface !== undefined && dst === broadcastOf(iface.ip, iface.prefix));
-    if (this.#isOwn(dst) || broadcast) this.deliver(packet, broadcast);
+    if (this.isOwn(dst) || broadcast) this.#deliver(packet, broadcast, index, srcMac);
     else if (this.forwarding && iface) this.#forward(iface, packet);
   }
 
@@ -192,36 +216,48 @@ export class IpNode implements SimNode {
   }
 
   #icmpError(from: IfaceAddress, original: Ipv4Packet, type: 'destUnreachable' | 'timeExceeded', code?: 'net' | 'host') {
+    const payload = original.payload;
     // Auf Fehlermeldungen antwortet man nie mit Fehlermeldungen (sonst Ping-Pong).
-    if (isIcmpError(original.payload)) return;
+    if (payload.kind === 'icmp' && isIcmpError(payload)) return;
     const message: IcmpMessage = {
       kind: 'icmp',
       type,
       id: 0,
       seq: 0,
       size: 0,
-      original: { src: original.src, dst: original.dst, id: original.payload.id, seq: original.payload.seq },
+      original: {
+        src: original.src,
+        dst: original.dst,
+        id: payload.kind === 'icmp' ? payload.id : 0,
+        seq: payload.kind === 'icmp' ? payload.seq : 0,
+      },
       ...(code ? { code } : {}),
     };
     this.sendIp(original.src, message, { src: formatIp(from.ip) });
   }
 
-  protected deliver(packet: Ipv4Packet, broadcast: boolean) {
-    const icmp = packet.payload;
-    if (icmp.type === 'echoRequest' && !broadcast) {
-      this.sendIp(packet.src, { ...icmp, type: 'echoReply' }, { src: packet.dst });
-    } else if (icmp.type === 'echoReply') {
-      this.#ping?.onReply(packet);
-    } else if (isIcmpError(icmp)) {
-      this.#ping?.onIcmpError(packet);
+  #deliver(packet: Ipv4Packet, broadcast: boolean, index: number, srcMac = '') {
+    const payload = packet.payload;
+    if (payload.kind === 'udp') {
+      this.onUdp(packet, payload, index, srcMac);
+    } else if (payload.type === 'echoRequest') {
+      if (!broadcast) this.sendIp(packet.src, { ...payload, type: 'echoReply' }, { src: packet.dst });
+    } else {
+      this.onIcmp(packet);
     }
   }
+
+  /** Anwendungen hängen sich hier ein (Ping, Traceroute). */
+  protected onIcmp(_packet: Ipv4Packet) {}
+
+  /** UDP-Dienste hängen sich hier ein (DHCP, später DNS). */
+  protected onUdp(_packet: Ipv4Packet, _datagram: UdpDatagram, _index: number, _srcMac: string) {}
 
   /**
    * Sendet ein IP-Paket: Route suchen, nächsten Hop per ARP auflösen, Rahmen senden.
    * Fehler, die schon beim Absender auffallen, meldet `onError`.
    */
-  sendIp(dstText: string, payload: IcmpMessage, options: { src?: string; ttl?: number } = {}, onError?: (e: SendError) => void) {
+  sendIp(dstText: string, payload: Ipv4Packet['payload'], options: SendOptions = {}, onError?: (e: SendError) => void) {
     const dst = parseIp(dstText);
     if (dst === null) return;
     const build = (src: string): Ipv4Packet => ({
@@ -234,9 +270,17 @@ export class IpNode implements SimNode {
     });
 
     // Eigene Adresse und Loopback verlassen das Gerät nicht.
-    if (this.#isOwn(dst)) {
+    if (this.isOwn(dst)) {
       const packet = build(dstText);
-      this.ctx.schedule(0, () => this.deliver(packet, false));
+      this.ctx.schedule(0, () => this.#deliver(packet, false, 0));
+      return;
+    }
+
+    // Broadcast an alle im eigenen Netz, unabhängig von Routen.
+    if (dst === LIMITED_BROADCAST) {
+      const iface = this.interfaces()[0];
+      if (!iface) return void onError?.('noRoute');
+      this.ctx.transmit(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: build(formatIp(iface.ip)) });
       return;
     }
 
@@ -247,7 +291,7 @@ export class IpNode implements SimNode {
       return;
     }
     const packet = build(formatIp(iface.ip));
-    if (dst === LIMITED_BROADCAST || (route.via === null && dst === broadcastOf(iface.ip, iface.prefix))) {
+    if (route.via === null && dst === broadcastOf(iface.ip, iface.prefix)) {
       this.ctx.transmit(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: packet });
       return;
     }
@@ -257,113 +301,18 @@ export class IpNode implements SimNode {
     });
   }
 
-  // --- Anwendungen ---------------------------------------------------------
-
-  ping(targetText: string) {
-    const target = parseIp(targetText.trim());
-    if (target === null) {
-      this.ctx.print('ping.invalidTarget', { target: targetText.trim() });
-      return;
-    }
-    const own = this.#isOwn(target);
-    const iface = this.interfaces()[0];
-    if (!own) {
-      if (!iface) {
-        this.ctx.print('ping.noAddress');
-        return;
-      }
-      if (!this.ctx.isConnected(iface.index)) {
-        this.ctx.print('ping.noLink');
-        return;
-      }
-      if (!lookupRoute(this.routes(), target)) {
-        this.ctx.print('ping.noRoute', { target: formatIp(target) });
-        return;
-      }
-    }
-    this.#ping?.cancel();
-    this.#ping = new PingRun(this, this.ctx, formatIp(target), ++this.#icmpId, this.ctx.device()?.gateway ?? '');
-    this.#ping.start();
+  /** Sendet ohne eigene Adresse an alle (DHCP vor der Adressvergabe): Absender 0.0.0.0. */
+  sendUnconfiguredBroadcast(index: number, payload: UdpDatagram) {
+    const mac = this.ctx.device()?.interfaces[index]?.mac;
+    if (!mac) return;
+    this.ctx.transmit(index, {
+      src: mac,
+      dst: BROADCAST_MAC,
+      payload: { kind: 'ipv4', src: '0.0.0.0', dst: '255.255.255.255', ttl: DEFAULT_TTL, id: ++this.#ipId, payload },
+    });
   }
 }
 
 export class RouterNode extends IpNode {
   protected override readonly forwarding = true;
-}
-
-/** Ablauf von "ping": vier Echo-Anfragen, jeweils eine Sekunde nach Antwort oder Zeitüberschreitung. */
-class PingRun {
-  #seq = 0;
-  #received = 0;
-  #outstanding = new Map<number, number>();
-  #cancelled = false;
-
-  constructor(
-    private readonly host: IpNode,
-    private readonly ctx: NodeContext,
-    private readonly target: string,
-    private readonly id: number,
-    private readonly gateway: string,
-  ) {}
-
-  start() {
-    this.ctx.print('ping.start', { target: this.target, size: PING_SIZE });
-    this.#send();
-  }
-
-  cancel() {
-    this.#cancelled = true;
-  }
-
-  #send() {
-    if (this.#cancelled) return;
-    const seq = ++this.#seq;
-    this.#outstanding.set(seq, this.ctx.now);
-    this.ctx.schedule(PING_TIMEOUT, () => {
-      if (this.#settle(seq)) this.ctx.print('ping.timeout');
-    });
-    const request: IcmpMessage = { kind: 'icmp', type: 'echoRequest', id: this.id, seq, size: PING_SIZE };
-    this.host.sendIp(this.target, request, {}, (error) => {
-      if (this.#settle(seq)) this.ctx.print(`ping.${error}`, { target: this.target, gateway: this.gateway });
-    });
-  }
-
-  onReply(packet: Ipv4Packet) {
-    const icmp = packet.payload;
-    if (icmp.id !== this.id) return;
-    const sentAt = this.#outstanding.get(icmp.seq);
-    if (sentAt === undefined || !this.#settle(icmp.seq)) return;
-    this.#received++;
-    this.ctx.print('ping.reply', { from: packet.src, size: icmp.size, time: this.ctx.now - sentAt, ttl: packet.ttl });
-  }
-
-  /** Ein Router meldet, dass unsere Anfrage nicht zugestellt werden konnte. */
-  onIcmpError(packet: Ipv4Packet) {
-    const icmp = packet.payload;
-    const original = icmp.original;
-    if (!original || original.id !== this.id || !this.#settle(original.seq)) return;
-    if (icmp.type === 'timeExceeded') this.ctx.print('ping.ttlExpired', { from: packet.src });
-    else this.ctx.print(icmp.code === 'host' ? 'ping.hostUnreachableFrom' : 'ping.netUnreachableFrom', { from: packet.src });
-  }
-
-  /** Schliesst eine Anfrage ab (genau einmal) und plant die nächste. */
-  #settle(seq: number): boolean {
-    if (this.#cancelled || !this.#outstanding.delete(seq)) return false;
-    if (this.#seq < PING_COUNT) this.ctx.schedule(PING_INTERVAL, () => this.#send());
-    else this.ctx.schedule(0, () => this.#finish());
-    return true;
-  }
-
-  #finish() {
-    if (this.#cancelled) return;
-    const sent = this.#seq;
-    const lost = sent - this.#received;
-    this.ctx.print('ping.summary', {
-      target: this.target,
-      sent,
-      received: this.#received,
-      lost,
-      percent: Math.round((lost / sent) * 100),
-    });
-  }
 }

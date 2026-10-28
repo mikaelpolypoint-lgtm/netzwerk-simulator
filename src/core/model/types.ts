@@ -27,8 +27,22 @@ export interface Device {
   /** Nur Endgeräte: Standardgateway und DNS-Server. */
   gateway?: string;
   dns?: string;
+  /** Nur Endgeräte: Adresse per DHCP beziehen statt statisch. */
+  dhcp?: boolean;
+  /** Nur Rechner: DHCP-Server-Dienst. */
+  dhcpServer?: DhcpServerConfig;
   /** Nur Vermittlungsrechner: statische Routen. */
   routes?: StaticRoute[];
+}
+
+export interface DhcpServerConfig {
+  /** Erste und letzte vergebene Adresse; die Maske ist die des Servers. */
+  start: string;
+  end: string;
+  gateway?: string;
+  dns?: string;
+  /** Lease-Dauer in Sekunden. */
+  leaseTime: number;
 }
 
 export interface StaticRoute {

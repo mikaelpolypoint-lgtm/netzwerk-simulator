@@ -1,7 +1,11 @@
+import { DEVICE_SPECS } from '../model/devices';
 import { cableAt, getCable, getDevice, otherEnd } from '../model/topology';
 import type { Device, Endpoint, Topology } from '../model/types';
+import { runCommand } from './commands';
+import type { LeaseRecord } from './dhcp';
 import type { EthernetFrame } from './frames';
-import { IpNode, RouterNode, type ArpEntry } from './ip';
+import { HostNode, type AddressState } from './host';
+import { RouterNode, type ArpEntry } from './ip';
 import { EventQueue } from './queue';
 import { ModemNode, SwitchNode, type MacEntry } from './switch';
 
@@ -33,6 +37,8 @@ export interface DeviceState {
   console: ConsoleLine[];
   arp?: ArpEntry[];
   macTable?: MacEntry[];
+  address?: AddressState;
+  dhcpLeases?: LeaseRecord[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -43,6 +49,7 @@ export interface NodeContext {
   transmit(iface: number, frame: EthernetFrame): boolean;
   isConnected(iface: number): boolean;
   print(code: string, params?: ConsoleLine['params']): void;
+  clearConsole(): void;
 }
 
 export interface SimNode {
@@ -59,12 +66,14 @@ export class Simulation {
   #queue = new EventQueue();
   #now = 0;
   #log: PacketLogEntry[] = [];
+  #inFlight = new Set<PacketLogEntry>();
   #nextLogId = 1;
   #nodes = new Map<string, SimNode>();
   #consoles = new Map<string, ConsoleLine[]>();
 
   constructor(topology: Topology) {
     this.#topology = topology;
+    this.#bootDhcpClients();
   }
 
   get now(): number {
@@ -83,6 +92,14 @@ export class Simulation {
         this.#nodes.delete(id);
         this.#consoles.delete(id);
       }
+    }
+    this.#bootDhcpClients();
+  }
+
+  /** Wie beim Einschalten: DHCP-Clients ohne Adresse fragen nach einer. */
+  #bootDhcpClients() {
+    for (const device of this.#topology.devices) {
+      if (device.dhcp && DEVICE_SPECS[device.type].role === 'endpoint') this.#host(device.id)?.ensureDhcp();
     }
   }
 
@@ -128,6 +145,11 @@ export class Simulation {
     return this.#log;
   }
 
+  /** Rahmen, die gerade über ein Kabel unterwegs sind (für die Animation). */
+  getInFlight(): PacketLogEntry[] {
+    return [...this.#inFlight];
+  }
+
   clearPacketLog() {
     this.#log = [];
   }
@@ -144,8 +166,22 @@ export class Simulation {
 
   /** Startet "ping <ziel>" auf einem Endgerät. */
   ping(deviceId: string, target: string) {
-    const node = this.#node(deviceId);
-    if (node instanceof IpNode) node.ping(target);
+    this.#host(deviceId)?.ping(target);
+  }
+
+  traceroute(deviceId: string, target: string) {
+    this.#host(deviceId)?.traceroute(target);
+  }
+
+  /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */
+  runCommand(deviceId: string, line: string) {
+    const host = this.#host(deviceId);
+    if (host) runCommand(host, line);
+  }
+
+  #host(id: string): HostNode | undefined {
+    const node = this.#node(id);
+    return node instanceof HostNode ? node : undefined;
   }
 
   #node(id: string): SimNode | undefined {
@@ -161,7 +197,7 @@ export class Simulation {
           ? new ModemNode(ctx)
           : device.type === 'router'
             ? new RouterNode(ctx)
-            : new IpNode(ctx);
+            : new HostNode(ctx);
     this.#nodes.set(id, node);
     return node;
   }
@@ -181,6 +217,7 @@ export class Simulation {
         lines.push({ time: sim.#now, code, params });
         sim.#consoles.set(id, lines.slice(-CONSOLE_LIMIT));
       },
+      clearConsole: () => sim.#consoles.delete(id),
     };
   }
 
@@ -200,8 +237,10 @@ export class Simulation {
     };
     this.#log.push(entry);
     if (this.#log.length > LOG_LIMIT) this.#log.splice(0, this.#log.length - LOG_LIMIT);
+    this.#inFlight.add(entry);
 
     this.#queue.push(entry.arrives, () => {
+      this.#inFlight.delete(entry);
       // Wurde das Kabel inzwischen entfernt oder umgesteckt, geht der Rahmen verloren.
       const current = getCable(this.#topology, cable.id);
       const intact = current && cableAt(this.#topology, from)?.id === cable.id && cableAt(this.#topology, to)?.id === cable.id;

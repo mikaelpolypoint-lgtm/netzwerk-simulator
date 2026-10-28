@@ -73,6 +73,8 @@ export interface HostConfigInput {
   mask: string;
   gateway?: string;
   dns?: string;
+  /** Adresse per DHCP beziehen; die übrigen Felder werden dann ignoriert. */
+  dhcp?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export interface HostConfigInput {
 export function checkHostConfig(input: HostConfigInput): { errors: AddressIssue[]; warnings: AddressIssue[] } {
   const errors: AddressIssue[] = [];
   const warnings: AddressIssue[] = [];
+  if (input.dhcp) return { errors, warnings };
   const ipText = input.ip.trim();
   const maskText = input.mask.trim();
   const gatewayText = input.gateway?.trim() ?? '';

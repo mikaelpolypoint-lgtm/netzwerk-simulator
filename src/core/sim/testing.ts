@@ -6,11 +6,12 @@ import {
   connect,
   emptyTopology,
   getDevice,
+  setDhcpServer,
   setInterfaceAddress,
   setInterfaceCount,
   type Result,
 } from '../model/topology';
-import type { DeviceType, Topology } from '../model/types';
+import type { DeviceType, DhcpServerConfig, Topology } from '../model/types';
 import type { PacketLogEntry } from './simulation';
 
 export function unwrap<T>(r: Result<T>): T {
@@ -53,6 +54,16 @@ export class NetBuilder {
   route(router: string, network: string, mask: string, gateway: string) {
     this.topology = unwrap(addStaticRoute(this.topology, router, { network, mask, gateway }));
   }
+
+  dhcpClient(name: string, type: DeviceType = 'notebook'): string {
+    const id = this.add(type, name);
+    this.topology = unwrap(configureHost(this.topology, id, { ip: '', mask: '', dhcp: true }));
+    return id;
+  }
+
+  dhcpServer(id: string, config: DhcpServerConfig) {
+    this.topology = unwrap(setDhcpServer(this.topology, id, config));
+  }
 }
 
 /** Kurzform eines Logeintrags, z.B. "PC1→PC2 ARP request 10.0.0.2?". */
@@ -61,5 +72,6 @@ export function describe(topology: Topology, entry: PacketLogEntry): string {
   const route = `${name(entry.from.device)}→${name(entry.to.device)}`;
   const p = entry.frame.payload;
   if (p.kind === 'arp') return `${route} ARP ${p.op} ${p.targetIp}`;
+  if (p.payload.kind === 'udp') return `${route} DHCP ${p.payload.payload.op} ${p.src}>${p.dst}`;
   return `${route} ICMP ${p.payload.type} ${p.src}>${p.dst}`;
 }

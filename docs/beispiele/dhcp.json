@@ -1,0 +1,173 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "pc",
+        "name": "Server",
+        "position": {
+          "x": 0,
+          "y": -160
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "ip": "192.168.10.2",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "dhcpServer": {
+          "start": "192.168.10.100",
+          "end": "192.168.10.150",
+          "gateway": "192.168.10.1",
+          "dns": "192.168.10.2",
+          "leaseTime": 3600
+        }
+      },
+      {
+        "id": "d2",
+        "type": "switch",
+        "name": "Switch 1",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:02:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:02:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:02:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:02:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:02:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:02:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:02:07"
+          }
+        ]
+      },
+      {
+        "id": "d3",
+        "type": "notebook",
+        "name": "Notebook 1",
+        "position": {
+          "x": -220,
+          "y": 150
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00"
+          }
+        ],
+        "dhcp": true
+      },
+      {
+        "id": "d4",
+        "type": "notebook",
+        "name": "Notebook 2",
+        "position": {
+          "x": 0,
+          "y": 170
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00"
+          }
+        ],
+        "dhcp": true
+      },
+      {
+        "id": "d5",
+        "type": "pc",
+        "name": "PC 1",
+        "position": {
+          "x": 220,
+          "y": 150
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00"
+          }
+        ],
+        "dhcp": true
+      }
+    ],
+    "cables": [
+      {
+        "id": "c6",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c7",
+        "a": {
+          "device": "d3",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c8",
+        "a": {
+          "device": "d4",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 2
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d5",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 3
+        }
+      }
+    ],
+    "nextId": 10
+  },
+  "configuration": {}
+}

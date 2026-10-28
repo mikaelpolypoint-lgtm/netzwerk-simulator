@@ -11,7 +11,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 | M1 | Topologie-Editor, Speichern/Laden als .json | ✅ |
 | M2 | Simulationskern, ARP, IPv4 im gleichen Subnetz, Paketliste | ✅ |
 | M3 | Switch-Lerntabelle, Subnetting, Router mit statischen Routen | ✅ |
-| M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | offen |
+| M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | ✅ |
 | M5 | DNS, TCP/UDP, HTTP | offen |
 | M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | offen |
 | M7 | Deployment (Variante A und B) | offen |
@@ -57,12 +57,15 @@ Regeln, die das Projekt technisch absichert:
 - Jedes Kabel braucht 1 ms. Im Aktionsmodus läuft die virtuelle Zeit synchron zur echten; im Entwurfsmodus pausiert sie, Zustände wie ARP-Tabellen bleiben erhalten.
 - Wird ein Kabel während einer Übertragung entfernt, geht der Rahmen verloren und ist in der Paketliste so markiert.
 - Switches lernen MAC-Adressen pro Port (5 Minuten gültig). Vermittlungsrechner leiten nach längstem Präfix weiter, senken die TTL und melden Probleme per ICMP («Ziel nicht erreichbar», «TTL abgelaufen»). Das Modem ist eine transparente Strecke.
+- Endgeräte haben einen Desktop (Doppelklick im Aktionsmodus) mit Befehlszeile: `ping`, `tracert`, `ipconfig [/release|/renew]`, `arp [-a|-d]`, `cls`, `help`.
+- DHCP: Rechner können DHCP-Server sein; Clients beziehen beim Start der Simulation per Discover/Offer/Request/Ack eine Adresse und erneuern nach der halben Lease-Dauer. Router leiten DHCP nicht weiter (kein Relay), der Server muss im selben Netz stehen.
+- Paketliste mit Schichtenansicht (Ethernet → ARP/IPv4 → ICMP/UDP → DHCP); Vereinfachungen sind pro Schicht vermerkt. Zeitlauf-Regler mit Anhalten, Einzelschritt und Zeitlupe, in der die Rahmen als Punkte über die Kabel wandern.
 - Schleifen zwischen Switches lässt der Editor nicht zu (es gibt kein Spanning Tree, sonst entstünde ein Broadcast-Sturm).
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
 
 ## Beispiele
 
-[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json`: PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz. Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) und `dhcp.json` (ein Server vergibt drei Clients ihre Adressen). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 
