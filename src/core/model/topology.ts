@@ -1,4 +1,6 @@
 import { checkDhcpServer, normalizeDhcpServer } from '../net/dhcp';
+import { checkDnsRecord, normalizeRecord } from '../net/dns';
+import { isValidPath } from '../net/http';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, normalizeRoute } from '../net/routing';
 import { DEVICE_SPECS } from './devices';
@@ -8,11 +10,13 @@ import type {
   Device,
   DeviceType,
   DhcpServerConfig,
+  DnsRecord,
   Endpoint,
   NetInterface,
   Point,
   StaticRoute,
   Topology,
+  WebFile,
 } from './types';
 
 export const MAX_NAME_LENGTH = 32;
@@ -46,7 +50,15 @@ export type ErrorCode =
   | 'dhcpRangeOutsideSubnet'
   | 'dhcpRangeOrder'
   | 'dhcpRangeReserved'
-  | 'dhcpLeaseTime';
+  | 'dhcpLeaseTime'
+  | 'invalidDnsName'
+  | 'dnsTtl'
+  | 'duplicateRecord'
+  | 'unknownRecord'
+  | 'invalidPath'
+  | 'duplicatePath'
+  | 'unknownFile'
+  | 'serviceDisabled';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -318,6 +330,80 @@ export function setDhcpServer(t: Topology, id: string, config: DhcpServerConfig 
       return config ? { ...rest, dhcpServer: normalizeDhcpServer(config) } : rest;
     }),
   );
+}
+
+// --- DNS- und Webserver ------------------------------------------------------
+
+function serverDevice(t: Topology, id: string): Result<Device> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'pc') return fail('notAServer');
+  return ok(device);
+}
+
+export function setDnsServerEnabled(t: Topology, id: string, enabled: boolean): Result<Topology> {
+  const device = serverDevice(t, id);
+  if (!device.ok) return device;
+  if (enabled === !!device.value.dnsServer) return ok(t);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { dnsServer: _s, ...rest } = d;
+      return enabled ? { ...rest, dnsServer: { records: [] } } : rest;
+    }),
+  );
+}
+
+export function addDnsRecord(t: Topology, id: string, record: DnsRecord): Result<Topology> {
+  const device = serverDevice(t, id);
+  if (!device.ok) return device;
+  const config = device.value.dnsServer;
+  if (!config) return fail('serviceDisabled');
+  const issue = checkDnsRecord(config, record);
+  if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  return ok(updateDevice(t, id, (d) => ({ ...d, dnsServer: { records: [...config.records, normalizeRecord(record)] } })));
+}
+
+export function removeDnsRecord(t: Topology, id: string, index: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device?.dnsServer?.records[index]) return fail('unknownRecord');
+  const records = device.dnsServer.records.filter((_, i) => i !== index);
+  return ok(updateDevice(t, id, (d) => ({ ...d, dnsServer: { records } })));
+}
+
+/** Beim Einschalten erhält der Webserver eine Startseite, damit sofort etwas abrufbar ist. */
+export function setWebServerEnabled(t: Topology, id: string, enabled: boolean, initial: WebFile[] = []): Result<Topology> {
+  const device = serverDevice(t, id);
+  if (!device.ok) return device;
+  if (enabled === !!device.value.webServer) return ok(t);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { webServer: _w, ...rest } = d;
+      return enabled ? { ...rest, webServer: { files: initial.map((f) => ({ ...f })) } } : rest;
+    }),
+  );
+}
+
+/** Legt eine Seite an oder ersetzt sie; `previousPath` erlaubt das Umbenennen. */
+export function saveWebFile(t: Topology, id: string, file: WebFile, previousPath?: string): Result<Topology> {
+  const device = serverDevice(t, id);
+  if (!device.ok) return device;
+  const config = device.value.webServer;
+  if (!config) return fail('serviceDisabled');
+  const path = file.path.trim();
+  if (!isValidPath(path)) return { ok: false, error: { code: 'invalidPath', params: { path }, field: 'path' } };
+  if (path !== previousPath && config.files.some((f) => f.path === path)) {
+    return { ok: false, error: { code: 'duplicatePath', params: { path }, field: 'path' } };
+  }
+  const others = config.files.filter((f) => f.path !== (previousPath ?? path));
+  const files = [...others, { path, content: file.content }].sort((a, b) => a.path.localeCompare(b.path));
+  return ok(updateDevice(t, id, (d) => ({ ...d, webServer: { files } })));
+}
+
+export function removeWebFile(t: Topology, id: string, path: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device?.webServer?.files.some((f) => f.path === path)) return fail('unknownFile');
+  const files = device.webServer.files.filter((f) => f.path !== path);
+  return ok(updateDevice(t, id, (d) => ({ ...d, webServer: { files } })));
 }
 
 export function addStaticRoute(t: Topology, id: string, route: StaticRoute): Result<Topology> {

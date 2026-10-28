@@ -24,6 +24,15 @@ describe('Beispielprojekte', () => {
     expect(codes.filter((c) => c === 'ping.reply')).toHaveLength(4);
   });
 
+  it('web.json: Notebook bezieht per DHCP eine Adresse und ruft www.schule.ch über den Router ab', () => {
+    const sim = new Simulation(load('web.json'));
+    sim.runUntil(2000);
+    sim.browse('d1', 'http://www.schule.ch/stundenplan.html');
+    sim.runUntil(4000);
+    expect(sim.getDeviceState('d1').browser).toMatchObject({ status: 'done', response: { status: 200 } });
+    expect(sim.getDeviceState('d1').browser?.response?.body).toContain('Stundenplan');
+  });
+
   it('dhcp.json: alle drei Clients erhalten eine Adresse', () => {
     const sim = new Simulation(load('dhcp.json'));
     sim.runUntil(10_000);

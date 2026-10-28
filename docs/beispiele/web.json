@@ -1,0 +1,211 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "notebook",
+        "name": "Notebook 1",
+        "position": {
+          "x": -380,
+          "y": 120
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00"
+          }
+        ],
+        "dhcp": true
+      },
+      {
+        "id": "d2",
+        "type": "pc",
+        "name": "Server",
+        "position": {
+          "x": -380,
+          "y": -120
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "ip": "192.168.10.2",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.10.1",
+        "dhcpServer": {
+          "start": "192.168.10.100",
+          "end": "192.168.10.199",
+          "gateway": "192.168.10.1",
+          "dns": "192.168.10.2",
+          "leaseTime": 3600
+        },
+        "dnsServer": {
+          "records": [
+            {
+              "name": "webserver1",
+              "type": "A",
+              "value": "192.168.20.10",
+              "ttl": 300
+            },
+            {
+              "name": "www.schule.ch",
+              "type": "A",
+              "value": "192.168.20.10",
+              "ttl": 300
+            }
+          ]
+        }
+      },
+      {
+        "id": "d3",
+        "type": "switch",
+        "name": "Switch 1",
+        "position": {
+          "x": -180,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:03:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:03:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:03:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:03:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:03:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:03:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:03:07"
+          }
+        ]
+      },
+      {
+        "id": "d4",
+        "type": "router",
+        "name": "Router 1",
+        "position": {
+          "x": 40,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00",
+            "ip": "192.168.10.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:04:01",
+            "ip": "192.168.20.1",
+            "mask": "255.255.255.0"
+          }
+        ]
+      },
+      {
+        "id": "d5",
+        "type": "pc",
+        "name": "Webserver",
+        "position": {
+          "x": 260,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00",
+            "ip": "192.168.20.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.20.1",
+        "webServer": {
+          "files": [
+            {
+              "path": "/index.html",
+              "content": "<h1>Willkommen bei der Berufsschule</h1>\n<p>Diese Seite kommt vom Webserver im Netz 192.168.20.0/24.</p>\n<ul>\n  <li><a href=\"stundenplan.html\">Stundenplan</a></li>\n  <li><a href=\"gibtsnicht.html\">Ein kaputter Link (404)</a></li>\n</ul>"
+            },
+            {
+              "path": "/stundenplan.html",
+              "content": "<h1>Stundenplan</h1>\n<table border=\"1\" cellpadding=\"4\">\n  <tr><th>Zeit</th><th>Fach</th></tr>\n  <tr><td>08:00</td><td>Netzwerktechnik</td></tr>\n  <tr><td>10:00</td><td>Programmieren</td></tr>\n</table>\n<p><a href=\"index.html\">Zurück</a></p>"
+            }
+          ]
+        }
+      }
+    ],
+    "cables": [
+      {
+        "id": "c6",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c7",
+        "a": {
+          "device": "d2",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c8",
+        "a": {
+          "device": "d3",
+          "iface": 2
+        },
+        "b": {
+          "device": "d4",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d4",
+          "iface": 1
+        },
+        "b": {
+          "device": "d5",
+          "iface": 0
+        }
+      }
+    ],
+    "nextId": 10
+  },
+  "configuration": {}
+}

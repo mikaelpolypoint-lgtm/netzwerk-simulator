@@ -2,7 +2,19 @@ import { DEVICE_SPECS, isDeviceType } from '../model/devices';
 import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
 import { MAX_NAME_LENGTH, deviceSeq, findSwitchLoop } from '../model/topology';
-import type { Cable, Device, DhcpServerConfig, Endpoint, NetInterface, StaticRoute, Topology } from '../model/types';
+import type {
+  Cable,
+  Device,
+  DhcpServerConfig,
+  DnsRecord,
+  Endpoint,
+  NetInterface,
+  StaticRoute,
+  Topology,
+  WebFile,
+} from '../model/types';
+import { isValidName, normalizeName } from '../net/dns';
+import { isValidPath } from '../net/http';
 
 export const FORMAT_ID = 'netzwerk-simulator';
 export const FORMAT_VERSION = 1;
@@ -192,6 +204,37 @@ function readDevice(v: unknown, path: string): Device {
     if (s.gateway !== undefined) server.gateway = ip(s.gateway, `${p}.gateway`);
     if (s.dns !== undefined) server.dns = ip(s.dns, `${p}.dns`);
     device.dhcpServer = server;
+  }
+  if (o.dnsServer !== undefined) {
+    const p = `${path}.dnsServer`;
+    const records = arr(obj(o.dnsServer, p).records, `${p}.records`).map((raw, i): DnsRecord => {
+      const rp = `${p}.records[${i}]`;
+      const r = obj(raw, rp);
+      const type = r.type;
+      if (type !== 'A' && type !== 'MX') throw new Invalid(`${rp}.type`);
+      const record: DnsRecord = {
+        name: normalizeName(str(r.name, `${rp}.name`)),
+        type,
+        value: str(r.value, `${rp}.value`).trim(),
+        ttl: int(r.ttl, `${rp}.ttl`),
+      };
+      if (!isValidName(record.name)) throw new Invalid(`${rp}.name`);
+      if (type === 'A' ? parseIp(record.value) === null : !isValidName(record.value)) throw new Invalid(`${rp}.value`);
+      if (record.ttl < 0) throw new Invalid(`${rp}.ttl`);
+      return record;
+    });
+    device.dnsServer = { records };
+  }
+  if (o.webServer !== undefined) {
+    const p = `${path}.webServer`;
+    const files = arr(obj(o.webServer, p).files, `${p}.files`).map((raw, i): WebFile => {
+      const fp = `${p}.files[${i}]`;
+      const f = obj(raw, fp);
+      const filePath = str(f.path, `${fp}.path`);
+      if (!isValidPath(filePath)) throw new Invalid(`${fp}.path`);
+      return { path: filePath, content: str(f.content, `${fp}.content`) };
+    });
+    device.webServer = { files };
   }
   if (o.routes !== undefined) {
     device.routes = arr(o.routes, `${path}.routes`).map((raw, i): StaticRoute => {

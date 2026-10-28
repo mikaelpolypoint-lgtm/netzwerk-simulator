@@ -1,7 +1,11 @@
 // Hilfen für Tests: Netze knapp beschreiben und Paketfolgen lesbar vergleichen.
 import {
   addDevice,
+  addDnsRecord,
   addStaticRoute,
+  saveWebFile,
+  setDnsServerEnabled,
+  setWebServerEnabled,
   configureHost,
   connect,
   emptyTopology,
@@ -64,6 +68,18 @@ export class NetBuilder {
   dhcpServer(id: string, config: DhcpServerConfig) {
     this.topology = unwrap(setDhcpServer(this.topology, id, config));
   }
+
+  dnsServer(id: string, records: [name: string, ip: string, ttl?: number][]) {
+    this.topology = unwrap(setDnsServerEnabled(this.topology, id, true));
+    for (const [name, value, ttl = 60] of records) {
+      this.topology = unwrap(addDnsRecord(this.topology, id, { name, type: 'A', value, ttl }));
+    }
+  }
+
+  webServer(id: string, files: Record<string, string>) {
+    this.topology = unwrap(setWebServerEnabled(this.topology, id, true));
+    for (const [path, content] of Object.entries(files)) this.topology = unwrap(saveWebFile(this.topology, id, { path, content }));
+  }
 }
 
 /** Kurzform eines Logeintrags, z.B. "PC1→PC2 ARP request 10.0.0.2?". */
@@ -72,6 +88,18 @@ export function describe(topology: Topology, entry: PacketLogEntry): string {
   const route = `${name(entry.from.device)}→${name(entry.to.device)}`;
   const p = entry.frame.payload;
   if (p.kind === 'arp') return `${route} ARP ${p.op} ${p.targetIp}`;
-  if (p.payload.kind === 'udp') return `${route} DHCP ${p.payload.payload.op} ${p.src}>${p.dst}`;
-  return `${route} ICMP ${p.payload.type} ${p.src}>${p.dst}`;
+  const inner = p.payload;
+  if (inner.kind === 'tcp') {
+    const data = inner.data ? ` "${inner.data.split('\r\n')[0]}"` : '';
+    return `${route} TCP ${inner.srcPort}>${inner.dstPort} [${inner.flags.join(',')}] seq=${inner.seq} ack=${inner.ack}${data}`;
+  }
+  if (inner.kind === 'udp') {
+    const msg = inner.payload;
+    if (msg.kind === 'dns') {
+      const answer = msg.response ? ` → ${msg.rcode === 'ok' ? msg.answers.map((a) => a.value).join(',') : msg.rcode}` : '';
+      return `${route} DNS ${msg.response ? 'response' : 'query'} ${msg.question.name}${answer}`;
+    }
+    return `${route} DHCP ${msg.op} ${p.src}>${p.dst}`;
+  }
+  return `${route} ICMP ${inner.type} ${p.src}>${p.dst}`;
 }

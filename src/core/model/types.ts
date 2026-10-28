@@ -31,8 +31,38 @@ export interface Device {
   dhcp?: boolean;
   /** Nur Rechner: DHCP-Server-Dienst. */
   dhcpServer?: DhcpServerConfig;
+  /** Nur Rechner: DNS-Server-Dienst mit seiner Zone. */
+  dnsServer?: DnsServerConfig;
+  /** Nur Rechner: Webserver mit seinen Seiten. */
+  webServer?: WebServerConfig;
   /** Nur Vermittlungsrechner: statische Routen. */
   routes?: StaticRoute[];
+}
+
+export type DnsType = 'A' | 'MX';
+
+export interface DnsRecord {
+  /** Name in Kleinbuchstaben, z.B. "webserver1" oder "www.schule.ch". */
+  name: string;
+  type: DnsType;
+  /** Bei A eine IPv4-Adresse, bei MX der Name des Mailservers. */
+  value: string;
+  /** Gültigkeit im Cache der Clients in Sekunden. */
+  ttl: number;
+}
+
+export interface DnsServerConfig {
+  records: DnsRecord[];
+}
+
+export interface WebFile {
+  /** Pfad mit führendem Schrägstrich, z.B. "/index.html". */
+  path: string;
+  content: string;
+}
+
+export interface WebServerConfig {
+  files: WebFile[];
 }
 
 export interface DhcpServerConfig {

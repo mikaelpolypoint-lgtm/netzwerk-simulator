@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { COMMANDS } from '../core/sim/commands';
 import de from './de.json';
 
 function sourceFiles(dir: string): string[] {
@@ -31,17 +32,24 @@ describe('Sprachdatei', () => {
     let checked = 0;
     for (const file of sourceFiles(join(__dirname, '../core'))) {
       const text = readFileSync(file, 'utf8');
-      for (const match of text.matchAll(/print\(\s*'([a-zA-Z0-9_.]+)'/g)) {
+      for (const match of text.matchAll(/(?:print|#step|#fail)\(\s*'([a-zA-Z0-9_.]+)'/g)) {
         checked++;
         if (!(`console.${match[1]}` in de)) missing.add(`console.${match[1]} (${file})`);
       }
     }
     // Zusammengesetzte Codes: ping.${error}, help.${befehl}, ipconfig.mode.${modus}
+    const sendErrors = ['noRoute', 'hostUnreachable', 'gatewayUnreachable'];
+    const dnsErrors = ['noDnsServer', 'timeout', ...sendErrors];
     const dynamic = [
-      ...['noRoute', 'hostUnreachable', 'gatewayUnreachable'].map((e) => `console.ping.${e}`),
-      ...['ping', 'tracert', 'ipconfig', 'arp', 'cls', 'help'].map((c) => `console.help.${c}`),
+      ...sendErrors.map((e) => `console.ping.${e}`),
+      ...COMMANDS.map((c) => `console.help.${c}`),
       'console.ipconfig.mode.static',
       'console.ipconfig.mode.dhcp',
+      ...['ping', 'tracert'].flatMap((c) => [`console.${c}.unknownHost`, ...dnsErrors.map((e) => `console.${c}.dns.${e}`)]),
+      ...['invalidName', 'nxdomain', ...dnsErrors].map((e) => `console.browser.dns.${e}`),
+      ...['refused', 'timeout', 'reset', ...sendErrors].map((e) => `console.browser.tcp.${e}`),
+      'console.browser.invalidUrl',
+      'console.browser.httpsUnsupported',
     ];
     for (const key of dynamic) if (!(key in de)) missing.add(key);
     expect(checked).toBeGreaterThan(30);

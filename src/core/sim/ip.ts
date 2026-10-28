@@ -8,6 +8,7 @@ import {
   type EthernetFrame,
   type IcmpMessage,
   type Ipv4Packet,
+  type TcpSegment,
   type UdpDatagram,
 } from './frames';
 import type { NodeContext, SimNode } from './simulation';
@@ -240,6 +241,8 @@ export class IpNode implements SimNode {
     const payload = packet.payload;
     if (payload.kind === 'udp') {
       this.onUdp(packet, payload, index, srcMac);
+    } else if (payload.kind === 'tcp') {
+      this.onTcp(packet, payload);
     } else if (payload.type === 'echoRequest') {
       if (!broadcast) this.sendIp(packet.src, { ...payload, type: 'echoReply' }, { src: packet.dst });
     } else {
@@ -250,8 +253,21 @@ export class IpNode implements SimNode {
   /** Anwendungen hängen sich hier ein (Ping, Traceroute). */
   protected onIcmp(_packet: Ipv4Packet) {}
 
-  /** UDP-Dienste hängen sich hier ein (DHCP, später DNS). */
+  /** UDP-Dienste hängen sich hier ein (DHCP, DNS). */
   protected onUdp(_packet: Ipv4Packet, _datagram: UdpDatagram, _index: number, _srcMac: string) {}
+
+  /** TCP-Segmente gehen an den TCP-Stack des Endgeräts. */
+  protected onTcp(_packet: Ipv4Packet, _segment: TcpSegment) {}
+
+  /** Eigene Adresse, über die `remote` erreicht wird (oder null). */
+  localIpFor(remote: string): string | null {
+    const dst = parseIp(remote);
+    if (dst === null) return null;
+    if (this.isOwn(dst)) return remote;
+    const route = lookupRoute(this.routes(), dst);
+    const iface = route && this.interfaces().find((i) => i.index === route.iface);
+    return iface ? formatIp(iface.ip) : null;
+  }
 
   /**
    * Sendet ein IP-Paket: Route suchen, nächsten Hop per ARP auflösen, Rahmen senden.

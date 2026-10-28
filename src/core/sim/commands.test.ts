@@ -1,4 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
+import { COMMANDS } from './commands';
 import { Simulation } from './simulation';
 import { NetBuilder } from './testing';
 
@@ -89,7 +90,7 @@ group('Befehlszeile', () => {
     sim.runCommand(pc1, 'format c:');
     expect(lines(sim, pc1).at(-1)).toMatchObject({ code: 'cmd.unknown', params: { cmd: 'format' } });
     sim.runCommand(pc1, 'help');
-    expect(codes(sim, pc1).filter((c) => c.startsWith('help.'))).toHaveLength(6);
+    expect(codes(sim, pc1).filter((c) => c.startsWith('help.'))).toHaveLength(COMMANDS.length);
     sim.runCommand(pc1, 'cls');
     expect(lines(sim, pc1)).toEqual([]);
     sim.runCommand(pc1, 'ping');

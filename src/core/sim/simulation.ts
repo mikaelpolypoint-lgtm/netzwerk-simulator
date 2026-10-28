@@ -4,7 +4,9 @@ import type { Device, Endpoint, Topology } from '../model/types';
 import { runCommand } from './commands';
 import type { LeaseRecord } from './dhcp';
 import type { EthernetFrame } from './frames';
-import { HostNode, type AddressState } from './host';
+import type { DnsCacheEntry } from './dns';
+import { HostNode, type AddressState, type ConnectionInfo } from './host';
+import type { BrowserState } from './http';
 import { RouterNode, type ArpEntry } from './ip';
 import { EventQueue } from './queue';
 import { ModemNode, SwitchNode, type MacEntry } from './switch';
@@ -39,6 +41,9 @@ export interface DeviceState {
   macTable?: MacEntry[];
   address?: AddressState;
   dhcpLeases?: LeaseRecord[];
+  dnsCache?: DnsCacheEntry[];
+  connections?: ConnectionInfo[];
+  browser?: BrowserState;
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -171,6 +176,11 @@ export class Simulation {
 
   traceroute(deviceId: string, target: string) {
     this.#host(deviceId)?.traceroute(target);
+  }
+
+  /** Ruft im Webbrowser des Geräts eine URL auf, z.B. "http://webserver1/index.html". */
+  browse(deviceId: string, url: string) {
+    this.#host(deviceId)?.browse(url);
   }
 
   /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */

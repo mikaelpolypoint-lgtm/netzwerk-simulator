@@ -23,9 +23,17 @@
   --proto-arp: #f5e3b3;
   --proto-icmp: #d6e4fb;
   --proto-dhcp: #d3f2e5;
+  --proto-dns: #e9dcfb;
+  --proto-tcp: #e3e7ec;
+  --proto-http: #fbdcdc;
+  --proto-mail: #d9f0f7;
   --dot-arp: #c27c0e;
   --dot-icmp: #1d5fd6;
   --dot-dhcp: #067a52;
+  --dot-dns: #7c3aed;
+  --dot-tcp: #5b6676;
+  --dot-http: #c0262d;
+  --dot-mail: #0e7490;
 
   --endpoint: #1d5fd6;
   --endpoint-soft: #dde8fc;
@@ -59,9 +67,17 @@
     --proto-arp: #4a3c14;
     --proto-icmp: #1c3252;
     --proto-dhcp: #123a2c;
+    --proto-dns: #33244f;
+    --proto-tcp: #2b3440;
+    --proto-http: #4a1f22;
+    --proto-mail: #133a44;
     --dot-arp: #f5b041;
     --dot-icmp: #6aa5ff;
     --dot-dhcp: #3ccf96;
+    --dot-dns: #b794f6;
+    --dot-tcp: #9eaaba;
+    --dot-http: #f2756a;
+    --dot-mail: #5fd0e8;
 
     --endpoint: #6aa5ff;
     --endpoint-soft: #1c3252;
@@ -129,6 +145,37 @@ button[aria-pressed='true'] {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* Jedes Protokoll hat eine Farbe: Hintergrund in der Paketliste, Punkt in der Animation. */
+.proto-arp {
+  --proto: var(--proto-arp);
+  --dot: var(--dot-arp);
+}
+.proto-icmp {
+  --proto: var(--proto-icmp);
+  --dot: var(--dot-icmp);
+}
+.proto-dhcp {
+  --proto: var(--proto-dhcp);
+  --dot: var(--dot-dhcp);
+}
+.proto-dns {
+  --proto: var(--proto-dns);
+  --dot: var(--dot-dns);
+}
+.proto-tcp {
+  --proto: var(--proto-tcp);
+  --dot: var(--dot-tcp);
+}
+.proto-http {
+  --proto: var(--proto-http);
+  --dot: var(--dot-http);
+}
+.proto-smtp,
+.proto-pop3 {
+  --proto: var(--proto-mail);
+  --dot: var(--dot-mail);
 }
 
 /* Farbe markiert die Rolle eines Geräts (Konzept, Abschnitt 8). */

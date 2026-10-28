@@ -3,8 +3,8 @@
   import { t } from '../../i18n';
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
-  import DhcpServerForm from './DhcpServerForm.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
+  import Services from './Services.svelte';
   import HostPanel from './HostPanel.svelte';
   import NetDevicePanel from './NetDevicePanel.svelte';
   import RouterConfig from './RouterConfig.svelte';
@@ -82,7 +82,7 @@
       {#if editor.editable}
         <HostConfigForm {device} />
         {#if device.type === 'pc'}
-          <DhcpServerForm {device} />
+          <Services {device} />
         {/if}
       {:else}
         <HostPanel {device} />

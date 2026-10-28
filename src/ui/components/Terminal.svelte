@@ -12,9 +12,12 @@
   let output: HTMLDivElement | undefined = $state();
   let input: HTMLInputElement | undefined = $state();
 
-  // Meldungen des DHCP-Server-Dienstes gehören in dessen eigenes Fenster.
+  // Meldungen der Server-Dienste gehören in deren eigene Fenster.
+  const SERVICE_PREFIXES = ['dhcpServer.', 'dnsServer.', 'http.', 'smtp.', 'pop3.'];
   const lines = $derived(
-    ((simStore.tick, simStore.sim?.getDeviceState(device.id).console) ?? []).filter((l) => !l.code.startsWith('dhcpServer.')),
+    ((simStore.tick, simStore.sim?.getDeviceState(device.id).console) ?? []).filter(
+      (l) => !SERVICE_PREFIXES.some((p) => l.code.startsWith(p)),
+    ),
   );
 
   $effect(() => {

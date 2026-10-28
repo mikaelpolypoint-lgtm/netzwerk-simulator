@@ -12,7 +12,7 @@ export const TRACE_TIMEOUT = 2000;
 /** Was eine ICMP-Anwendung vom Endgerät braucht. */
 export interface IcmpHost {
   readonly ctx: NodeContext;
-  sendIp(dst: string, payload: IcmpMessage, options?: { ttl?: number }, onError?: (e: SendError) => void): void;
+  sendIp(dst: string, payload: Ipv4Packet['payload'], options?: { ttl?: number }, onError?: (e: SendError) => void): void;
 }
 
 export interface IcmpApp {
@@ -32,6 +32,7 @@ export class PingRun implements IcmpApp {
     private readonly target: string,
     private readonly id: number,
     private readonly gateway: string,
+    private readonly name?: string,
   ) {}
 
   get #ctx() {
@@ -39,7 +40,8 @@ export class PingRun implements IcmpApp {
   }
 
   start() {
-    this.#ctx.print('ping.start', { target: this.target, size: PING_SIZE });
+    if (this.name) this.#ctx.print('ping.startNamed', { name: this.name, target: this.target, size: PING_SIZE });
+    else this.#ctx.print('ping.start', { target: this.target, size: PING_SIZE });
     this.#send();
   }
 
@@ -113,6 +115,7 @@ export class TracerouteRun implements IcmpApp {
     private readonly host: IcmpHost,
     private readonly target: string,
     private readonly id: number,
+    private readonly name?: string,
   ) {}
 
   get #ctx() {
@@ -120,7 +123,8 @@ export class TracerouteRun implements IcmpApp {
   }
 
   start() {
-    this.#ctx.print('tracert.start', { target: this.target, max: TRACE_MAX_HOPS });
+    if (this.name) this.#ctx.print('tracert.startNamed', { name: this.name, target: this.target, max: TRACE_MAX_HOPS });
+    else this.#ctx.print('tracert.start', { target: this.target, max: TRACE_MAX_HOPS });
     this.#next();
   }
 

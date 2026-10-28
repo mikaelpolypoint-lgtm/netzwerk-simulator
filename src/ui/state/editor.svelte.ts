@@ -1,6 +1,12 @@
 import {
   addDevice,
+  addDnsRecord,
   addStaticRoute,
+  removeDnsRecord,
+  removeWebFile,
+  saveWebFile,
+  setDnsServerEnabled,
+  setWebServerEnabled,
   configureHost,
   connect,
   emptyTopology,
@@ -18,7 +24,9 @@ import {
   suggestName,
   type DeviceType,
   type DhcpServerConfig,
+  type DnsRecord,
   type HostConfigInput,
+  type WebFile,
   type Point,
   type Result,
   type StaticRoute,
@@ -230,6 +238,38 @@ class Editor {
 
   setDhcpServer(id: string, config: DhcpServerConfig | null): TopologyError | null {
     return this.#applyForm(setDhcpServer(this.topology, id, config));
+  }
+
+  setDnsServerEnabled(id: string, enabled: boolean) {
+    if (!this.editable) return;
+    const next = this.#check(setDnsServerEnabled(this.topology, id, enabled));
+    if (next) this.#commit(next);
+  }
+
+  addDnsRecord(id: string, record: DnsRecord): TopologyError | null {
+    return this.#applyForm(addDnsRecord(this.topology, id, record));
+  }
+
+  removeDnsRecord(id: string, index: number) {
+    if (!this.editable) return;
+    const next = this.#check(removeDnsRecord(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  setWebServerEnabled(id: string, enabled: boolean, initial: WebFile[]) {
+    if (!this.editable) return;
+    const next = this.#check(setWebServerEnabled(this.topology, id, enabled, initial));
+    if (next) this.#commit(next);
+  }
+
+  saveWebFile(id: string, file: WebFile, previousPath?: string): TopologyError | null {
+    return this.#applyForm(saveWebFile(this.topology, id, file, previousPath));
+  }
+
+  removeWebFile(id: string, path: string) {
+    if (!this.editable) return;
+    const next = this.#check(removeWebFile(this.topology, id, path));
+    if (next) this.#commit(next);
   }
 
   addStaticRoute(id: string, route: StaticRoute): TopologyError | null {

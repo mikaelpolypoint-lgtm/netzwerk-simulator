@@ -66,7 +66,10 @@ group('DHCP-Bezug (Abnahme M4)', () => {
     const { net } = network();
     const sim = new Simulation(net.topology);
     sim.runUntil(5000);
-    const ack = sim.getPacketLog().find((e) => e.frame.payload.kind === 'ipv4' && e.frame.payload.payload.kind === 'udp' && e.frame.payload.payload.payload.op === 'ack');
+    const ack = sim.getPacketLog().find((e) => {
+      const p = e.frame.payload;
+      return p.kind === 'ipv4' && p.payload.kind === 'udp' && p.payload.payload.kind === 'dhcp' && p.payload.payload.op === 'ack';
+    });
     const msg = ack?.frame.payload.kind === 'ipv4' && ack.frame.payload.payload.kind === 'udp' ? ack.frame.payload.payload : undefined;
     expect(msg).toMatchObject({ srcPort: 67, dstPort: 68, payload: { yourIp: '192.168.0.100', leaseTime: 60, mask: '255.255.255.0' } });
   });

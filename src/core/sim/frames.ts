@@ -1,3 +1,7 @@
+import type { DnsRecord, DnsType } from '../model/types';
+
+export type { DnsRecord, DnsType };
+
 // Pakete sind verschachtelte, unveränderliche Objekte statt Bytefolgen:
 // Ethernet-Rahmen enthält ARP oder IPv4, IPv4 enthält ICMP oder UDP,
 // UDP enthält Anwendungsdaten (DHCP, später DNS).
@@ -50,7 +54,17 @@ export interface DhcpMessage {
   leaseTime?: number;
 }
 
-export type AppMessage = DhcpMessage;
+export interface DnsMessage {
+  kind: 'dns';
+  id: number;
+  response: boolean;
+  question: { name: string; type: DnsType };
+  answers: DnsRecord[];
+  /** "nxdomain": Name unbekannt. */
+  rcode: 'ok' | 'nxdomain';
+}
+
+export type AppMessage = DhcpMessage | DnsMessage;
 
 export interface UdpDatagram {
   kind: 'udp';
@@ -59,13 +73,29 @@ export interface UdpDatagram {
   payload: AppMessage;
 }
 
+export type TcpFlag = 'SYN' | 'ACK' | 'FIN' | 'RST' | 'PSH';
+
+/**
+ * TCP-Segment. Die Nutzdaten sind Text (z.B. eine HTTP-Anfrage); Sequenz-
+ * nummern zählen Zeichen statt Bytes.
+ */
+export interface TcpSegment {
+  kind: 'tcp';
+  srcPort: number;
+  dstPort: number;
+  seq: number;
+  ack: number;
+  flags: TcpFlag[];
+  data: string;
+}
+
 export interface Ipv4Packet {
   kind: 'ipv4';
   src: string;
   dst: string;
   ttl: number;
   id: number;
-  payload: IcmpMessage | UdpDatagram;
+  payload: IcmpMessage | UdpDatagram | TcpSegment;
 }
 
 export interface EthernetFrame {
@@ -76,3 +106,7 @@ export interface EthernetFrame {
 
 export const DHCP_SERVER_PORT = 67;
 export const DHCP_CLIENT_PORT = 68;
+export const DNS_PORT = 53;
+export const HTTP_PORT = 80;
+export const SMTP_PORT = 25;
+export const POP3_PORT = 110;

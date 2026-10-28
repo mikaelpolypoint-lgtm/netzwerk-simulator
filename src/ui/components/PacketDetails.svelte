@@ -17,12 +17,18 @@
   {#each layers as layer, depth (layer.title)}
     <details open style="--depth: {depth}">
       <summary>{layer.title}</summary>
-      <dl>
-        {#each layer.fields as [label, value] (label)}
-          <dt>{label}</dt>
-          <dd>{value}</dd>
-        {/each}
-      </dl>
+      {#if layer.fields.length}
+        <dl>
+          {#each layer.fields as [label, value], i (i)}
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          {/each}
+        </dl>
+      {/if}
+      {#if layer.text !== undefined}
+        <!-- Zeilenumbrüche sichtbar machen: HTTP trennt Kopfzeilen mit CR LF. -->
+        <pre>{layer.text.replace(/\r\n/g, '↵\n')}</pre>
+      {/if}
       {#if layer.note}
         <p class="note">{layer.note}</p>
       {/if}
@@ -79,6 +85,17 @@
     margin: 0;
     font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
     overflow-wrap: anywhere;
+  }
+  pre {
+    margin: 6px 8px;
+    padding: 6px;
+    max-height: 220px;
+    overflow: auto;
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--surface-2);
+    border-radius: 4px;
   }
   .note {
     margin: 0 8px 6px;

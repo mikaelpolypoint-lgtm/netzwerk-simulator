@@ -173,7 +173,7 @@
         <DeviceNode {device} onpointerdown={onDevicePointerDown} />
       {/each}
       {#each dots as dot (dot.id)}
-        <circle class="dot-packet dot-{dot.protocol}" cx={dot.x} cy={dot.y} r="7" />
+        <circle class="dot-packet proto-{dot.protocol}" cx={dot.x} cy={dot.y} r="7" />
       {/each}
     </g>
   </svg>
@@ -217,15 +217,6 @@
     stroke: var(--bg);
     stroke-width: 2;
     pointer-events: none;
-  }
-  .dot-arp {
-    --dot: var(--dot-arp);
-  }
-  .dot-icmp {
-    --dot: var(--dot-icmp);
-  }
-  .dot-dhcp {
-    --dot: var(--dot-dhcp);
   }
   .rubber {
     stroke: var(--accent);

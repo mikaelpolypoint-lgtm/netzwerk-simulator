@@ -44,7 +44,6 @@
 </script>
 
 <form class="dhcp" onsubmit={apply}>
-  <h3>{t('dhcpServer.title')}</h3>
   <label class="toggle">
     <input type="checkbox" bind:checked={enabled} />
     {t('dhcpServer.enable')}
@@ -75,11 +74,7 @@
 
 <style>
   .dhcp {
-    margin: 4px 0 12px;
-  }
-  h3 {
-    margin: 16px 0 6px;
-    font-size: 0.85rem;
+    margin: 0;
   }
   .toggle {
     display: flex;

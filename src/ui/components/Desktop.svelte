@@ -4,12 +4,22 @@
   import { closeDesktop, desktop } from '../state/desktop.svelte';
   import { editor } from '../state/editor.svelte';
   import AddressView from './AddressView.svelte';
+  import Browser from './Browser.svelte';
   import DhcpServerView from './DhcpServerView.svelte';
+  import ServiceLog from './ServiceLog.svelte';
   import Terminal from './Terminal.svelte';
 
   /** Simulierter Desktop eines Endgeräts mit seinen Anwendungen. */
   const device = $derived(desktop.deviceId ? getDevice(editor.topology, desktop.deviceId) : undefined);
-  const apps = $derived(['terminal', 'network', ...(device?.dhcpServer ? ['dhcpServer'] : [])]);
+  const apps = $derived([
+    'terminal',
+    'browser',
+    'network',
+    ...(device?.dhcpServer ? ['dhcpServer'] : []),
+    ...(device?.dnsServer ? ['dnsServer'] : []),
+    ...(device?.webServer ? ['webServer'] : []),
+  ]);
+  const dnsSummary = $derived((device?.dnsServer?.records ?? []).map((r) => `${r.name}  ${r.type}  ${r.value}  (TTL ${r.ttl} s)`));
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -35,8 +45,14 @@
     <div class="content" role="tabpanel">
       {#if desktop.app === 'network'}
         <div class="padded"><AddressView {device} /></div>
+      {:else if desktop.app === 'browser'}
+        <Browser {device} />
       {:else if desktop.app === 'dhcpServer'}
         <DhcpServerView {device} />
+      {:else if desktop.app === 'dnsServer'}
+        <ServiceLog {device} prefix="dnsServer." summary={dnsSummary.length ? dnsSummary : [t('dnsServer.noRecords')]} />
+      {:else if desktop.app === 'webServer'}
+        <ServiceLog {device} prefix="http." summary={(device.webServer?.files ?? []).map((f) => f.path)} />
       {:else}
         <Terminal {device} />
       {/if}

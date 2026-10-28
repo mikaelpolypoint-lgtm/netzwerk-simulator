@@ -238,15 +238,6 @@
     text-align: center;
     background: var(--proto, var(--surface-2));
   }
-  .proto-arp {
-    --proto: var(--proto-arp);
-  }
-  .proto-icmp {
-    --proto: var(--proto-icmp);
-  }
-  .proto-dhcp {
-    --proto: var(--proto-dhcp);
-  }
   .lost td {
     color: var(--danger);
   }

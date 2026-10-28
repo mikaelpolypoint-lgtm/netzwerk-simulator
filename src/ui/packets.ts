@@ -13,12 +13,24 @@ export interface PacketRow {
   lost: boolean;
 }
 
+/** Bekannte Ports und ihr Anwendungsprotokoll. */
+const TCP_APPS: Record<number, string> = { 80: 'HTTP', 25: 'SMTP', 110: 'POP3' };
+
 /** Oberstes erkennbares Protokoll, wie ein Paketanalysator es anzeigt. */
 export function protocolOf(frame: EthernetFrame): string {
   const p = frame.payload;
   if (p.kind === 'arp') return 'ARP';
-  if (p.payload.kind === 'icmp') return 'ICMP';
-  return p.payload.payload.kind.toUpperCase();
+  const inner = p.payload;
+  if (inner.kind === 'icmp') return 'ICMP';
+  if (inner.kind === 'udp') return inner.payload.kind.toUpperCase();
+  // TCP-Segmente mit Nutzdaten zählen zum Anwendungsprotokoll, reine Steuersegmente zu TCP.
+  const app = TCP_APPS[inner.dstPort] ?? TCP_APPS[inner.srcPort];
+  return inner.data && app ? app : 'TCP';
+}
+
+function portLabel(port: number): string {
+  const names: Record<number, string> = { 53: 'DNS', 67: 'DHCP-Server', 68: 'DHCP-Client', ...TCP_APPS };
+  return names[port] ? `${port} (${names[port]})` : String(port);
 }
 
 function endpointLabel(topology: Topology, device: string, iface: number): string {
@@ -38,8 +50,23 @@ function info(frame: EthernetFrame): string {
       what: t(`packets.unreachable.${inner.code ?? 'net'}`),
     });
   }
-  const dhcp = inner.payload;
-  return t(`packets.dhcp.${dhcp.op}`, { ip: dhcp.yourIp ?? dhcp.requestedIp ?? '', xid: hex(dhcp.xid) });
+  if (inner.kind === 'tcp') {
+    const flags = `[${inner.flags.join(', ')}]`;
+    const numbers = t('packets.tcp.numbers', { seq: inner.seq, ack: inner.ack, len: inner.data.length });
+    const app = protocolOf(frame);
+    if (app === 'TCP') return `${portLabel(inner.srcPort)} → ${portLabel(inner.dstPort)} ${flags} ${numbers}`;
+    // Bei Anwendungsdaten die erste Zeile zeigen, wie ein Paketanalysator.
+    const first = inner.data.split('\r\n')[0] ?? '';
+    const looksLikeStart = /^(GET|POST|HTTP\/|[A-Z]{3,4}( |$)|\+OK|-ERR|\d{3}[ -])/.test(first);
+    return `${looksLikeStart ? first : t('packets.tcp.continuation')} ${numbers}`;
+  }
+  const msg = inner.payload;
+  if (msg.kind === 'dns') {
+    if (!msg.response) return t('packets.dns.query', { type: msg.question.type, name: msg.question.name });
+    if (msg.rcode === 'nxdomain') return t('packets.dns.nxdomain', { name: msg.question.name });
+    return t('packets.dns.answer', { type: msg.question.type, name: msg.question.name, value: msg.answers.map((a) => a.value).join(', ') });
+  }
+  return t(`packets.dhcp.${msg.op}`, { ip: msg.yourIp ?? msg.requestedIp ?? '', xid: hex(msg.xid) });
 }
 
 const hex = (n: number) => `0x${n.toString(16).padStart(8, '0')}`;
@@ -66,6 +93,8 @@ export function toRow(topology: Topology, entry: PacketLogEntry): PacketRow {
 export interface Layer {
   title: string;
   fields: [string, string][];
+  /** Anwendungsdaten als Text, z.B. eine HTTP-Anfrage. */
+  text?: string;
   /** Was an dieser Schicht vereinfacht ist (Konzept: Vereinfachungen transparent machen). */
   note?: string;
 }
@@ -108,7 +137,7 @@ export function layersOf(frame: EthernetFrame): Layer[] {
     fields: [
       ...field('version', 4),
       ...field('ttl', p.ttl),
-      ...field('protocol', inner.kind === 'icmp' ? '1 (ICMP)' : '17 (UDP)'),
+      ...field('protocol', inner.kind === 'icmp' ? '1 (ICMP)' : inner.kind === 'tcp' ? '6 (TCP)' : '17 (UDP)'),
       ...field('ipId', p.id),
       ...field('srcIp', p.src),
       ...field('dstIp', p.dst),
@@ -134,17 +163,48 @@ export function layersOf(frame: EthernetFrame): Layer[] {
     return layers;
   }
 
-  const portName = (port: number) => (port === 67 ? 'DHCP-Server' : port === 68 ? 'DHCP-Client' : '');
+  if (inner.kind === 'tcp') {
+    layers.push({
+      title: t('layer.tcp'),
+      fields: [
+        ...field('srcPort', portLabel(inner.srcPort)),
+        ...field('dstPort', portLabel(inner.dstPort)),
+        ...field('seq', inner.seq),
+        ...field('ack', inner.flags.includes('ACK') ? inner.ack : undefined),
+        ...field('flags', inner.flags.join(', ')),
+        ...field('dataLength', t('layer.chars', { n: inner.data.length })),
+      ],
+      note: t('layer.note.tcp'),
+    });
+    if (inner.data) {
+      layers.push({ title: `${protocolOf(frame)} (${t('layer.appData')})`, fields: [], text: inner.data });
+    }
+    return layers;
+  }
+
   layers.push({
     title: t('layer.udp'),
-    fields: [
-      ...field('srcPort', `${inner.srcPort} (${portName(inner.srcPort)})`),
-      ...field('dstPort', `${inner.dstPort} (${portName(inner.dstPort)})`),
-    ],
+    fields: [...field('srcPort', portLabel(inner.srcPort)), ...field('dstPort', portLabel(inner.dstPort))],
     note: t('layer.note.udp'),
   });
 
-  const dhcp = inner.payload;
+  const app = inner.payload;
+  if (app.kind === 'dns') {
+    layers.push({
+      title: t('layer.dns'),
+      fields: [
+        ...field('dnsId', app.id),
+        ...field('dnsKind', t(app.response ? 'layer.dnsResponse' : 'layer.dnsQuery')),
+        ...field('question', `${app.question.name} (${app.question.type})`),
+        ...(app.response ? field('rcode', app.rcode === 'ok' ? '0 (NOERROR)' : '3 (NXDOMAIN)') : []),
+        ...app.answers.flatMap((a, i) => field('answer', `${i + 1}: ${a.name} ${a.type} ${a.value}, TTL ${a.ttl} s`)),
+      ],
+      note: t('layer.note.dns'),
+    });
+    return layers;
+  }
+
+  const dhcp = app;
   layers.push({
     title: t('layer.dhcp'),
     fields: [

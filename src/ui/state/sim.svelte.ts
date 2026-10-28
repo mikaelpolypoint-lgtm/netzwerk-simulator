@@ -70,6 +70,11 @@ class SimStore {
     this.tick++;
   }
 
+  browse(deviceId: string, url: string) {
+    this.#sim?.browse(deviceId, url);
+    this.tick++;
+  }
+
   clearPacketLog() {
     this.#sim?.clearPacketLog();
     this.tick++;
