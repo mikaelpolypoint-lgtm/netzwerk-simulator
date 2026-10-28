@@ -984,5 +984,19 @@
   "error.invalidUser": "Nom d'utilisateur invalide : {name}",
   "error.textTooLong": "Le texte est trop long (au maximum {max} caractères).",
 
-  "packets.ssh.encrypted": "Données chiffrées ({len} caractères)"
+  "packets.ssh.encrypted": "Données chiffrées ({len} caractères)",
+
+  "panel.title": "Face avant",
+  "panel.label": "Ports de {name}",
+  "panel.hint": "Recâbler : clique sur un port occupé, puis sur un port libre.",
+  "panel.hintMoving": "{port} sélectionné : clique maintenant sur un port libre (en pointillés).",
+  "panel.hintLocked": "Le recâblage se fait en mode conception.",
+
+  "toolbar.rack": "Baie",
+  "toolbar.rackHint": "Afficher les appareils réseau dans une baie 19 pouces et recâbler",
+  "rack.title": "Vue de la baie",
+  "rack.help": "Commutateurs, routeurs et modems en tiroirs, une baie par étage. En mode conception : clique sur un port occupé puis sur un port libre pour recâbler.",
+  "rack.empty": "Pas encore de commutateur, routeur ou modem dans le projet.",
+  "rack.single": "Baie",
+  "rack.label": "Baie {name}"
 }

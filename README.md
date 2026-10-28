@@ -12,7 +12,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
 ```
 
-Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md).
+Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md), dazu [Webhosting mit Plesk](docs/plesk.md) und die [Desktop-Version für Windows, macOS und Linux](docs/desktop.md).
 
 ## Stand
 
@@ -27,10 +27,16 @@ Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Instal
 | M7 | Deployment (Variante A und B) | ✅ |
 | + | Kabel umstecken/beschädigen, DHCP-Relay, Internet mit NAT, VLANs und Spanning Tree, schnelle Paketliste | ✅ |
 | + | Aufgaben-Formular, Abgaben auswerten, Französisch, Oberflächentests, CI | ✅ |
+| + | Basis-/Pro-Modus, Router-on-a-Stick, Layer-3-Switch, Befehlszeile (FRRouting-Stil), SSH | ✅ |
+| + | WLAN mit Access Point, Mesh über Stockwerke, TP/Glasfaser/Funk, Link-LEDs, Farbtags | ✅ |
+| + | Dokumentationsmodus mit Bereichen, Stockwerke, Snapshots, Rack-Ansicht | ✅ |
+| + | Desktop-Installer (Tauri), Plesk-Testumgebung, Lizenzhinweise im Build | ✅ |
 
 ## Entwicklung
 
 Voraussetzung: Node.js 20 oder neuer.
+
+**Branches:** `develop` ist der Entwicklungsstand (Testversion auf Plesk, siehe [docs/plesk.md](docs/plesk.md)), `main` die stabile Version. Gearbeitet wird auf `develop`; vor dem Arbeiten `git pull`, vor dem Push `npm run release`.
 
 ```bash
 npm ci
@@ -41,11 +47,13 @@ npm run build    # erzeugt dist/index.html
 npm run verify   # alles zusammen: Typprüfung, Tests, Build (vor jedem Commit)
 npm run release  # verify + release/netzwerk-simulator.html neu erzeugen und offline prüfen
 npm run e2e      # Oberflächentests (Playwright) gegen den Build
+npm run desktop:dev    # Desktop-Fenster (Tauri, braucht Rust)
+npm run desktop:build  # Installer für das eigene System
 ```
 
-Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den installierten: unter Windows Edge, sonst Chrome (anderer Kanal mit `PW_CHANNEL`, z.B. `PW_CHANNEL=chromium` nach `npx playwright install chromium`).
+Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den installierten: unter Windows Edge, sonst Chrome (anderer Kanal mit `PW_CHANNEL`, z.B. `PW_CHANNEL=chromium` nach `npx playwright install chromium`, oder ein beliebiges Chromium mit `PW_EXECUTABLE=/pfad/zu/chromium`).
 
-`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält oder die CSP fehlt. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
+`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält, die CSP fehlt oder Lizenzhinweise fehlen. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/netzwerk-simulator.html` nicht zum Code passt.
 
@@ -89,6 +97,16 @@ Regeln, die das Projekt technisch absichert:
 - Das Gerät «Internet» leitet wie ein Provider weiter und verwirft private Adressen. Router übersetzen mit NAT (inkl. Port-Übersetzung) und bieten Portweiterleitungen für Server im Heimnetz.
 - VLANs: Switch-Ports gehören zu einem VLAN (Access) oder übertragen als Trunk alle VLANs mit 802.1Q-Tag; die MAC-Tabelle gilt je VLAN.
 - Spanning Tree (vereinfacht, verkürzte Zeiten): Switches wählen per BPDU eine Root-Bridge und blockieren redundante Ports; nach einem Ausfall wird neu berechnet. Schleifen zwischen Switches erlaubt der Editor nur, wenn alle beteiligten Switches STP aktiv haben; Ports zu Endgeräten leiten sofort weiter (wie PortFast).
+- **Basis/Pro**: Der Schalter oben rechts blendet fortgeschrittene Funktionen ein (VLANs, Trunks, Spanning Tree, NAT, DHCP-Relay, Router-on-a-Stick, Layer-3-Switch). Projekte, die solche Funktionen nutzen, schalten beim Öffnen automatisch auf Pro.
+- **Router-on-a-Stick**: Router-Subinterfaces mit 802.1Q-Tag (`eth0.10`) an einem Trunk-Port; jedes ist Gateway eines VLANs.
+- **Layer-3-Switch**: Switch mit VLAN-Interfaces (SVIs) als Gateways, routet zwischen VLANs (`ip routing`), auch mit DHCP-Relay.
+- **Befehlszeile** für Router und Switches im Stil von FRRouting (vtysh), mit Abkürzungen, `?`, Tab und `do`; Zugang per Doppelklick (Konsole) oder per `ssh` vom PC über simuliertes TCP. Befehlsreferenz: [docs/cli.md](docs/cli.md).
+- **Verbindungsarten**: TP-Kabel, Glasfaser und Funk (WLAN). Jedes Kabelende zeigt eine Link-LED (grün aktiv, rot aus mit Grund), Anschlüsse haben Farbtags und Beschreibungen, Ports lassen sich abschalten (`shutdown`).
+- **WLAN**: Access Points mit SSID, WPA2-Passwort, Band und Kanal; Endgeräte mit WLAN-Profil. Die Signalqualität hängt von Abstand und Stockwerken ab. **Mesh**: Access Points mit Mesh-Betrieb verbinden sich per Funk, auch über Stockwerke.
+- **Stockwerke**: Geräte und Bereiche liegen auf Stockwerken; die Ansicht zeigt alle oder eines.
+- **Dokumentationsmodus**: farbige Bereiche mit Titel, Netz (Netzadresse, Maske, Hostbereich und Broadcast werden berechnet), VLAN und Notiz.
+- **Snapshots**: benannte Zwischenstände, automatisch vor jedem Start der Simulation; sie werden mit dem Projekt gespeichert.
+- **Frontansicht und Rack**: Switch-Ports wie auf dem Gerät, Umstecken per Klick; die Rack-Ansicht zeigt alle Netzwerkgeräte pro Stockwerk.
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
 
 ## Aufgaben
@@ -97,7 +115,7 @@ Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruc
 
 ## Beispiele
 
-[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver) `heimnetz-nat.json` (Heimnetz mit NAT, öffentlicher Webserver, Portweiterleitung auf ein NAS) und `vlan-stp.json` (drei Switches im Ring mit Spanning Tree, zwei VLANs über Trunks). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver) `heimnetz-nat.json` (Heimnetz mit NAT, öffentlicher Webserver, Portweiterleitung auf ein NAS) `vlan-stp.json` (drei Switches im Ring mit Spanning Tree, zwei VLANs über Trunks), `router-on-a-stick.json` (zwei VLANs, ein Router mit Subinterfaces, SSH-Zugang `admin` / `Netz2026`), `layer3-switch.json` (Core-Switch routet zwischen drei VLANs, zentraler DHCP-Server über Relay, dokumentierte Bereiche) und `wlan-mesh.json` (zwei Mesh-Access-Points im EG und OG). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 
@@ -107,7 +125,7 @@ Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruc
 
 ## Projektdatei
 
-Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse mit MAC, IP und Maske, Kabel) und `configuration` (geräteübergreifende Einstellungen, derzeit leer). Gerätebezogene Einstellungen wie Gateway und DNS-Server liegen direkt beim Gerät. Beim Öffnen wird die Datei vollständig geprüft; unbekannte Felder werden verworfen, und Fehler nennen die betroffene Stelle (z.B. `topology.devices[2].type`).
+Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse mit MAC, IP und Maske, Kabel mit Medium, Dokumentationsbereiche, Stockwerke), `configuration` (geräteübergreifende Einstellungen, derzeit leer) und optional `snapshots` (Zwischenstände). Gerätebezogene Einstellungen wie Gateway und DNS-Server liegen direkt beim Gerät. Beim Öffnen wird die Datei vollständig geprüft; unbekannte Felder werden verworfen, und Fehler nennen die betroffene Stelle (z.B. `topology.devices[2].type`).
 
 ## Herkunft
 
@@ -116,3 +134,5 @@ Die Idee orientiert sich am öffentlich dokumentierten Konzept der Lernsoftware 
 ## Lizenz
 
 [MIT](LICENSE) © 2026 Mikael von Allmen. Freie Nutzung, Anpassung und Weitergabe, auch an andere Schulen, solange der Lizenzhinweis erhalten bleibt.
+
+Eingebaute Software anderer (z.B. die Svelte-Laufzeit) steht unter MIT-kompatiblen Lizenzen; die Hinweise liegen in [release/THIRD_PARTY_NOTICES.md](release/THIRD_PARTY_NOTICES.md) und erscheinen im Simulator unter **Über**. Der Build prüft die Lizenzen und bricht bei einer nicht freigegebenen ab. Die Desktop-Version liefert zusätzlich die Lizenzen der Rust-Pakete mit ([docs/desktop.md](docs/desktop.md)). Die Befehlszeile bildet die Syntax von FRRouting nur nach und enthält keinen Code daraus ([docs/cli.md](docs/cli.md#lizenzen)).

@@ -199,9 +199,12 @@ export class Simulation {
     this.#consoles.delete(id);
   }
 
-  /** Startet "ping <ziel>" auf einem Endgerät. */
+  /** Startet "ping <ziel>" auf einem Endgerät oder (aus der Befehlszeile) auf einem Router/Layer-3-Switch. */
   ping(deviceId: string, target: string) {
-    this.#host(deviceId)?.ping(target);
+    const node = this.#node(deviceId);
+    if (node instanceof HostNode) node.ping(target);
+    else if (node instanceof RouterNode) node.ping(target);
+    else if (node instanceof L3SwitchNode) node.router.ping(target);
   }
 
   traceroute(deviceId: string, target: string) {

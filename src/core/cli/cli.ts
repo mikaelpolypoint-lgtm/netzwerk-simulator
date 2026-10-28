@@ -68,6 +68,8 @@ export interface CliOutput {
   topology?: Topology;
   /** Sitzung beendet («exit» im obersten Modus). */
   close?: boolean;
+  /** Etwas, das die Simulation ausführen soll (z.B. ping). */
+  action?: { kind: 'ping'; target: string };
 }
 
 /** Gerätetypen mit Befehlszeile. */
@@ -312,6 +314,13 @@ const COMMANDS: Command[] = [
   { modes: ['enable'], syntax: 'write memory', help: 'Save the running configuration', run: () => ok(['Building configuration...', '[OK]']) },
   { modes: ['enable'], syntax: 'write', help: 'Save the running configuration', run: () => ok(['Building configuration...', '[OK]']) },
   { modes: ['enable'], syntax: 'copy running-config startup-config', help: 'Save the running configuration', run: () => ok(['Building configuration...', '[OK]']) },
+  {
+    modes: EXEC,
+    types: L3,
+    syntax: 'ping <ip>',
+    help: 'Send ICMP echo requests',
+    run: ({ args }) => ({ lines: [`Sending 4 ICMP echos to ${args[0]}:`], action: { kind: 'ping', target: args[0]! } }),
+  },
   { modes: EXEC, syntax: 'show version', help: 'Software version', run: ({ device }) => ok(showVersion(device)) },
   { modes: ['enable'], syntax: 'show running-config', help: 'Current operating configuration', run: ({ device }) => ok(runningConfig(device)) },
   { modes: EXEC, types: L3, syntax: 'show ip route', help: 'IP routing table', run: ({ device }) => ok(showIpRoute(device)) },
@@ -651,7 +660,8 @@ export function execute(session: CliSession, line: string, env: CliEnv): CliOutp
     return { session: rest, lines: ['% Access denied'] };
   }
 
-  const trimmed = line.trim();
+  // Kommentare: ganze Zeile mit «!» oder angehängt mit « ! …» (wie in Konfigurationsdateien).
+  const trimmed = line.replace(/\s+!\s.*$/, '').trim();
   if (!trimmed || trimmed.startsWith('!')) return { session, lines: [] };
   if (trimmed.endsWith('?')) return { session, lines: help(device, session, trimmed.slice(0, -1), line.slice(0, line.lastIndexOf('?'))) };
 
@@ -679,7 +689,13 @@ export function execute(session: CliSession, line: string, env: CliEnv): CliOutp
   const chosen = top[0]!;
   const out = chosen.command.run({ args: chosen.args, device, session, env });
   const result: Partial<CliOutput> = Array.isArray(out) ? { lines: out } : (out ?? {});
-  return { session: result.session ?? session, lines: result.lines ?? [], ...(result.topology ? { topology: result.topology } : {}), ...(result.close ? { close: true } : {}) };
+  return {
+    session: result.session ?? session,
+    lines: result.lines ?? [],
+    ...(result.topology ? { topology: result.topology } : {}),
+    ...(result.close ? { close: true } : {}),
+    ...(result.action ? { action: result.action } : {}),
+  };
 }
 
 /** Antwort auf «?»: mögliche nächste Wörter mit kurzer Erklärung. */

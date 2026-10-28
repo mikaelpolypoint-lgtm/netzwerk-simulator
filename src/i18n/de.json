@@ -984,5 +984,19 @@
   "error.invalidUser": "Ungültiger Benutzername: {name}",
   "error.textTooLong": "Der Text ist zu lang (höchstens {max} Zeichen).",
 
-  "packets.ssh.encrypted": "Verschlüsselte Daten ({len} Zeichen)"
+  "packets.ssh.encrypted": "Verschlüsselte Daten ({len} Zeichen)",
+
+  "panel.title": "Frontansicht",
+  "panel.label": "Anschlüsse von {name}",
+  "panel.hint": "Umverkabeln: belegten Port anklicken, dann einen freien.",
+  "panel.hintMoving": "{port} gewählt: jetzt einen freien Port anklicken (gestrichelt).",
+  "panel.hintLocked": "Umverkabeln ist im Entwurfsmodus möglich.",
+
+  "toolbar.rack": "Rack",
+  "toolbar.rackHint": "Netzwerkgeräte als Einschübe im 19-Zoll-Rack anzeigen und umstecken",
+  "rack.title": "Rack-Ansicht",
+  "rack.help": "Switches, Router und Modems als Einschübe, pro Stockwerk ein Rack. Im Entwurfsmodus: belegten Port anklicken, dann einen freien, um umzustecken.",
+  "rack.empty": "Noch keine Switches, Router oder Modems im Projekt.",
+  "rack.single": "Rack",
+  "rack.label": "Rack {name}"
 }

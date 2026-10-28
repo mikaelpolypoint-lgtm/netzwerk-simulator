@@ -15,6 +15,7 @@ import {
 } from './frames';
 import type { NodeContext, SimNode } from './simulation';
 import { deviceSeq } from '../model/topology';
+import { PingRun, type IcmpApp } from './apps';
 import { SSH_PORT, startSshServer } from './ssh';
 import { TcpStack } from './tcp';
 
@@ -419,10 +420,25 @@ export class RouterNode extends IpNode {
   #byOutside = new Map<string, NatEntry>();
   #nextPort = NAT_PORT_START;
 
+  #ping: IcmpApp | null = null;
+  #pingId = 0x4000;
+
   constructor(ctx: NodeContext) {
     super(ctx);
     this.tcp = new TcpStack(this, deviceSeq(ctx.device()?.id ?? 'd0'));
     startSshServer(this, ctx);
+  }
+
+  /** «ping» aus der Befehlszeile des Routers. */
+  ping(target: string) {
+    this.#ping?.cancel();
+    const run = new PingRun(this, target, ++this.#pingId, '');
+    this.#ping = run;
+    run.start();
+  }
+
+  protected override onIcmp(packet: Ipv4Packet) {
+    this.#ping?.onIcmp(packet);
   }
 
   /** Nur SSH (Port 22); alles andere an den Router selbst verwirft er still, wie Heimrouter. */

@@ -3,6 +3,7 @@
   import { editor, type Mode } from '../state/editor.svelte';
   import { ui } from '../state/ui.svelte';
   import AboutDialog from './AboutDialog.svelte';
+  import RackDialog from './RackDialog.svelte';
   import SnapshotDialog from './SnapshotDialog.svelte';
 
   let { onopen, onsave }: { onopen: () => void; onsave: () => void } = $props();
@@ -10,6 +11,7 @@
   const modes: Mode[] = ['design', 'action', 'doc'];
   let about = $state(false);
   let snapshots = $state(false);
+  let rack = $state(false);
 </script>
 
 <header class="toolbar">
@@ -50,6 +52,7 @@
     {/if}
   </div>
 
+  <button onclick={() => (rack = true)} title={t('toolbar.rackHint')}>{t('toolbar.rack')}</button>
   <button onclick={() => (snapshots = true)} title={t('toolbar.snapshotsHint')}>
     {t('toolbar.snapshots')}{editor.snapshots.length ? ` (${editor.snapshots.length})` : ''}
   </button>
@@ -92,6 +95,9 @@
 {/if}
 {#if snapshots}
   <SnapshotDialog onclose={() => (snapshots = false)} />
+{/if}
+{#if rack}
+  <RackDialog onclose={() => (rack = false)} />
 {/if}
 
 <style>

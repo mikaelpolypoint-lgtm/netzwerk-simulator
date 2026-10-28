@@ -61,9 +61,58 @@
     return { topology: editor.topology, state };
   }
 
+  // --- ping: Ausgaben der Simulation laufend als Zeilen im Gerätestil anhängen.
+  let pingFrom = $state<number | null>(null);
+
+  function pingLine(code: string, p: Record<string, string | number> = {}): string | null {
+    switch (code) {
+      case 'ping.reply':
+        return `Reply from ${p.from}: bytes=${p.size} time=${p.time}ms TTL=${p.ttl}`;
+      case 'ping.timeout':
+        return 'Request timed out.';
+      case 'ping.summary':
+        return `Success rate is ${p.sent ? Math.round((Number(p.received) / Number(p.sent)) * 100) : 0} percent (${p.received}/${p.sent})`;
+      case 'ping.noRoute':
+        return '% Network unreachable (no route)';
+      case 'ping.hostUnreachable':
+      case 'ping.gatewayUnreachable':
+        return '% Host unreachable (no ARP reply)';
+      case 'ping.ttlExpired':
+        return `TTL expired in transit (from ${p.from})`;
+      case 'ping.hostUnreachableFrom':
+      case 'ping.netUnreachableFrom':
+        return `Destination unreachable (from ${p.from})`;
+      default:
+        return code.startsWith('ping.') && !code.startsWith('ping.start') ? `% ${code}` : null;
+    }
+  }
+
+  $effect(() => {
+    if (pingFrom === null) return;
+    void simStore.tick;
+    const console = simStore.sim?.getDeviceState(deviceId).console ?? [];
+    const fresh = console.slice(pingFrom);
+    if (fresh.length === 0) return;
+    pingFrom = console.length;
+    const added = fresh.flatMap((l) => {
+      const text = pingLine(l.code, l.params);
+      return text ? [{ text, kind: 'out' as const }] : [];
+    });
+    if (added.length) lines = [...lines, ...added];
+    if (fresh.some((l) => l.code === 'ping.summary')) pingFrom = null;
+  });
+
   function run(text: string, echo: string) {
     const result = execute(session, text, env());
     lines = [...lines, { text: `${prompt}${echo}`, kind: 'in' }, ...result.lines.map((l) => ({ text: l, kind: 'out' as const }))];
+    if (result.action?.kind === 'ping') {
+      if (editor.acting && simStore.sim) {
+        pingFrom = simStore.sim.getDeviceState(deviceId).console.length;
+        simStore.ping(deviceId, result.action.target);
+      } else {
+        lines = [...lines, { text: '% Ping needs the running simulation (action mode)', kind: 'out' }];
+      }
+    }
     if (result.topology) editor.applyConfig(result.topology);
     session = result.session;
     if (result.close) {

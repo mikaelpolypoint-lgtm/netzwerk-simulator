@@ -38,6 +38,14 @@ group('Router-on-a-Stick', () => {
     expect(log).toContain('S1→PC20 ARP request 192.168.20.10');
   });
 
+  it('pingt aus der Befehlszeile des Routers in beide VLANs', () => {
+    const { net, r } = build();
+    const sim = new Simulation(net.topology);
+    sim.ping(r, '192.168.20.10');
+    sim.runUntilIdle();
+    expect(replies(sim, r)).toBe(4);
+  });
+
   it('zeigt die Subinterfaces in der Routingtabelle', () => {
     const { net, r } = build();
     const routes = buildRoutes(net.topology.devices.find((d) => d.id === r)!).routes;
@@ -86,6 +94,14 @@ group('Layer-3-Switch', () => {
     const state = sim.getDeviceState(sw) as { arp?: { ip: string; iface: number }[]; macTable?: unknown[] };
     expect(state.arp).toContainEqual(expect.objectContaining({ ip: '10.20.0.10', iface: sviId(20) }));
     expect(state.macTable?.length).toBeGreaterThan(0);
+  });
+
+  it('pingt aus der Befehlszeile des Layer-3-Switches', () => {
+    const { net, sw } = build();
+    const sim = new Simulation(net.topology);
+    sim.ping(sw, '10.20.0.10');
+    sim.runUntilIdle();
+    expect(replies(sim, sw)).toBe(4);
   });
 
   it('antwortet auf Ping an die eigene SVI', () => {

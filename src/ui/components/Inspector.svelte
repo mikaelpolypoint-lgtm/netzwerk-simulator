@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { DEVICE_SPECS, MAX_NAME_LENGTH, canUseWifi, floorsOf, hasCli, isRouterType } from '../../core';
+  import { DEVICE_SPECS, MAX_NAME_LENGTH, canUseWifi, floorsOf, hasCli, isRouterType, isSwitchType } from '../../core';
   import { t } from '../../i18n';
   import { roleLabel, typeLabel } from '../labels';
   import { openCli } from '../state/cli.svelte';
   import { editor } from '../state/editor.svelte';
   import AreaForm from './AreaForm.svelte';
   import CableInspector from './CableInspector.svelte';
+  import PortPanel from './PortPanel.svelte';
   import PortTable from './PortTable.svelte';
   import SviConfig from './SviConfig.svelte';
   import WifiClientForm from './WifiClientForm.svelte';
@@ -142,6 +143,11 @@
           >
         </div>
       </div>
+    {/if}
+
+    {#if isSwitchType(device.type) || device.type === 'router'}
+      <h3>{t('panel.title')}</h3>
+      <PortPanel {device} />
     {/if}
 
     <h3>{t('inspector.interfaces')}</h3>

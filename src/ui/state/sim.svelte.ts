@@ -70,6 +70,11 @@ class SimStore {
     this.tick++;
   }
 
+  ping(deviceId: string, target: string) {
+    this.#sim?.ping(deviceId, target);
+    this.tick++;
+  }
+
   ssh(deviceId: string, target: string, user: string, password: string) {
     this.#sim?.ssh(deviceId, target, user, password);
     this.tick++;
