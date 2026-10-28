@@ -1,12 +1,15 @@
 <script lang="ts">
-  import { buildRoutes, parseMask, type Device, type StaticRoute } from '../../core';
+  import { buildRoutes, logicalInterfaces, parseMask, type Device, type StaticRoute } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
   import { subnetSummary } from '../subnet';
+  import { ui } from '../state/ui.svelte';
   import RoutingTable from './RoutingTable.svelte';
+  import SubinterfaceConfig from './SubinterfaceConfig.svelte';
 
-  let { device }: { device: Device } = $props();
+  /** routesOnly: nur statische Routen (Layer-3-Switch, dessen Adressen auf den SVIs liegen). */
+  let { device, routesOnly = false }: { device: Device; routesOnly?: boolean } = $props();
 
   // --- Interfaces ------------------------------------------------------------
 
@@ -82,6 +85,7 @@
   }
 </script>
 
+{#if !routesOnly}
 <h3>{t('router.interfaces')}</h3>
 {#each device.interfaces as iface, index (iface.index)}
   {@const draft = drafts[index]}
@@ -115,7 +119,13 @@
   {/if}
 {/each}
 
-{#if device.type === 'router'}
+{/if}
+
+{#if device.type === 'router' && ui.pro}
+  <SubinterfaceConfig {device} />
+{/if}
+
+{#if device.type === 'router' && ui.pro}
   <h3>{t('nat.title')}</h3>
   <p class="muted small-text">{t('nat.hint')}</p>
   {#each device.interfaces as iface, index (iface.index)}
@@ -149,6 +159,7 @@
   {/if}
 {/if}
 
+{#if ui.pro && !routesOnly}
 <h3>{t('router.relay')}</h3>
 <p class="muted small-text">{t('router.relayHint')}</p>
 {#each device.interfaces as iface, index (iface.index)}
@@ -166,6 +177,7 @@
 {/each}
 {#if relayError}
   <p class="error" role="alert">{relayError}</p>
+{/if}
 {/if}
 
 <h3>{t('router.staticRoutes')}</h3>
@@ -206,8 +218,8 @@
       <span>{t('router.iface')}</span>
       <select bind:value={route.iface}>
         <option value="">{t('router.ifaceAuto')}</option>
-        {#each device.interfaces as iface (iface.index)}
-          <option value={String(iface.index)}>{interfaceLabel(device, iface.index)}</option>
+        {#each logicalInterfaces(device) as id (id)}
+          <option value={String(id)}>{interfaceLabel(device, id)}</option>
         {/each}
       </select>
     </label>

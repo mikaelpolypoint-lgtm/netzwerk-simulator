@@ -1,0 +1,55 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Netzwerk-Simulator",
+  "version": "../package.json",
+  "identifier": "ch.netzwerk-simulator.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Netzwerk-Simulator",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Education",
+    "shortDescription": "Netzwerk-Simulator für den Informatik-Unterricht",
+    "longDescription": "Rechnernetze aufbauen, Geräte konfigurieren und den Verkehr auf Paketebene beobachten. Läuft vollständig offline.",
+    "copyright": "© 2026 Mikael von Allmen, MIT-Lizenz",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../release/THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "THIRD_PARTY_RUST.md": "THIRD_PARTY_RUST.md"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  }
+}

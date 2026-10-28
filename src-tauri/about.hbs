@@ -1,0 +1,21 @@
+# Rust-Pakete in der Desktop-Version
+
+Diese Datei wird von `cargo about generate` erzeugt (siehe docs/desktop.md).
+Sie listet die Lizenzen aller Rust-Pakete, die in die Desktop-Programme
+eingebaut sind. Die Pakete werden unverändert verwendet; ihr Quellcode ist
+unter der jeweils angegebenen Adresse erhältlich (für MPL-2.0-Pakete gemäss
+Abschnitt 3.2 der Lizenz).
+
+{{#each licenses}}
+## {{{name}}}
+
+Verwendet von:
+{{#each used_by}}
+- {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} – Quellcode: {{{crate.repository}}}{{/if}}
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

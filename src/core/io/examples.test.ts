@@ -73,4 +73,34 @@ describe('Beispielprojekte', () => {
       '192.168.10.102',
     ]);
   });
+
+  const replies = (sim: Simulation, id: string) => sim.getDeviceState(id).console.filter((l) => l.code === 'ping.reply').length;
+  const byName = (t: ReturnType<typeof load>, name: string) => t.devices.find((d) => d.name === name)!.id;
+
+  it('router-on-a-stick.json: Verwaltung erreicht Unterricht über die Subinterfaces', () => {
+    const t = load('router-on-a-stick.json');
+    const sim = new Simulation(t);
+    sim.ping(byName(t, 'PC Verwaltung'), '192.168.20.11');
+    sim.runUntilIdle();
+    expect(replies(sim, byName(t, 'PC Verwaltung'))).toBe(4);
+  });
+
+  it('layer3-switch.json: Notebooks beziehen über das DHCP-Relay der SVIs Adressen aus ihrem VLAN', () => {
+    const t = load('layer3-switch.json');
+    const sim = new Simulation(t);
+    sim.runUntil(5000);
+    expect(sim.getDeviceState(byName(t, 'Notebook 1')).address?.ip).toMatch(/^10\.10\.0\./);
+    expect(sim.getDeviceState(byName(t, 'Notebook 2')).address?.ip).toMatch(/^10\.20\.0\./);
+    sim.ping(byName(t, 'Notebook 1'), '10.99.0.10');
+    sim.runUntil(15000);
+    expect(replies(sim, byName(t, 'Notebook 1'))).toBe(4);
+  });
+
+  it('wlan-mesh.json: Notebook im OG erreicht den Server über das Mesh', () => {
+    const t = load('wlan-mesh.json');
+    const sim = new Simulation(t);
+    sim.ping(byName(t, 'Notebook OG'), '192.168.50.5');
+    sim.runUntilIdle();
+    expect(replies(sim, byName(t, 'Notebook OG'))).toBe(4);
+  });
 });

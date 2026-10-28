@@ -66,7 +66,15 @@ function compareVector(a: Vector, b: Vector): number {
  * VLANs: Access-Ports gehören zu einem VLAN, Trunks übertragen alle mit
  * 802.1Q-Tag (VLAN 1 ohne Tag). Die MAC-Tabelle gilt je VLAN.
  */
+/** Lokaler Empfänger im Switch (VLAN-Interfaces eines Layer-3-Switches). */
+export interface LocalPort {
+  mac: string;
+  has(vlan: number): boolean;
+  deliver(vlan: number, frame: EthernetFrame): void;
+}
+
 export class SwitchNode implements SimNode {
+  protected local: LocalPort | null = null;
   #table = new Map<string, MacEntry>();
   #received = new Map<number, Received>();
   #roles = new Map<number, PortRole>();
@@ -110,7 +118,7 @@ export class SwitchNode implements SimNode {
     const cable = cableAt(this.#topology(), { device: device.id, iface: port });
     if (!cable) return true;
     const peer = getDevice(this.#topology(), otherEnd(cable, device.id).device);
-    return !peer || (peer.type !== 'switch' && peer.type !== 'modem');
+    return !peer || (peer.type !== 'switch' && peer.type !== 'l3switch' && peer.type !== 'modem' && peer.type !== 'accesspoint');
   }
 
   #topology() {
@@ -227,6 +235,12 @@ export class SwitchNode implements SimNode {
     this.#table.set(`${vlan}|${frame.src}`, { mac: frame.src, port: inPort, vlan, expires: now + MAC_TTL });
     if (inState === 'learning') return;
 
+    // Layer-3-Switch: Rahmen an die eigene SVI gehen nach oben, Broadcasts zusätzlich.
+    if (this.local?.has(vlan)) {
+      if (frame.dst === this.local.mac) return this.local.deliver(vlan, frame);
+      if (frame.dst === BROADCAST_MAC) this.local.deliver(vlan, frame);
+    }
+
     const flood = frame.dst === BROADCAST_MAC || frame.dst === STP_MAC;
     const known = flood ? undefined : this.#table.get(`${vlan}|${frame.dst}`);
     if (known && known.expires > now && this.ctx.isConnected(known.port) && this.#state(known.port) === 'forwarding') {
@@ -240,7 +254,23 @@ export class SwitchNode implements SimNode {
     }
   }
 
-  state() {
+  /** Rahmen vom Switch selbst (SVI) ins VLAN schicken: bekannter Port oder an alle. */
+  injectLocal(vlan: number, frame: EthernetFrame) {
+    const device = this.#device;
+    if (!device) return;
+    const now = this.ctx.now;
+    const known = frame.dst === BROADCAST_MAC ? undefined : this.#table.get(`${vlan}|${frame.dst}`);
+    if (known && known.expires > now && this.ctx.isConnected(known.port) && this.#state(known.port) === 'forwarding') {
+      this.#send(known.port, frame, vlan);
+      return;
+    }
+    for (const port of device.interfaces) {
+      if (!this.#member(port.index, vlan) || this.#state(port.index) !== 'forwarding') continue;
+      this.#send(port.index, frame, vlan);
+    }
+  }
+
+  state(): object {
     const now = this.ctx.now;
     const macTable = [...this.#table.values()]
       .filter((e) => e.expires > now && this.ctx.isConnected(e.port))

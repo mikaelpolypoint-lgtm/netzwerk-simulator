@@ -1,4 +1,5 @@
 import { DEVICE_SPECS } from '../model/devices';
+import { linkStatus } from '../model/links';
 import { cableAt, getCable, getDevice, otherEnd } from '../model/topology';
 import type { Device, Endpoint, Topology } from '../model/types';
 import { runCommand } from './commands';
@@ -10,6 +11,7 @@ import type { BrowserState } from './http';
 import type { MailClientState } from './mail';
 import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
 import { EventQueue } from './queue';
+import { L3SwitchNode } from './l3switch';
 import { ModemNode, SwitchNode, type MacEntry, type StpState } from './switch';
 
 /** Übertragungszeit pro Kabel in Millisekunden (virtuelle Zeit). */
@@ -126,7 +128,7 @@ export class Simulation {
   /** Wie beim Einschalten: Switches mit STP beginnen BPDUs zu senden, DHCP-Clients fragen nach einer Adresse. */
   #bootDhcpClients() {
     for (const device of this.#topology.devices) {
-      if (device.type === 'switch' && device.stp) {
+      if ((device.type === 'switch' || device.type === 'l3switch') && device.stp) {
         const node = this.#node(device.id);
         if (node instanceof SwitchNode) node.start();
       }
@@ -197,9 +199,12 @@ export class Simulation {
     this.#consoles.delete(id);
   }
 
-  /** Startet "ping <ziel>" auf einem Endgerät. */
+  /** Startet "ping <ziel>" auf einem Endgerät oder (aus der Befehlszeile) auf einem Router/Layer-3-Switch. */
   ping(deviceId: string, target: string) {
-    this.#host(deviceId)?.ping(target);
+    const node = this.#node(deviceId);
+    if (node instanceof HostNode) node.ping(target);
+    else if (node instanceof RouterNode) node.ping(target);
+    else if (node instanceof L3SwitchNode) node.router.ping(target);
   }
 
   traceroute(deviceId: string, target: string) {
@@ -221,6 +226,20 @@ export class Simulation {
     this.#host(deviceId)?.mail.fetch();
   }
 
+  /** SSH-Sitzung vom Endgerät zu einem Router oder Layer-3-Switch öffnen. */
+  ssh(deviceId: string, target: string, user: string, password: string) {
+    this.#host(deviceId)?.ssh.connect(target, user, password);
+  }
+
+  /** Eine Befehlszeile über die offene SSH-Sitzung übertragen. */
+  sshSend(deviceId: string, line: string) {
+    this.#host(deviceId)?.ssh.send(line);
+  }
+
+  sshClose(deviceId: string) {
+    this.#host(deviceId)?.ssh.close();
+  }
+
   /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */
   runCommand(deviceId: string, line: string) {
     const host = this.#host(deviceId);
@@ -239,8 +258,10 @@ export class Simulation {
     if (!device) return undefined;
     const ctx = this.#context(id);
     const node: SimNode =
-      device.type === 'switch'
+      device.type === 'switch' || device.type === 'accesspoint'
         ? new SwitchNode(ctx)
+        : device.type === 'l3switch'
+          ? new L3SwitchNode(ctx)
         : device.type === 'modem'
           ? new ModemNode(ctx)
           : device.type === 'router'
@@ -262,7 +283,10 @@ export class Simulation {
       topology: () => sim.#topology,
       schedule: (delay, run) => sim.#queue.push(sim.#now + delay, run),
       transmit: (iface, frame) => sim.#transmit({ device: id, iface }, frame),
-      isConnected: (iface) => cableAt(sim.#topology, { device: id, iface }) !== undefined,
+      isConnected: (iface) => {
+        const cable = cableAt(sim.#topology, { device: id, iface });
+        return !!cable && linkStatus(sim.#topology, cable).up;
+      },
       print: (code, params) => {
         const lines = sim.#consoles.get(id) ?? [];
         lines.push({ time: sim.#now, code, params });
@@ -274,7 +298,8 @@ export class Simulation {
 
   #transmit(from: Endpoint, frame: EthernetFrame): boolean {
     const cable = cableAt(this.#topology, from);
-    if (!cable) return false;
+    // Abgeschaltete Anschlüsse und Funkverbindungen ohne Anmeldung übertragen nichts.
+    if (!cable || !linkStatus(this.#topology, cable).up) return false;
     const to = otherEnd(cable, from.device);
     const entry: PacketLogEntry = {
       id: this.#nextLogId++,
@@ -296,7 +321,7 @@ export class Simulation {
       this.#inFlight.delete(entry);
       // Wurde das Kabel inzwischen entfernt oder umgesteckt, geht der Rahmen verloren.
       const current = getCable(this.#topology, cable.id);
-      const intact = current && cableAt(this.#topology, from)?.id === cable.id && cableAt(this.#topology, to)?.id === cable.id;
+      const intact = current && linkStatus(this.#topology, current).up && cableAt(this.#topology, from)?.id === cable.id && cableAt(this.#topology, to)?.id === cable.id;
       if (!intact || damaged) {
         entry.status = 'lost';
         entry.lostBecause = intact ? 'damaged' : 'removed';

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isRouterType, type Device } from '../../core';
+  import { isRouterType, isSwitchType, type Device } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { simStore } from '../state/sim.svelte';
@@ -13,8 +13,8 @@
   const now = $derived((simStore.tick, simStore.sim?.now ?? 0));
 </script>
 
-{#if device.type === 'switch'}
-  <p class="muted">{t('switch.explain')}</p>
+{#if isSwitchType(device.type) || device.type === 'accesspoint'}
+  <p class="muted">{t(device.type === 'accesspoint' ? 'ap.explain' : 'switch.explain')}</p>
   {#if deviceState?.stp}
     {@const stp = deviceState.stp}
     <h3>{t('switch.stp')}</h3>
@@ -46,6 +46,10 @@
     </table>
   {/if}
   <StateTables {device} macTable={deviceState?.macTable ?? []} {now} />
+  {#if device.type === 'l3switch'}
+    <RoutingTable {device} />
+    <StateTables {device} arp={deviceState?.arp ?? []} {now} />
+  {/if}
 {:else if isRouterType(device.type)}
   {#if device.type === 'internet'}
     <p class="muted">{t('internet.explain')}</p>

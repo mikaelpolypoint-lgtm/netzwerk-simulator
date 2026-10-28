@@ -1,0 +1,329 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "router",
+        "name": "Router",
+        "position": {
+          "x": -300,
+          "y": -150
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "ip": "192.168.50.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:01:01",
+            "ip": "10.0.0.2",
+            "mask": "255.255.255.252"
+          }
+        ]
+      },
+      {
+        "id": "d2",
+        "type": "pc",
+        "name": "Server",
+        "position": {
+          "x": -500,
+          "y": 30
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "ip": "192.168.50.5",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.50.1"
+      },
+      {
+        "id": "d3",
+        "type": "accesspoint",
+        "name": "AP EG",
+        "position": {
+          "x": -60,
+          "y": 30
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:03:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:03:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:03:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:03:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:03:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:03:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:03:07"
+          },
+          {
+            "index": 8,
+            "mac": "02:00:00:00:03:08"
+          }
+        ],
+        "wlan": {
+          "ssid": "Schulhaus",
+          "band": "5",
+          "channel": 36,
+          "password": "Funk2026!",
+          "mesh": true
+        }
+      },
+      {
+        "id": "d4",
+        "type": "accesspoint",
+        "name": "AP OG",
+        "position": {
+          "x": 60,
+          "y": -200
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:04:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:04:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:04:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:04:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:04:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:04:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:04:07"
+          },
+          {
+            "index": 8,
+            "mac": "02:00:00:00:04:08"
+          }
+        ],
+        "floor": 1,
+        "wlan": {
+          "ssid": "Schulhaus",
+          "band": "5",
+          "channel": 36,
+          "password": "Funk2026!",
+          "mesh": true
+        }
+      },
+      {
+        "id": "d5",
+        "type": "notebook",
+        "name": "Notebook EG",
+        "position": {
+          "x": 120,
+          "y": 150
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00",
+            "ip": "192.168.50.21",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.50.1",
+        "wifi": {
+          "ssid": "Schulhaus",
+          "password": "Funk2026!"
+        }
+      },
+      {
+        "id": "d6",
+        "type": "notebook",
+        "name": "Notebook OG",
+        "position": {
+          "x": 260,
+          "y": -300
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:06:00",
+            "ip": "192.168.50.22",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "floor": 1,
+        "gateway": "192.168.50.1",
+        "wifi": {
+          "ssid": "Schulhaus",
+          "password": "Funk2026!"
+        }
+      },
+      {
+        "id": "d7",
+        "type": "switch",
+        "name": "Switch",
+        "position": {
+          "x": -300,
+          "y": 30
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:07:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:07:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:07:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:07:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:07:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:07:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:07:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:07:07"
+          }
+        ]
+      }
+    ],
+    "cables": [
+      {
+        "id": "c8",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d7",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d2",
+          "iface": 0
+        },
+        "b": {
+          "device": "d7",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c10",
+        "a": {
+          "device": "d3",
+          "iface": 0
+        },
+        "b": {
+          "device": "d7",
+          "iface": 2
+        }
+      },
+      {
+        "id": "c11",
+        "a": {
+          "device": "d3",
+          "iface": 1
+        },
+        "b": {
+          "device": "d4",
+          "iface": 1
+        },
+        "medium": "wireless"
+      },
+      {
+        "id": "c12",
+        "a": {
+          "device": "d5",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 2
+        },
+        "medium": "wireless"
+      },
+      {
+        "id": "c13",
+        "a": {
+          "device": "d6",
+          "iface": 0
+        },
+        "b": {
+          "device": "d4",
+          "iface": 2
+        },
+        "medium": "wireless"
+      }
+    ],
+    "nextId": 14,
+    "floors": [
+      {
+        "name": "EG"
+      },
+      {
+        "name": "OG"
+      }
+    ]
+  },
+  "configuration": {}
+}

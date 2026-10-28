@@ -12,11 +12,14 @@
     "test:watch": "vitest",
     "verify": "npm run check && npm test && npm run build",
     "e2e": "npm run build && playwright test",
-    "release": "npm run verify && node scripts/release.mjs"
+    "release": "npm run verify && node scripts/release.mjs",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tauri-apps/cli": "^2.12.4",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^26.6.5",
     "svelte": "^5.57.3",

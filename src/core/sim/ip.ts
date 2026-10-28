@@ -1,6 +1,6 @@
 import type { Device } from '../model/types';
 import { LIMITED_BROADCAST, broadcastOf, formatIp, isPrivate, parseIp } from '../net/ipv4';
-import { buildRoutes, interfaceAddresses, lookupRoute, type IfaceAddress, type Route } from '../net/routing';
+import { buildRoutes, decodeIface, interfaceAddresses, lookupRoute, macOfIface, relayOf, subifId, type IfaceAddress, type Route } from '../net/routing';
 import {
   BROADCAST_MAC,
   DHCP_CLIENT_PORT,
@@ -14,6 +14,10 @@ import {
   type UdpDatagram,
 } from './frames';
 import type { NodeContext, SimNode } from './simulation';
+import { deviceSeq } from '../model/topology';
+import { PingRun, type IcmpApp } from './apps';
+import { SSH_PORT, startSshServer } from './ssh';
+import { TcpStack } from './tcp';
 
 export const ARP_TIMEOUT = 1000;
 export const ARP_ATTEMPTS = 2;
@@ -92,12 +96,43 @@ export class IpNode implements SimNode {
     return { arp: this.arpEntries() };
   }
 
-  receive(index: number, frame: EthernetFrame) {
-    const mac = this.ctx.device()?.interfaces[index]?.mac;
-    // Getaggte Rahmen (VLAN) und BPDUs sind nur für Switches bestimmt.
-    if (!mac || frame.vlan !== undefined || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
+  /**
+   * Rahmen am physischen Anschluss `port`. Getaggte Rahmen gehören zum
+   * passenden Subinterface (Router-on-a-Stick); ohne Subinterface werden sie
+   * verworfen, wie bei echten Geräten.
+   */
+  receive(port: number, frame: EthernetFrame) {
+    const device = this.ctx.device();
+    if (!device) return;
+    let index = port;
+    if (frame.vlan !== undefined) {
+      if (!device.subinterfaces?.some((s) => s.parent === port && s.vlan === frame.vlan)) return;
+      index = subifId(port, frame.vlan);
+    }
+    this.receiveOn(index, frame);
+  }
+
+  /** Rahmen auf einem logischen Interface; Ziel muss dessen MAC oder Broadcast sein. */
+  receiveOn(index: number, frame: EthernetFrame) {
+    const device = this.ctx.device();
+    const mac = device && macOfIface(device, index);
+    if (!mac || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
     if (frame.payload.kind === 'arp') this.#onArp(index, frame.payload);
     else if (frame.payload.kind === 'ipv4') this.#onIp(index, frame.payload, frame.src);
+  }
+
+  /** Sendet einen Rahmen auf einem logischen Interface, bei Subinterfaces mit 802.1Q-Tag. */
+  protected sendFrame(index: number, frame: EthernetFrame): boolean {
+    const ref = decodeIface(index);
+    if (ref.kind === 'port') return this.ctx.transmit(ref.port, frame);
+    if (ref.kind === 'sub') return this.ctx.transmit(ref.port, { ...frame, vlan: ref.vlan });
+    return false;
+  }
+
+  /** MAC des logischen Interfaces. */
+  macOf(index: number): string | undefined {
+    const device = this.ctx.device();
+    return device && macOfIface(device, index);
   }
 
   /** Nachbarn auch ohne ARP bekannt machen, z.B. den DHCP-Server aus seinem Ack. */
@@ -114,7 +149,7 @@ export class IpNode implements SimNode {
     // Wie RFC 826: Absender lernen, wenn die Anfrage uns gilt oder er schon bekannt ist.
     if (forMe || this.#arp.has(arp.senderIp)) this.#learn(arp.senderIp, arp.senderMac, index);
     if (arp.op === 'request' && forMe) {
-      this.ctx.transmit(index, {
+      this.sendFrame(index, {
         src: iface.mac,
         dst: arp.senderMac,
         payload: {
@@ -170,7 +205,7 @@ export class IpNode implements SimNode {
   #sendArpRequest(index: number, ip: number) {
     const iface = this.interfaces().find((i) => i.index === index);
     if (!iface) return;
-    this.ctx.transmit(index, {
+    this.sendFrame(index, {
       src: iface.mac,
       dst: BROADCAST_MAC,
       payload: {
@@ -228,7 +263,7 @@ export class IpNode implements SimNode {
     const forwarded = this.outbound(inIface, out, { ...packet, ttl: packet.ttl - 1 });
     if (!forwarded) return;
     this.#resolve(out.index, route.via ?? dst, {
-      onMac: (mac) => this.ctx.transmit(out.index, { src: out.mac, dst: mac, payload: forwarded }),
+      onMac: (mac) => this.sendFrame(out.index, { src: out.mac, dst: mac, payload: forwarded }),
       onFail: () => this.#icmpError(inIface, packet, 'destUnreachable', 'host'),
     });
   }
@@ -313,7 +348,7 @@ export class IpNode implements SimNode {
     if (dst === LIMITED_BROADCAST) {
       const iface = this.interfaces()[0];
       if (!iface) return void onError?.('noRoute');
-      this.ctx.transmit(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: build(formatIp(iface.ip)) });
+      this.sendFrame(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: build(formatIp(iface.ip)) });
       return;
     }
 
@@ -325,20 +360,20 @@ export class IpNode implements SimNode {
     }
     const packet = build(formatIp(iface.ip));
     if (route.via === null && dst === broadcastOf(iface.ip, iface.prefix)) {
-      this.ctx.transmit(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: packet });
+      this.sendFrame(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: packet });
       return;
     }
     this.#resolve(iface.index, route.via ?? dst, {
-      onMac: (mac) => this.ctx.transmit(iface.index, { src: iface.mac, dst: mac, payload: packet }),
+      onMac: (mac) => this.sendFrame(iface.index, { src: iface.mac, dst: mac, payload: packet }),
       onFail: () => onError?.(route.via === null ? 'hostUnreachable' : 'gatewayUnreachable'),
     });
   }
 
   /** Sendet ohne eigene Adresse an alle (DHCP vor der Adressvergabe): Absender 0.0.0.0. */
   sendUnconfiguredBroadcast(index: number, payload: UdpDatagram, src = '0.0.0.0') {
-    const mac = this.ctx.device()?.interfaces[index]?.mac;
+    const mac = this.macOf(index);
     if (!mac) return;
-    this.ctx.transmit(index, {
+    this.sendFrame(index, {
       src: mac,
       dst: BROADCAST_MAC,
       payload: { kind: 'ipv4', src, dst: '255.255.255.255', ttl: DEFAULT_TTL, id: ++this.#ipId, payload },
@@ -379,9 +414,38 @@ function withFlowPort(payload: Ipv4Packet['payload'], side: 'src' | 'dst', port:
 /** Vermittlungsrechner: leitet weiter, kann als DHCP-Relay arbeiten und Adressen übersetzen (NAT). */
 export class RouterNode extends IpNode {
   protected override readonly forwarding = true;
+  /** TCP nur für die Verwaltung per SSH. */
+  readonly tcp: TcpStack;
   #byInside = new Map<string, NatEntry>();
   #byOutside = new Map<string, NatEntry>();
   #nextPort = NAT_PORT_START;
+
+  #ping: IcmpApp | null = null;
+  #pingId = 0x4000;
+
+  constructor(ctx: NodeContext) {
+    super(ctx);
+    this.tcp = new TcpStack(this, deviceSeq(ctx.device()?.id ?? 'd0'));
+    startSshServer(this, ctx);
+  }
+
+  /** «ping» aus der Befehlszeile des Routers. */
+  ping(target: string) {
+    this.#ping?.cancel();
+    const run = new PingRun(this, target, ++this.#pingId, '');
+    this.#ping = run;
+    run.start();
+  }
+
+  protected override onIcmp(packet: Ipv4Packet) {
+    this.#ping?.onIcmp(packet);
+  }
+
+  /** Nur SSH (Port 22); alles andere an den Router selbst verwirft er still, wie Heimrouter. */
+  protected override onTcp(packet: Ipv4Packet, segment: TcpSegment) {
+    if (segment.dstPort !== SSH_PORT) return;
+    this.tcp.receive(packet.src, packet.dst, segment);
+  }
 
   #isNat(index: number) {
     return !!this.ctx.device()?.interfaces[index]?.nat;
@@ -454,7 +518,8 @@ export class RouterNode extends IpNode {
     if (msg.kind !== 'dhcp' || datagram.dstPort !== DHCP_SERVER_PORT) return;
     const fromClient = msg.op === 'discover' || msg.op === 'request' || msg.op === 'release';
     if (fromClient) {
-      const server = this.ctx.device()?.interfaces[index]?.dhcpRelay;
+      const device = this.ctx.device();
+      const server = device && relayOf(device, index);
       const own = this.interfaces().find((i) => i.index === index);
       if (!server || !own || msg.giaddr) return;
       this.ctx.print('relay.forward', { op: msg.op, server });

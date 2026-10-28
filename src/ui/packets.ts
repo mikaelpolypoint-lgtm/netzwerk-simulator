@@ -45,6 +45,8 @@ function info(frame: EthernetFrame): string {
     const app = protocolOf(frame);
     if (app === 'TCP') return `${portLabel(inner.srcPort)} → ${portLabel(inner.dstPort)} ${flags} ${numbers}`;
     // Bei Anwendungsdaten die erste Zeile zeigen, wie ein Paketanalysator; HTTP-Folgesegmente als Fortsetzung.
+    // SSH: nach dem Versionsaustausch ist alles verschlüsselt.
+    if (app === 'SSH' && !inner.data.startsWith('SSH-')) return `${t('packets.ssh.encrypted', { len: inner.data.length })} ${numbers}`;
     const first = (inner.data.split('\r\n')[0] ?? '').slice(0, 80);
     const continuation = app === 'HTTP' && !/^(GET|POST|HEAD|HTTP\/)/.test(first);
     return `${continuation ? t('packets.tcp.continuation') : first} ${numbers}`;

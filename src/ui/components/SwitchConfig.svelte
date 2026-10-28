@@ -3,6 +3,7 @@
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import { ui } from '../state/ui.svelte';
 
   /** Entwurfsmodus, Switch: Spanning Tree und VLAN pro Port. */
   let { device }: { device: Device } = $props();
@@ -21,6 +22,9 @@
   }
 </script>
 
+{#if !ui.pro}
+<p class="muted">{t('switch.basicHint')}</p>
+{:else}
 <h3>{t('switch.stp')}</h3>
 <label class="toggle">
   <input type="checkbox" checked={!!device.stp} onchange={(e) => editor.setStp(device.id, e.currentTarget.checked)} />
@@ -78,6 +82,7 @@
   </tbody>
 </table>
 <p class="muted">{t('switch.vlanHint')}</p>
+{/if}
 
 <style>
   h3 {

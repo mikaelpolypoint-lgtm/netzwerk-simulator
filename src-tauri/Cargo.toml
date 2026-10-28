@@ -1,0 +1,25 @@
+[package]
+name = "netzwerk-simulator"
+version = "0.1.0"
+description = "Netzwerk-Simulator für den Informatik-Unterricht"
+authors = ["Mikael von Allmen"]
+license = "MIT"
+repository = "https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "netzwerk_simulator_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

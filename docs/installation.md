@@ -9,6 +9,8 @@ Es gibt drei Wege, je nachdem, was du vorhast:
 | [A: Datei direkt öffnen](#a-datei-direkt-öffnen) | Unterricht, Prüfungsrechner, Lernende zu Hause | nur einen Browser (Git optional) |
 | [B: Schulserver](#b-schulserver-mit-docker) | ganze Schule im Schulnetz | Docker |
 | [C: Selbst bauen](#c-selbst-bauen-und-anpassen) | Anpassungen am Simulator | Git und Node.js |
+| [Webhosting mit Plesk](plesk.md) | Testversion oder öffentliche Version im Web | Plesk mit Git-Erweiterung |
+| [Desktop-Version](desktop.md) | Installation als Programm (Windows, macOS, Linux) | Installer aus den GitHub-Releases |
 
 ---
 

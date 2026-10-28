@@ -2,7 +2,7 @@ import { parseMask } from '../net/ipv4';
 import type { HostNode } from './host';
 
 /** Befehle der simulierten Befehlszeile, angelehnt an Windows ("ipconfig", "tracert"). */
-export const COMMANDS = ['ping', 'tracert', 'nslookup', 'ipconfig', 'arp', 'netstat', 'cls', 'help'] as const;
+export const COMMANDS = ['ping', 'tracert', 'nslookup', 'ipconfig', 'arp', 'netstat', 'ssh', 'cls', 'help'] as const;
 
 export function runCommand(host: HostNode, line: string) {
   const ctx = host.ctx;
@@ -45,6 +45,10 @@ export function runCommand(host: HostNode, line: string) {
       return;
     case 'netstat':
       printConnections(host);
+      return;
+    case 'ssh':
+      // Mit Ziel fragt die Oberfläche das Passwort ab und ruft dann Simulation.ssh() auf.
+      if (!args[0] || !/@|-l/.test(args.join(' '))) ctx.print('cmd.usage.ssh');
       return;
     case 'cls':
     case 'clear':

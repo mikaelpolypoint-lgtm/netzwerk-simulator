@@ -3,10 +3,66 @@ import type { Device, StaticRoute } from '../model/types';
 import { formatIp, maskToText, networkOf, parseIp, parseMask } from './ipv4';
 
 export interface IfaceAddress {
+  /** Logisches Interface (siehe `ifaceId`); bei physischen Anschlüssen deren Index. */
   index: number;
   mac: string;
   ip: number;
   prefix: number;
+}
+
+// --- Logische Interfaces -------------------------------------------------------
+//
+// Routen, ARP und Pakete beziehen sich auf logische Interfaces. Die Nummer
+// verrät, worum es sich handelt, und bleibt stabil, wenn andere Subinterfaces
+// hinzukommen oder wegfallen:
+//   0 … 9999          physischer Anschluss (Index)
+//   10000·(p+1) + v   Subinterface von Anschluss p für VLAN v (Router-on-a-Stick)
+//   100000 + v        VLAN-Interface (SVI) eines Layer-3-Switches
+
+export const SUBIF_BASE = 10_000;
+export const SVI_BASE = 100_000;
+
+export type IfaceRef = { kind: 'port'; port: number } | { kind: 'sub'; port: number; vlan: number } | { kind: 'svi'; vlan: number };
+
+export function subifId(port: number, vlan: number): number {
+  return SUBIF_BASE * (port + 1) + vlan;
+}
+
+export function sviId(vlan: number): number {
+  return SVI_BASE + vlan;
+}
+
+export function decodeIface(id: number): IfaceRef {
+  if (id >= SVI_BASE) return { kind: 'svi', vlan: id - SVI_BASE };
+  if (id >= SUBIF_BASE) return { kind: 'sub', port: Math.floor(id / SUBIF_BASE) - 1, vlan: id % SUBIF_BASE };
+  return { kind: 'port', port: id };
+}
+
+/** MAC-Adresse der SVIs eines Layer-3-Switches: die des ersten Ports mit letztem Byte FF. */
+export function sviMac(device: Device): string {
+  const base = device.interfaces[0]?.mac ?? '02:00:00:00:00:00';
+  return base.slice(0, 15) + 'FF';
+}
+
+/** MAC eines logischen Interfaces (Subinterfaces teilen sich die MAC ihres Anschlusses). */
+export function macOfIface(device: Device, id: number): string | undefined {
+  const ref = decodeIface(id);
+  if (ref.kind === 'svi') return sviMac(device);
+  return device.interfaces[ref.port]?.mac;
+}
+
+/** Alle logischen Interfaces eines Geräts, auch unkonfigurierte (für Auswahllisten). */
+export function logicalInterfaces(device: Device): number[] {
+  if (device.type === 'l3switch') return (device.svis ?? []).map((s) => sviId(s.vlan));
+  return [...device.interfaces.map((i) => i.index), ...(device.subinterfaces ?? []).map((s) => subifId(s.parent, s.vlan))];
+}
+
+/** Ziel des DHCP-Relays auf einem logischen Interface. */
+export function relayOf(device: Device, id: number): string | undefined {
+  const ref = decodeIface(id);
+  if (ref.kind === 'port') return device.interfaces[ref.port]?.dhcpRelay;
+  if (ref.kind === 'sub') return device.subinterfaces?.find((s) => s.parent === ref.port && s.vlan === ref.vlan)?.dhcpRelay;
+  return device.svis?.find((s) => s.vlan === ref.vlan)?.dhcpRelay;
 }
 
 export type RouteKind = 'connected' | 'static' | 'default';
@@ -22,11 +78,19 @@ export interface Route {
 
 /** Alle Anschlüsse eines Geräts mit gültiger IP-Konfiguration. */
 export function interfaceAddresses(device: Device): IfaceAddress[] {
-  return device.interfaces.flatMap((i) => {
-    const ip = i.ip ? parseIp(i.ip) : null;
-    const prefix = i.mask ? parseMask(i.mask) : null;
-    return ip !== null && prefix !== null ? [{ index: i.index, mac: i.mac, ip, prefix }] : [];
-  });
+  const addr = (index: number, mac: string | undefined, ipText?: string, maskText?: string): IfaceAddress[] => {
+    const ip = ipText ? parseIp(ipText) : null;
+    const prefix = maskText ? parseMask(maskText) : null;
+    return mac && ip !== null && prefix !== null ? [{ index, mac, ip, prefix }] : [];
+  };
+  if (device.type === 'l3switch') {
+    const mac = sviMac(device);
+    return (device.svis ?? []).flatMap((s) => addr(sviId(s.vlan), mac, s.ip, s.mask));
+  }
+  return [
+    ...device.interfaces.flatMap((i) => addr(i.index, i.mac, i.ip, i.mask)),
+    ...(device.subinterfaces ?? []).flatMap((s) => addr(subifId(s.parent, s.vlan), device.interfaces[s.parent]?.mac, s.ip, s.mask)),
+  ];
 }
 
 /** Längster Präfix gewinnt; bei Gleichstand die zuerst eingetragene Route. */
@@ -64,6 +128,9 @@ export function buildRoutes(device: Device): { routes: Route[]; unusable: number
     return { routes, unusable };
   }
 
+  // Layer-3-Switch mit «no ip routing»: nur die eigenen Netze, keine Routen.
+  if (device.type === 'l3switch' && device.ipRouting === false) return { routes, unusable };
+
   (device.routes ?? []).forEach((r, n) => {
     const network = parseIp(r.network);
     const prefix = parseMask(r.mask);
@@ -100,7 +167,7 @@ export function checkStaticRoute(device: Device, route: StaticRoute): RouteIssue
   if (route.gateway && parseIp(route.gateway) === null) {
     return { code: 'invalidIp', field: 'gateway', params: { value: route.gateway } };
   }
-  if (route.iface !== undefined && !device.interfaces[route.iface]) return { code: 'unknownInterface', field: 'iface' };
+  if (route.iface !== undefined && !logicalInterfaces(device).includes(route.iface)) return { code: 'unknownInterface', field: 'iface' };
   if (!route.gateway && route.iface === undefined) return { code: 'routeNeedsTarget', field: 'gateway' };
   const duplicate = (device.routes ?? []).some((r) => r.network === route.network && parseMask(r.mask) === prefix);
   if (duplicate) return { code: 'duplicateRoute', field: 'network', params: { net: `${route.network}/${prefix}` } };
