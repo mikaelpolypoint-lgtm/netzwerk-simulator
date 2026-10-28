@@ -1,10 +1,12 @@
 <script lang="ts">
   import { LOCALES, locale, setLocale, t, type Locale } from '../../i18n';
   import { editor, type Mode } from '../state/editor.svelte';
+  import AboutDialog from './AboutDialog.svelte';
 
   let { onopen, onsave }: { onopen: () => void; onsave: () => void } = $props();
 
   const modes: Mode[] = ['design', 'action'];
+  let about = $state(false);
 </script>
 
 <header class="toolbar">
@@ -63,7 +65,13 @@
       {/each}
     </select>
   </label>
+
+  <button onclick={() => (about = true)}>{t('toolbar.about')}</button>
 </header>
+
+{#if about}
+  <AboutDialog onclose={() => (about = false)} />
+{/if}
 
 <style>
   .toolbar {

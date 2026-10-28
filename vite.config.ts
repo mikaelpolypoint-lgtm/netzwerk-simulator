@@ -1,6 +1,8 @@
 import { defineConfig, type Plugin } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+// @ts-expect-error: reines JavaScript ohne Typdeklaration
+import { thirdPartyLicenses } from './scripts/third-party-licenses.mjs';
 
 // Nur im Build: Die Seite darf keinerlei Netzwerkverbindungen aufbauen
 // (Datenschutz-Konzept, Abschnitt 7). Im Dev-Server würde das HMR blockieren.
@@ -23,9 +25,14 @@ function contentSecurityPolicy(): Plugin {
   };
 }
 
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // Eine einzige HTML-Datei, die auch per file:// (Variante A) funktioniert.
-  plugins: [svelte(), viteSingleFile(), contentSecurityPolicy()],
+  plugins: [svelte(), viteSingleFile(), contentSecurityPolicy(), thirdPartyLicenses()],
   test: {
     include: ['src/**/*.test.ts'],
   },

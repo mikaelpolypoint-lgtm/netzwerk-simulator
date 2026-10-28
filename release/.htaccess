@@ -1,0 +1,21 @@
+# Für Webhosting mit Apache (z.B. Plesk): Dokumentstamm auf diesen Ordner setzen.
+# Siehe docs/plesk.md. Bei reinem Nginx wird diese Datei ignoriert.
+
+DirectoryIndex netzwerk-simulator.html
+Options -Indexes
+
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  # Neue Versionen sollen sofort ankommen.
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# Nur die App und die Lizenzhinweise ausliefern.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>

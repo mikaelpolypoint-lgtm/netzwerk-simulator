@@ -810,5 +810,16 @@
 
   "key.ctrl": "Ctrl",
   "key.delete": "Suppr",
-  "toolbar.language": "Langue"
+  "toolbar.language": "Langue",
+
+  "toolbar.about": "À propos",
+  "about.version": "Version {version}",
+  "about.intro": "Logiciel libre pour l'enseignement de l'informatique. Fonctionne entièrement en local, sans compte et sans connexion Internet.",
+  "about.ownLicense": "Licence",
+  "about.thirdParty": "Logiciels inclus",
+  "about.thirdPartyHint": "Ces paquets sont intégrés au simulateur. Leurs licences le permettent à condition de fournir les mentions suivantes.",
+  "about.devBuild": "Non disponible dans le serveur de développement ; la liste est générée lors de la compilation.",
+  "about.syntaxTitle": "Syntaxe de commandes reproduite",
+  "about.syntaxText": "La ligne de commande des routeurs et commutateurs s'inspire de la syntaxe de FRRouting (vtysh). Il s'agit d'une reproduction simplifiée et indépendante pour l'enseignement, qui ne contient ni code ni textes de FRRouting. FRRouting est un projet distinct sous licence GPL-2.0, sans lien avec ce simulateur.",
+  "about.close": "Fermer"
 }

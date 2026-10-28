@@ -810,5 +810,16 @@
 
   "key.ctrl": "Strg",
   "key.delete": "Entf",
-  "toolbar.language": "Sprache"
+  "toolbar.language": "Sprache",
+
+  "toolbar.about": "Über",
+  "about.version": "Version {version}",
+  "about.intro": "Freie Software für den Informatik-Unterricht. Läuft vollständig lokal, ohne Konten und ohne Internetverbindung.",
+  "about.ownLicense": "Lizenz",
+  "about.thirdParty": "Enthaltene Software",
+  "about.thirdPartyHint": "Diese Pakete sind in den Simulator eingebaut. Ihre Lizenzen erlauben das, sofern die folgenden Hinweise mitgegeben werden.",
+  "about.devBuild": "Im Entwicklungsserver nicht verfügbar; die Liste wird beim Bauen erzeugt.",
+  "about.syntaxTitle": "Nachgebildete Befehlssyntax",
+  "about.syntaxText": "Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) angelehnt. Sie ist eine eigene, vereinfachte Nachbildung für den Unterricht und enthält keinen Code und keine Texte aus FRRouting. FRRouting ist ein eigenständiges Projekt unter der GPL-2.0-Lizenz und steht in keiner Verbindung zu diesem Simulator.",
+  "about.close": "Schliessen"
 }
