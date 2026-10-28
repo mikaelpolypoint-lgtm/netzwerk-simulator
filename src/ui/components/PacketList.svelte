@@ -6,14 +6,20 @@
   import { simStore } from '../state/sim.svelte';
   import PacketDetails from './PacketDetails.svelte';
 
-  /** Mehr Zeilen machen die Tabelle träge; ältere bleiben in der Simulation erhalten. */
-  const MAX_ROWS = 500;
+  /**
+   * Nur sichtbare Zeilen werden gezeichnet (feste Zeilenhöhe), so bleibt die
+   * Liste auch mit Tausenden von Einträgen flüssig.
+   */
+  const ROW_HEIGHT = 24;
+  const OVERSCAN = 10;
 
   let protocol = $state('');
   let device = $state('');
   let direction = $state<'' | 'sent' | 'received'>('');
   let scroller: HTMLDivElement;
   let followTail = true;
+  let scrollTop = $state(0);
+  let viewport = $state(300);
 
   let selectedId = $state<number | null>(null);
 
@@ -29,15 +35,18 @@
       return entry.from.device === device || entry.to.device === device;
     }),
   );
-  const rows = $derived(filtered.slice(-MAX_ROWS).map((entry) => toRow(editor.topology, entry)));
+  const first = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+  const last = $derived(Math.min(filtered.length, Math.ceil((scrollTop + viewport) / ROW_HEIGHT) + OVERSCAN));
+  // Nur die sichtbaren Einträge in Tabellenzeilen übersetzen (das ist der teure Teil).
+  const rows = $derived(filtered.slice(first, last).map((entry) => toRow(editor.topology, entry)));
 
   // Neue Zeilen nur dann ins Bild holen, wenn man ohnehin unten war.
   $effect.pre(() => {
-    void rows;
-    if (scroller) followTail = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8;
+    void filtered.length;
+    if (scroller) followTail = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - ROW_HEIGHT;
   });
   $effect(() => {
-    void rows;
+    void filtered.length;
     if (followTail) tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight }));
   });
 </script>
@@ -76,8 +85,8 @@
   </header>
 
   <div class="body">
-  <div class="scroller" bind:this={scroller}>
-    {#if rows.length === 0}
+  <div class="scroller" bind:this={scroller} bind:clientHeight={viewport} onscroll={() => (scrollTop = scroller.scrollTop)}>
+    {#if filtered.length === 0}
       <p class="muted empty">{t('packets.empty')}</p>
     {:else}
       <table aria-describedby="packets-hint">
@@ -94,6 +103,9 @@
           </tr>
         </thead>
         <tbody>
+          {#if first > 0}
+            <tr class="spacer" aria-hidden="true" style="height: {first * ROW_HEIGHT}px"><td colspan="7"></td></tr>
+          {/if}
           {#each rows as row (row.id)}
             <tr
               class="proto-{row.protocol.toLowerCase()}"
@@ -115,9 +127,12 @@
               <td><span class="badge">{row.protocol}</span></td>
               <td class="mono">{row.source}</td>
               <td class="mono">{row.destination}</td>
-              <td>{row.info}</td>
+              <td class="info" title={row.info}>{row.info}</td>
             </tr>
           {/each}
+          {#if last < filtered.length}
+            <tr class="spacer" aria-hidden="true" style="height: {(filtered.length - last) * ROW_HEIGHT}px"><td colspan="7"></td></tr>
+          {/if}
         </tbody>
       </table>
     {/if}
@@ -213,14 +228,25 @@
     padding: 4px 8px;
     white-space: nowrap;
   }
+  /* Feste Zeilenhöhe: Voraussetzung, damit nur die sichtbaren Zeilen gezeichnet werden können. */
+  tbody tr:not(.spacer) {
+    height: 24px;
+  }
   td {
-    padding: 3px 8px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
+    line-height: 23px;
   }
-  td:last-child {
-    white-space: normal;
+  td.info {
     min-width: 16rem;
+    max-width: 40rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .spacer td {
+    padding: 0;
+    border: none;
   }
   .num {
     text-align: right;
