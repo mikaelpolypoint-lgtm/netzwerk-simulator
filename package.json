@@ -10,7 +10,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.core.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run check && npm test && npm run build"
+    "verify": "npm run check && npm test && npm run build",
+    "release": "npm run verify && node scripts/release.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

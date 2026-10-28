@@ -1,0 +1,14 @@
+# Netzwerk-Simulator im Schulnetz (Variante B).
+# Start:  docker compose up -d --build
+# Danach: http://<servername>:8080
+services:
+  netzwerk-simulator:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: netzwerk-simulator:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true

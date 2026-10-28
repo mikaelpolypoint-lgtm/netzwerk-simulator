@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Fertig gebaute Datei: im Diff nicht Zeile für Zeile anzeigen.
+release/*.html -diff linguist-generated=true

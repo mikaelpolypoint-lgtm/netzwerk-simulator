@@ -4,6 +4,14 @@ Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EF
 
 Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konzept.md).
 
+## Sofort loslegen
+
+```bash
+git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
+```
+
+Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md).
+
 ## Stand
 
 | Etappe | Inhalt | Status |
@@ -14,22 +22,25 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 | M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | ✅ |
 | M5 | DNS, TCP/UDP, HTTP | ✅ |
 | M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | ✅ |
-| M7 | Deployment (Variante A und B) | offen |
+| M7 | Deployment (Variante A und B) | ✅ |
 
 ## Entwicklung
 
 Voraussetzung: Node.js 20 oder neuer.
 
 ```bash
-npm install
+npm ci
 npm run dev      # Entwicklungsserver auf http://localhost:5173
 npm test         # Tests des Simulationskerns
 npm run check    # Typprüfung (UI und DOM-freier Kern)
 npm run build    # erzeugt dist/index.html
 npm run verify   # alles zusammen: Typprüfung, Tests, Build (vor jedem Commit)
+npm run release  # verify + release/netzwerk-simulator.html neu erzeugen und offline prüfen
 ```
 
-`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. Sie lässt sich direkt per Doppelklick vom Datenträger öffnen (Variante A) oder von einem beliebigen statischen Webserver ausliefern (Variante B).
+`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält oder die CSP fehlt. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
+
+Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/installation.md#b-schulserver-mit-docker)).
 
 ## Aufbau
 
