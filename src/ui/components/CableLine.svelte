@@ -55,10 +55,13 @@
   {onkeydown}
 >
   <line class="hit" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
-  <line class="wire" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  <line class="wire" class:damaged={!!cable.loss} x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
   {#if geometry.labels}
     <text class="port" x={geometry.labels.a.x} y={geometry.labels.a.y}>{labelA}</text>
     <text class="port" x={geometry.labels.b.x} y={geometry.labels.b.y}>{labelB}</text>
+  {/if}
+  {#if cable.loss}
+    <text class="loss" x={(a.position.x + b.position.x) / 2} y={(a.position.y + b.position.y) / 2 - 8}>⚡ {cable.loss} %</text>
   {/if}
 </g>
 
@@ -75,6 +78,22 @@
     stroke: var(--cable);
     stroke-width: 2.5;
     stroke-linecap: round;
+  }
+  /* Beschädigtes Kabel: gestrichelt und in Warnfarbe, damit es bei der Fehlersuche auffallen kann. */
+  .wire.damaged {
+    stroke: var(--danger);
+    stroke-dasharray: 8 5;
+  }
+  .loss {
+    font-size: 11px;
+    font-weight: 600;
+    text-anchor: middle;
+    fill: var(--danger);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+    pointer-events: none;
   }
   .cable:hover .wire {
     stroke-width: 3.5;

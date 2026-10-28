@@ -24,6 +24,7 @@ import {
   removeStaticRoute,
   renameDevice,
   replugCable,
+  setCableLoss,
   setDhcpServer,
   setInterfaceAddress,
   setInterfaceCount,
@@ -319,6 +320,12 @@ class Editor {
   removeStaticRoute(id: string, index: number) {
     if (!this.editable) return;
     const next = this.#check(removeStaticRoute(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  setCableLoss(id: string, percent: number) {
+    if (!this.editable) return;
+    const next = this.#check(setCableLoss(this.topology, id, percent));
     if (next) this.#commit(next);
   }
 

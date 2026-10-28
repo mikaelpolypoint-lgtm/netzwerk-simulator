@@ -36,6 +36,7 @@ export type ErrorCode =
   | 'interfaceCountOutOfRange'
   | 'interfaceConnected'
   | 'interfaceInUse'
+  | 'invalidLoss'
   | 'notAnEndpoint'
   | 'unknownInterface'
   | 'invalidIp'
@@ -256,6 +257,20 @@ export function findSwitchLoop(t: Topology): Cable | undefined {
     parent.set(ra, rb);
   }
   return undefined;
+}
+
+/** Beschädigung eines Kabels in Prozent verlorener Rahmen (0 = intakt). */
+export function setCableLoss(t: Topology, id: string, percent: number): Result<Topology> {
+  if (!getCable(t, id)) return fail('unknownCable');
+  if (!Number.isInteger(percent) || percent < 0 || percent > 100) return fail('invalidLoss');
+  return ok({
+    ...t,
+    cables: t.cables.map((c) => {
+      if (c.id !== id) return c;
+      const { loss: _l, ...rest } = c;
+      return percent > 0 ? { ...rest, loss: percent } : rest;
+    }),
+  });
 }
 
 /** Steckt ein Kabelende am selben Gerät auf einen anderen, freien Anschluss um. */

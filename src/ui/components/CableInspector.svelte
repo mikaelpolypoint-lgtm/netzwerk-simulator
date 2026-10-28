@@ -7,6 +7,9 @@
   /** Eigenschaften eines Kabels: an welchem Anschluss es steckt, umstecken, löschen. */
   let { cable }: { cable: Cable } = $props();
 
+  // Feste Stufen statt freier Eingabe: einfacher am Beamer, und eigene Werte erlauben die Projektdatei.
+  const LOSS_LEVELS = $derived([...new Set([0, 10, 25, 50, 75, 100, cable.loss ?? 0])].sort((a, b) => a - b));
+
   const ends = $derived(
     (['a', 'b'] as const).flatMap((end) => {
       const device = getDevice(editor.topology, cable[end].device);
@@ -44,6 +47,21 @@
 {#if editor.editable}
   <p class="muted">{t('cable.replugHint')}</p>
 {/if}
+
+<h3>{t('cable.condition')}</h3>
+<label class="end">
+  <span>{t('cable.loss')}</span>
+  <select
+    value={cable.loss ?? 0}
+    disabled={!editor.editable}
+    onchange={(e) => editor.setCableLoss(cable.id, Number(e.currentTarget.value))}
+  >
+    {#each LOSS_LEVELS as level (level)}
+      <option value={level}>{level === 0 ? t('cable.intact') : t('cable.lossLevel', { n: level })}</option>
+    {/each}
+  </select>
+</label>
+<p class="muted">{t('cable.lossHint')}</p>
 
 {#if editor.editable}
   <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>

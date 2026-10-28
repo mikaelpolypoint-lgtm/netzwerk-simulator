@@ -72,7 +72,7 @@ export function toRow(topology: Topology, entry: PacketLogEntry): PacketRow {
     protocol: protocolOf(frame),
     source,
     destination,
-    info: entry.status === 'lost' ? `${text} – ${t('packets.lost')}` : text,
+    info: entry.status === 'lost' ? `${text} – ${t(`packets.lost.${entry.lostBecause ?? 'removed'}`)}` : text,
     lost: entry.status === 'lost',
   };
 }

@@ -162,7 +162,10 @@ function readTopology(v: unknown): Topology {
     const a = readEndpoint(o.a, `${path}.a`, byId, usedEndpoints);
     const b = readEndpoint(o.b, `${path}.b`, byId, usedEndpoints);
     if (a.device === b.device) throw new Invalid(`${path}.b`);
-    return { id, a, b };
+    if (o.loss === undefined) return { id, a, b };
+    const loss = int(o.loss, `${path}.loss`);
+    if (loss < 0 || loss > 100) throw new Invalid(`${path}.loss`);
+    return loss > 0 ? { id, a, b, loss } : { id, a, b };
   });
 
   const highest = Math.max(0, ...devices.map((d) => deviceSeq(d.id)), ...cables.map((c) => deviceSeq(c.id)));

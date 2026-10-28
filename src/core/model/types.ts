@@ -125,6 +125,8 @@ export interface Cable {
   id: string;
   a: Endpoint;
   b: Endpoint;
+  /** Beschädigtes Kabel: so viele Prozent der Rahmen gehen verloren (für Fehlersuche-Übungen). */
+  loss?: number;
 }
 
 /** Unveränderlich: Jede Operation liefert eine neue Topologie. */

@@ -25,8 +25,22 @@ export interface PacketLogEntry {
   to: Endpoint;
   cable: string;
   frame: EthernetFrame;
-  /** "lost": Das Kabel wurde während der Übertragung entfernt. */
+  /** "lost": Rahmen kam nicht an, siehe `lostBecause`. */
   status: 'inTransit' | 'delivered' | 'lost';
+  /** "removed": Kabel während der Übertragung entfernt; "damaged": beschädigtes Kabel. */
+  lostBecause?: 'removed' | 'damaged';
+}
+
+/** Kleiner, schneller Zufallsgenerator mit festem Startwert (Mulberry32): gleiche Abläufe, gleiche Verluste. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let x = state;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /** Ausgabe einer Anwendung; Text entsteht erst in der Oberfläche aus Code und Parametern. */
@@ -78,6 +92,7 @@ export class Simulation {
   #nextLogId = 1;
   #nodes = new Map<string, SimNode>();
   #consoles = new Map<string, ConsoleLine[]>();
+  #random = seededRandom(20_260_001);
 
   constructor(topology: Topology) {
     this.#topology = topology;
@@ -261,14 +276,17 @@ export class Simulation {
     this.#log.push(entry);
     if (this.#log.length > LOG_LIMIT) this.#log.splice(0, this.#log.length - LOG_LIMIT);
     this.#inFlight.add(entry);
+    // Beschädigtes Kabel: Die Entscheidung fällt beim Senden, damit die Reihenfolge der Zufallszahlen feststeht.
+    const damaged = (cable.loss ?? 0) > 0 && this.#random() * 100 < cable.loss!;
 
     this.#queue.push(entry.arrives, () => {
       this.#inFlight.delete(entry);
       // Wurde das Kabel inzwischen entfernt oder umgesteckt, geht der Rahmen verloren.
       const current = getCable(this.#topology, cable.id);
       const intact = current && cableAt(this.#topology, from)?.id === cable.id && cableAt(this.#topology, to)?.id === cable.id;
-      if (!intact) {
+      if (!intact || damaged) {
         entry.status = 'lost';
+        entry.lostBecause = intact ? 'damaged' : 'removed';
         return;
       }
       entry.status = 'delivered';
