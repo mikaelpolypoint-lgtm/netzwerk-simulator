@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { DEVICE_SPECS, MAX_NAME_LENGTH, cableAt, getDevice, otherEnd, type Device, type Endpoint } from '../../core';
+  import { DEVICE_SPECS, MAX_NAME_LENGTH, cableAt, getDevice, otherEnd, type Device } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import CableInspector from './CableInspector.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
   import MailAccountForm from './MailAccountForm.svelte';
   import Services from './Services.svelte';
@@ -31,10 +32,6 @@
     }
   }
 
-  function describe(endpoint: Endpoint): string {
-    const d = getDevice(editor.topology, endpoint.device);
-    return d ? `${d.name} (${interfaceLabel(d, endpoint.iface)})` : '?';
-  }
 
   function peer(d: Device, index: number): string | undefined {
     const c = cableAt(editor.topology, { device: d.id, iface: index });
@@ -142,15 +139,7 @@
       <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
     {/if}
   {:else if cable}
-    <dl class="facts">
-      <dt>{t('inspector.type')}</dt>
-      <dd>{t('inspector.cable')}</dd>
-      <dt>{t('inspector.endpoints')}</dt>
-      <dd>{describe(cable.a)}<br />{describe(cable.b)}</dd>
-    </dl>
-    <button class="danger" disabled={!editor.editable} onclick={() => editor.deleteSelection()}>
-      {t('inspector.delete')}
-    </button>
+    <CableInspector {cable} />
   {:else}
     <p class="muted">{t('inspector.nothing')}</p>
     <h3>{t('inspector.shortcuts')}</h3>

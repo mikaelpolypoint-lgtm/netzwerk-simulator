@@ -35,6 +35,7 @@ export type ErrorCode =
   | 'nameTaken'
   | 'interfaceCountOutOfRange'
   | 'interfaceConnected'
+  | 'interfaceInUse'
   | 'notAnEndpoint'
   | 'unknownInterface'
   | 'invalidIp'
@@ -255,6 +256,22 @@ export function findSwitchLoop(t: Topology): Cable | undefined {
     parent.set(ra, rb);
   }
   return undefined;
+}
+
+/** Steckt ein Kabelende am selben Gerät auf einen anderen, freien Anschluss um. */
+export function replugCable(t: Topology, id: string, end: 'a' | 'b', iface: number): Result<Topology> {
+  const cable = getCable(t, id);
+  if (!cable) return fail('unknownCable');
+  const device = getDevice(t, cable[end].device);
+  if (!device) return fail('unknownDevice');
+  if (!device.interfaces[iface]) return fail('unknownInterface');
+  if (cable[end].iface === iface) return ok(t);
+  const occupied = cableAt(t, { device: device.id, iface });
+  if (occupied) return fail('interfaceInUse', { device: device.name, index: iface });
+  return ok({
+    ...t,
+    cables: t.cables.map((c) => (c.id === id ? { ...c, [end]: { device: device.id, iface } } : c)),
+  });
 }
 
 export function removeCable(t: Topology, id: string): Result<Topology> {

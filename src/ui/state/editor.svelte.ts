@@ -23,6 +23,7 @@ import {
   removeDevice,
   removeStaticRoute,
   renameDevice,
+  replugCable,
   setDhcpServer,
   setInterfaceAddress,
   setInterfaceCount,
@@ -318,6 +319,12 @@ class Editor {
   removeStaticRoute(id: string, index: number) {
     if (!this.editable) return;
     const next = this.#check(removeStaticRoute(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  replugCable(id: string, end: 'a' | 'b', iface: number) {
+    if (!this.editable) return;
+    const next = this.#check(replugCable(this.topology, id, end, iface));
     if (next) this.#commit(next);
   }
 

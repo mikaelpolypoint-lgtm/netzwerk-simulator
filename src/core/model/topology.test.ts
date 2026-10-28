@@ -11,6 +11,7 @@ import {
   removeCable,
   removeDevice,
   renameDevice,
+  replugCable,
   setInterfaceAddress,
   setInterfaceCount,
   suggestName,
@@ -121,6 +122,15 @@ describe('Kabel', () => {
     const t = unwrap(removeDevice(twoClientsOneSwitch(), 'd3'));
     expect(t.devices.map((d) => d.id)).toEqual(['d1', 'd2']);
     expect(t.cables).toEqual([]);
+  });
+
+  it('steckt Kabelenden auf freie Anschlüsse um', () => {
+    const t = twoClientsOneSwitch();
+    const moved = unwrap(replugCable(t, 'c4', 'b', 7));
+    expect(moved.cables[0]!.b).toEqual({ device: 'd3', iface: 7 });
+    expect(replugCable(t, 'c4', 'b', 1)).toMatchObject({ ok: false, error: { code: 'interfaceInUse' } });
+    expect(replugCable(t, 'c4', 'b', 99)).toMatchObject({ ok: false, error: { code: 'unknownInterface' } });
+    expect(replugCable(t, 'c4', 'b', 0)).toEqual({ ok: true, value: t });
   });
 
   it('gibt nach dem Entfernen eines Kabels den Port wieder frei', () => {
