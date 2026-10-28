@@ -5,6 +5,8 @@
   import { editor } from '../state/editor.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
   import HostPanel from './HostPanel.svelte';
+  import NetDevicePanel from './NetDevicePanel.svelte';
+  import RouterConfig from './RouterConfig.svelte';
 
   const device = $derived(editor.selectedDevice);
   const cable = $derived(editor.selectedCable);
@@ -82,7 +84,9 @@
         <HostPanel {device} />
       {/if}
     {:else if !editor.editable}
-      <p class="muted note">{t(device.type === 'switch' ? 'actions.switchFlood' : 'actions.notYet')}</p>
+      <NetDevicePanel {device} />
+    {:else if device.type === 'router'}
+      <RouterConfig {device} />
     {/if}
 
     {#if spec.minInterfaces !== spec.maxInterfaces && editor.editable}
@@ -230,9 +234,6 @@
   .free,
   .muted {
     color: var(--muted);
-  }
-  .note {
-    font-size: 0.85rem;
   }
   .danger {
     margin-top: 12px;

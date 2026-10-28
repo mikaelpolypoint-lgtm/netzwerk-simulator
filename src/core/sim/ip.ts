@@ -1,4 +1,5 @@
-import { LIMITED_BROADCAST, broadcastOf, formatIp, networkOf, parseIp, parseMask } from '../net/ipv4';
+import { LIMITED_BROADCAST, broadcastOf, formatIp, parseIp } from '../net/ipv4';
+import { buildRoutes, interfaceAddresses, lookupRoute, type IfaceAddress, type Route } from '../net/routing';
 import { BROADCAST_MAC, ZERO_MAC, type ArpPacket, type EthernetFrame, type IcmpMessage, type Ipv4Packet } from './frames';
 import type { NodeContext, SimNode } from './simulation';
 
@@ -20,21 +21,6 @@ export interface ArpEntry {
   expires: number;
 }
 
-export interface Route {
-  network: number;
-  prefix: number;
-  iface: number;
-  /** Nächster Router; null = Ziel liegt im direkt angeschlossenen Netz. */
-  via: number | null;
-}
-
-interface IfaceConfig {
-  index: number;
-  mac: string;
-  ip: number;
-  prefix: number;
-}
-
 interface Waiter {
   onMac: (mac: string) => void;
   onFail: () => void;
@@ -46,25 +32,18 @@ interface PendingResolution {
   waiters: Waiter[];
 }
 
-export type SendError = 'noRoute' | 'hostUnreachable';
-
-/** Längster Präfix gewinnt; bei Gleichstand die zuerst eingetragene Route. */
-export function lookupRoute(routes: readonly Route[], dst: number): Route | undefined {
-  let best: Route | undefined;
-  for (const route of routes) {
-    if (networkOf(dst, route.prefix) !== route.network) continue;
-    if (!best || route.prefix > best.prefix) best = route;
-  }
-  return best;
-}
+/** Fehler, die schon beim Absender auffallen. */
+export type SendError = 'noRoute' | 'hostUnreachable' | 'gatewayUnreachable';
 
 const isLoopback = (ip: number) => ip >>> 24 === 127;
+const isIcmpError = (icmp: IcmpMessage) => icmp.type === 'destUnreachable' || icmp.type === 'timeExceeded';
 
 /**
  * IPv4-Teilnehmer mit ARP und ICMP. Endgeräte nutzen ihn direkt;
- * Vermittlungsrechner erweitern ihn um Weiterleitung (M3).
+ * Vermittlungsrechner (`RouterNode`) leiten zusätzlich weiter.
  */
 export class IpNode implements SimNode {
+  protected readonly forwarding: boolean = false;
   #arp = new Map<string, ArpEntry>();
   #pending = new Map<string, PendingResolution>();
   #ipId = 0;
@@ -73,31 +52,14 @@ export class IpNode implements SimNode {
 
   constructor(protected readonly ctx: NodeContext) {}
 
-  /** Alle Anschlüsse mit gültiger IP-Konfiguration. */
-  protected interfaces(): IfaceConfig[] {
+  protected interfaces(): IfaceAddress[] {
     const device = this.ctx.device();
-    if (!device) return [];
-    return device.interfaces.flatMap((i) => {
-      const ip = i.ip ? parseIp(i.ip) : null;
-      const prefix = i.mask ? parseMask(i.mask) : null;
-      return ip !== null && prefix !== null ? [{ index: i.index, mac: i.mac, ip, prefix }] : [];
-    });
+    return device ? interfaceAddresses(device) : [];
   }
 
   protected routes(): Route[] {
-    const routes: Route[] = this.interfaces().map((i) => ({
-      network: networkOf(i.ip, i.prefix),
-      prefix: i.prefix,
-      iface: i.index,
-      via: null,
-    }));
-    const gatewayText = this.ctx.device()?.gateway;
-    const gateway = gatewayText ? parseIp(gatewayText) : null;
-    if (gateway !== null) {
-      const towards = lookupRoute(routes, gateway);
-      if (towards) routes.push({ network: 0, prefix: 0, iface: towards.iface, via: gateway });
-    }
-    return routes;
+    const device = this.ctx.device();
+    return device ? buildRoutes(device).routes : [];
   }
 
   state() {
@@ -206,6 +168,42 @@ export class IpNode implements SimNode {
     const iface = this.interfaces().find((i) => i.index === index);
     const broadcast = dst === LIMITED_BROADCAST || (iface !== undefined && dst === broadcastOf(iface.ip, iface.prefix));
     if (this.#isOwn(dst) || broadcast) this.deliver(packet, broadcast);
+    else if (this.forwarding && iface) this.#forward(iface, packet);
+  }
+
+  /** Weiterleiten wie ein Router: TTL senken, Route wählen, bei Problemen ICMP an den Absender. */
+  #forward(inIface: IfaceAddress, packet: Ipv4Packet) {
+    if (packet.ttl <= 1) {
+      this.#icmpError(inIface, packet, 'timeExceeded');
+      return;
+    }
+    const dst = parseIp(packet.dst)!;
+    const route = lookupRoute(this.routes(), dst);
+    const out = route && this.interfaces().find((i) => i.index === route.iface);
+    if (!route || !out) {
+      this.#icmpError(inIface, packet, 'destUnreachable', 'net');
+      return;
+    }
+    const forwarded: Ipv4Packet = { ...packet, ttl: packet.ttl - 1 };
+    this.#resolve(out.index, route.via ?? dst, {
+      onMac: (mac) => this.ctx.transmit(out.index, { src: out.mac, dst: mac, payload: forwarded }),
+      onFail: () => this.#icmpError(inIface, packet, 'destUnreachable', 'host'),
+    });
+  }
+
+  #icmpError(from: IfaceAddress, original: Ipv4Packet, type: 'destUnreachable' | 'timeExceeded', code?: 'net' | 'host') {
+    // Auf Fehlermeldungen antwortet man nie mit Fehlermeldungen (sonst Ping-Pong).
+    if (isIcmpError(original.payload)) return;
+    const message: IcmpMessage = {
+      kind: 'icmp',
+      type,
+      id: 0,
+      seq: 0,
+      size: 0,
+      original: { src: original.src, dst: original.dst, id: original.payload.id, seq: original.payload.seq },
+      ...(code ? { code } : {}),
+    };
+    this.sendIp(original.src, message, { src: formatIp(from.ip) });
   }
 
   protected deliver(packet: Ipv4Packet, broadcast: boolean) {
@@ -214,6 +212,8 @@ export class IpNode implements SimNode {
       this.sendIp(packet.src, { ...icmp, type: 'echoReply' }, { src: packet.dst });
     } else if (icmp.type === 'echoReply') {
       this.#ping?.onReply(packet);
+    } else if (isIcmpError(icmp)) {
+      this.#ping?.onIcmpError(packet);
     }
   }
 
@@ -253,7 +253,7 @@ export class IpNode implements SimNode {
     }
     this.#resolve(iface.index, route.via ?? dst, {
       onMac: (mac) => this.ctx.transmit(iface.index, { src: iface.mac, dst: mac, payload: packet }),
-      onFail: () => onError?.('hostUnreachable'),
+      onFail: () => onError?.(route.via === null ? 'hostUnreachable' : 'gatewayUnreachable'),
     });
   }
 
@@ -282,9 +282,13 @@ export class IpNode implements SimNode {
       }
     }
     this.#ping?.cancel();
-    this.#ping = new PingRun(this, this.ctx, formatIp(target), ++this.#icmpId);
+    this.#ping = new PingRun(this, this.ctx, formatIp(target), ++this.#icmpId, this.ctx.device()?.gateway ?? '');
     this.#ping.start();
   }
+}
+
+export class RouterNode extends IpNode {
+  protected override readonly forwarding = true;
 }
 
 /** Ablauf von "ping": vier Echo-Anfragen, jeweils eine Sekunde nach Antwort oder Zeitüberschreitung. */
@@ -299,6 +303,7 @@ class PingRun {
     private readonly ctx: NodeContext,
     private readonly target: string,
     private readonly id: number,
+    private readonly gateway: string,
   ) {}
 
   start() {
@@ -319,7 +324,7 @@ class PingRun {
     });
     const request: IcmpMessage = { kind: 'icmp', type: 'echoRequest', id: this.id, seq, size: PING_SIZE };
     this.host.sendIp(this.target, request, {}, (error) => {
-      if (this.#settle(seq)) this.ctx.print(`ping.${error}`, { target: this.target });
+      if (this.#settle(seq)) this.ctx.print(`ping.${error}`, { target: this.target, gateway: this.gateway });
     });
   }
 
@@ -330,6 +335,15 @@ class PingRun {
     if (sentAt === undefined || !this.#settle(icmp.seq)) return;
     this.#received++;
     this.ctx.print('ping.reply', { from: packet.src, size: icmp.size, time: this.ctx.now - sentAt, ttl: packet.ttl });
+  }
+
+  /** Ein Router meldet, dass unsere Anfrage nicht zugestellt werden konnte. */
+  onIcmpError(packet: Ipv4Packet) {
+    const icmp = packet.payload;
+    const original = icmp.original;
+    if (!original || original.id !== this.id || !this.#settle(original.seq)) return;
+    if (icmp.type === 'timeExceeded') this.ctx.print('ping.ttlExpired', { from: packet.src });
+    else this.ctx.print(icmp.code === 'host' ? 'ping.hostUnreachableFrom' : 'ping.netUnreachableFrom', { from: packet.src });
   }
 
   /** Schliesst eine Anfrage ab (genau einmal) und plant die nächste. */

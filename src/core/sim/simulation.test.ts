@@ -1,7 +1,7 @@
 import { describe as group, expect, it } from 'vitest';
 import { parseIp } from '../net/ipv4';
 import { removeCable } from '../model/topology';
-import { lookupRoute, type Route } from './ip';
+import { lookupRoute, type Route } from '../net/routing';
 import { Simulation } from './simulation';
 import { NetBuilder, describe, unwrap } from './testing';
 
@@ -175,9 +175,9 @@ group('Routenwahl', () => {
   it('bevorzugt den längsten passenden Präfix', () => {
     const ip = (s: string) => parseIp(s)!;
     const routes: Route[] = [
-      { network: 0, prefix: 0, iface: 0, via: ip('10.0.0.1') },
-      { network: ip('192.168.0.0'), prefix: 16, iface: 1, via: ip('10.0.1.1') },
-      { network: ip('192.168.7.0'), prefix: 24, iface: 2, via: null },
+      { network: 0, prefix: 0, iface: 0, via: ip('10.0.0.1'), kind: 'default' },
+      { network: ip('192.168.0.0'), prefix: 16, iface: 1, via: ip('10.0.1.1'), kind: 'static' },
+      { network: ip('192.168.7.0'), prefix: 24, iface: 2, via: null, kind: 'connected' },
     ];
     expect(lookupRoute(routes, ip('192.168.7.9'))?.iface).toBe(2);
     expect(lookupRoute(routes, ip('192.168.8.9'))?.iface).toBe(1);

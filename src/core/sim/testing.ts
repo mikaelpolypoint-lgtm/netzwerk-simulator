@@ -1,5 +1,15 @@
 // Hilfen für Tests: Netze knapp beschreiben und Paketfolgen lesbar vergleichen.
-import { addDevice, configureHost, connect, emptyTopology, getDevice, type Result } from '../model/topology';
+import {
+  addDevice,
+  addStaticRoute,
+  configureHost,
+  connect,
+  emptyTopology,
+  getDevice,
+  setInterfaceAddress,
+  setInterfaceCount,
+  type Result,
+} from '../model/topology';
 import type { DeviceType, Topology } from '../model/types';
 import type { PacketLogEntry } from './simulation';
 
@@ -27,6 +37,21 @@ export class NetBuilder {
     const { topology, id } = unwrap(connect(this.topology, a, b));
     this.topology = topology;
     return id;
+  }
+
+  /** Router mit Adressen in CIDR-Schreibweise, z.B. ["192.168.1.1/24", "192.168.2.1/24"]. */
+  router(name: string, addresses: string[]): string {
+    const id = this.add('router', name);
+    if (addresses.length > 2) this.topology = unwrap(setInterfaceCount(this.topology, id, addresses.length));
+    addresses.forEach((cidr, index) => {
+      const [ip, prefix] = cidr.split('/');
+      this.topology = unwrap(setInterfaceAddress(this.topology, id, index, ip!, prefix!));
+    });
+    return id;
+  }
+
+  route(router: string, network: string, mask: string, gateway: string) {
+    this.topology = unwrap(addStaticRoute(this.topology, router, { network, mask, gateway }));
   }
 }
 

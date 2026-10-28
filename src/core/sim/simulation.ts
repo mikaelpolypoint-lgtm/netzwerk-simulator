@@ -1,10 +1,9 @@
-import { DEVICE_SPECS } from '../model/devices';
 import { cableAt, getCable, getDevice, otherEnd } from '../model/topology';
 import type { Device, Endpoint, Topology } from '../model/types';
 import type { EthernetFrame } from './frames';
-import { IpNode, type ArpEntry } from './ip';
+import { IpNode, RouterNode, type ArpEntry } from './ip';
 import { EventQueue } from './queue';
-import { SwitchNode } from './switch';
+import { ModemNode, SwitchNode, type MacEntry } from './switch';
 
 /** Übertragungszeit pro Kabel in Millisekunden (virtuelle Zeit). */
 export const LINK_DELAY = 1;
@@ -33,6 +32,7 @@ export interface ConsoleLine {
 export interface DeviceState {
   console: ConsoleLine[];
   arp?: ArpEntry[];
+  macTable?: MacEntry[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -48,14 +48,6 @@ export interface NodeContext {
 export interface SimNode {
   receive(iface: number, frame: EthernetFrame): void;
   state(): Omit<DeviceState, 'console'>;
-}
-
-/** Vermittlungsrechner und Modem verarbeiten ab M3 Verkehr; bis dahin verwerfen sie alles. */
-class InertNode implements SimNode {
-  receive() {}
-  state() {
-    return {};
-  }
 }
 
 /**
@@ -111,10 +103,15 @@ export class Simulation {
     return true;
   }
 
-  /** Lässt die Zeit bis `time` laufen; liefert die Anzahl verarbeiteter Ereignisse. */
-  runUntil(time: number): number {
+  /**
+   * Lässt die Zeit bis `time` laufen; liefert die Anzahl verarbeiteter Ereignisse.
+   * Höchstens `maxEvents` pro Aufruf, damit die Oberfläche auch bei sehr viel Verkehr bedienbar bleibt;
+   * die Uhr bleibt dann beim letzten Ereignis stehen und holt beim nächsten Aufruf auf.
+   */
+  runUntil(time: number, maxEvents = 20_000): number {
     let count = 0;
     for (let next = this.#queue.peekTime(); next !== undefined && next <= time; next = this.#queue.peekTime()) {
+      if (count >= maxEvents) return count;
       this.step();
       count++;
     }
@@ -157,12 +154,14 @@ export class Simulation {
     const device = getDevice(this.#topology, id);
     if (!device) return undefined;
     const ctx = this.#context(id);
-    const node =
+    const node: SimNode =
       device.type === 'switch'
         ? new SwitchNode(ctx)
-        : DEVICE_SPECS[device.type].role === 'endpoint'
-          ? new IpNode(ctx)
-          : new InertNode();
+        : device.type === 'modem'
+          ? new ModemNode(ctx)
+          : device.type === 'router'
+            ? new RouterNode(ctx)
+            : new IpNode(ctx);
     this.#nodes.set(id, node);
     return node;
   }

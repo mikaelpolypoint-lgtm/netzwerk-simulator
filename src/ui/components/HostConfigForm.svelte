@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { broadcastOf, checkHostConfig, formatIp, maskToText, networkOf, parseIp, parseMask, type Device } from '../../core';
+  import { checkHostConfig, maskToText, parseMask, type Device } from '../../core';
   import { t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
+  import { subnetSummary } from '../subnet';
 
   let { device }: { device: Device } = $props();
 
@@ -33,15 +34,7 @@
     return draft.mask.includes('.') ? `/${prefix}` : maskToText(prefix);
   });
 
-  const networkInfo = $derived.by(() => {
-    const ip = saved.ip ? parseIp(saved.ip) : null;
-    const prefix = saved.mask ? parseMask(saved.mask) : null;
-    if (ip === null || prefix === null) return null;
-    return t('config.network', {
-      net: `${formatIp(networkOf(ip, prefix))}/${prefix}`,
-      broadcast: formatIp(broadcastOf(ip, prefix)),
-    });
-  });
+  const networkInfo = $derived(subnetSummary(saved.ip, saved.mask));
 
   function apply(event: SubmitEvent) {
     event.preventDefault();

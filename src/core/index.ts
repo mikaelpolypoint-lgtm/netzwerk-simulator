@@ -6,4 +6,6 @@ export * from './io/project';
 export * from './net/ipv4';
 export * from './sim/frames';
 export * from './sim/simulation';
-export { lookupRoute, type ArpEntry, type Route } from './sim/ip';
+export * from './net/routing';
+export type { ArpEntry } from './sim/ip';
+export { MAC_TTL, type MacEntry } from './sim/switch';

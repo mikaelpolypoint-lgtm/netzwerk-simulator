@@ -10,7 +10,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 |---|---|---|
 | M1 | Topologie-Editor, Speichern/Laden als .json | ✅ |
 | M2 | Simulationskern, ARP, IPv4 im gleichen Subnetz, Paketliste | ✅ |
-| M3 | Switch-Lerntabelle, Subnetting, Router mit statischen Routen | offen |
+| M3 | Switch-Lerntabelle, Subnetting, Router mit statischen Routen | ✅ |
 | M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | offen |
 | M5 | DNS, TCP/UDP, HTTP | offen |
 | M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | offen |
@@ -55,7 +55,13 @@ Regeln, die das Projekt technisch absichert:
 - Pakete sind verschachtelte Objekte (`core/sim/frames.ts`): Ethernet-Rahmen → ARP oder IPv4 → ICMP.
 - Jedes Kabel braucht 1 ms. Im Aktionsmodus läuft die virtuelle Zeit synchron zur echten; im Entwurfsmodus pausiert sie, Zustände wie ARP-Tabellen bleiben erhalten.
 - Wird ein Kabel während einer Übertragung entfernt, geht der Rahmen verloren und ist in der Paketliste so markiert.
+- Switches lernen MAC-Adressen pro Port (5 Minuten gültig). Vermittlungsrechner leiten nach längstem Präfix weiter, senken die TTL und melden Probleme per ICMP («Ziel nicht erreichbar», «TTL abgelaufen»). Das Modem ist eine transparente Strecke.
+- Schleifen zwischen Switches lässt der Editor nicht zu (es gibt kein Spanning Tree, sonst entstünde ein Broadcast-Sturm).
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
+
+## Beispiele
+
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json`: PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz. Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 

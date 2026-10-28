@@ -22,6 +22,10 @@ export interface IcmpMessage {
   seq: number;
   /** Nutzdaten in Byte (nur die Länge wird simuliert). */
   size: number;
+  /** Bei "destUnreachable": Netz oder einzelner Host nicht erreichbar. */
+  code?: 'net' | 'host';
+  /** Bei Fehlermeldungen: Kopfdaten des auslösenden Pakets. */
+  original?: { src: string; dst: string; id: number; seq: number };
 }
 
 export interface Ipv4Packet {

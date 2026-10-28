@@ -1,7 +1,8 @@
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
+import { checkStaticRoute, normalizeRoute } from '../net/routing';
 import { DEVICE_SPECS } from './devices';
 import { macFor } from './mac';
-import type { Cable, Device, DeviceType, Endpoint, NetInterface, Point, Topology } from './types';
+import type { Cable, Device, DeviceType, Endpoint, NetInterface, Point, StaticRoute, Topology } from './types';
 
 export const MAX_NAME_LENGTH = 32;
 
@@ -21,7 +22,13 @@ export type ErrorCode =
   | 'invalidIp'
   | 'invalidMask'
   | 'maskRequired'
-  | 'gatewayWithoutAddress';
+  | 'gatewayWithoutAddress'
+  | 'switchLoop'
+  | 'notARouter'
+  | 'unknownRoute'
+  | 'networkHasHostBits'
+  | 'routeNeedsTarget'
+  | 'duplicateRoute';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -152,6 +159,7 @@ export function connect(t: Topology, aId: string, bId: string): Result<{ topolog
   if (a.id === b.id) return fail('sameDevice');
   const direct = cablesOf(t, a.id).some((c) => otherEnd(c, a.id).device === b.id);
   if (direct) return fail('alreadyConnected', { a: a.name, b: b.name });
+  if (isBridge(a) && isBridge(b) && bridged(t, a.id, b.id)) return fail('switchLoop', { a: a.name, b: b.name });
   const ia = freeInterface(t, a);
   if (!ia) return fail('noFreeInterface', { device: a.name });
   const ib = freeInterface(t, b);
@@ -162,6 +170,52 @@ export function connect(t: Topology, aId: string, bId: string): Result<{ topolog
     b: { device: b.id, iface: ib.index },
   };
   return ok({ topology: { ...t, cables: [...t.cables, cable], nextId: t.nextId + 1 }, id: cable.id });
+}
+
+/**
+ * Switches und Modems leiten Broadcasts an alle Ports weiter. Ohne Spanning
+ * Tree würde eine Schleife zwischen ihnen einen endlosen Broadcast-Sturm
+ * auslösen, darum verhindert der Editor solche Verbindungen.
+ */
+export function isBridge(device: Device): boolean {
+  return device.type === 'switch' || device.type === 'modem';
+}
+
+function bridged(t: Topology, from: string, to: string): boolean {
+  const seen = new Set([from]);
+  const queue = [from];
+  for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+    if (id === to) return true;
+    for (const cable of cablesOf(t, id)) {
+      const next = otherEnd(cable, id).device;
+      const device = getDevice(t, next);
+      if (device && isBridge(device) && !seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return false;
+}
+
+/** Erstes Kabel, das eine Schleife zwischen Switches/Modems schliesst (für geladene Dateien). */
+export function findSwitchLoop(t: Topology): Cable | undefined {
+  const parent = new Map<string, string>();
+  const root = (id: string): string => {
+    let r = id;
+    while (parent.get(r) && parent.get(r) !== r) r = parent.get(r)!;
+    return r;
+  };
+  for (const cable of t.cables) {
+    const a = getDevice(t, cable.a.device);
+    const b = getDevice(t, cable.b.device);
+    if (!a || !b || !isBridge(a) || !isBridge(b)) continue;
+    const ra = root(a.id);
+    const rb = root(b.id);
+    if (ra === rb) return cable;
+    parent.set(ra, rb);
+  }
+  return undefined;
 }
 
 export function removeCable(t: Topology, id: string): Result<Topology> {
@@ -225,6 +279,28 @@ export function configureHost(t: Topology, id: string, input: HostConfigInput): 
         ...(gateway ? { gateway } : {}),
         ...(dns ? { dns } : {}),
       };
+    }),
+  );
+}
+
+export function addStaticRoute(t: Topology, id: string, route: StaticRoute): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  const issue = checkStaticRoute(device, route);
+  if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  return ok(updateDevice(t, id, (d) => ({ ...d, routes: [...(d.routes ?? []), normalizeRoute(route)] })));
+}
+
+export function removeStaticRoute(t: Topology, id: string, index: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.routes?.[index]) return fail('unknownRoute');
+  return ok(
+    updateDevice(t, id, (d) => {
+      const routes = (d.routes ?? []).filter((_, i) => i !== index);
+      const { routes: _r, ...rest } = d;
+      return routes.length ? { ...rest, routes } : rest;
     }),
   );
 }

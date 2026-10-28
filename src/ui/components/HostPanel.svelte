@@ -3,6 +3,7 @@
   import type { Device } from '../../core';
   import { t } from '../../i18n';
   import { simStore } from '../state/sim.svelte';
+  import StateTables from './StateTables.svelte';
 
   let { device }: { device: Device } = $props();
 
@@ -66,29 +67,7 @@
   {/each}
 </ol>
 
-<h3>{t('actions.arp')}</h3>
-{#if arp.length === 0}
-  <p class="muted">{t('actions.arpEmpty')}</p>
-{:else}
-  <table>
-    <thead>
-      <tr>
-        <th scope="col">{t('actions.arpIp')}</th>
-        <th scope="col">{t('actions.arpMac')}</th>
-        <th scope="col">{t('actions.arpTtl')}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each arp as entry (entry.ip)}
-        <tr>
-          <td class="mono">{entry.ip}</td>
-          <td class="mono">{entry.mac}</td>
-          <td>{t('actions.seconds', { s: Math.ceil((entry.expires - now) / 1000) })}</td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-{/if}
+<StateTables {device} {arp} {now} />
 
 <style>
   .facts {
@@ -161,26 +140,7 @@
     color: inherit;
     opacity: 0.6;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.75rem;
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 3px 4px;
-    border-bottom: 1px solid var(--border);
-  }
-  th {
-    color: var(--muted);
-    font-weight: normal;
-  }
   .mono {
     font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  }
-  .muted {
-    color: var(--muted);
-    font-size: 0.8rem;
   }
 </style>

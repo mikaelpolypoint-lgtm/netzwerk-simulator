@@ -1,5 +1,6 @@
 import {
   addDevice,
+  addStaticRoute,
   configureHost,
   connect,
   emptyTopology,
@@ -9,13 +10,16 @@ import {
   moveDevice,
   removeCable,
   removeDevice,
+  removeStaticRoute,
   renameDevice,
+  setInterfaceAddress,
   setInterfaceCount,
   suggestName,
   type DeviceType,
   type HostConfigInput,
   type Point,
   type Result,
+  type StaticRoute,
   type Topology,
   type TopologyError,
 } from '../../core';
@@ -206,13 +210,30 @@ class Editor {
     return true;
   }
 
-  /** Liefert den Fehler zurück, damit das Formular ihn beim betroffenen Feld zeigen kann. */
-  configureHost(id: string, input: HostConfigInput): TopologyError | null {
+  /** Für Formulare: Fehler zurückgeben statt melden, damit sie beim betroffenen Feld erscheinen. */
+  #applyForm(result: Result<Topology>): TopologyError | null {
     if (!this.editable) return null;
-    const result = configureHost(this.topology, id, input);
     if (!result.ok) return result.error;
     this.#commit(result.value);
     return null;
+  }
+
+  configureHost(id: string, input: HostConfigInput): TopologyError | null {
+    return this.#applyForm(configureHost(this.topology, id, input));
+  }
+
+  setInterfaceAddress(id: string, index: number, ip: string, mask: string): TopologyError | null {
+    return this.#applyForm(setInterfaceAddress(this.topology, id, index, ip, mask));
+  }
+
+  addStaticRoute(id: string, route: StaticRoute): TopologyError | null {
+    return this.#applyForm(addStaticRoute(this.topology, id, route));
+  }
+
+  removeStaticRoute(id: string, index: number) {
+    if (!this.editable) return;
+    const next = this.#check(removeStaticRoute(this.topology, id, index));
+    if (next) this.#commit(next);
   }
 
   setInterfaceCount(id: string, count: number) {

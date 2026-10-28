@@ -37,7 +37,13 @@ export function toRow(topology: Topology, entry: PacketLogEntry): PacketRow {
   } else {
     source = payload.src;
     destination = payload.dst;
-    info = t(`packets.icmp.${payload.payload.type}`, { seq: payload.payload.seq, ttl: payload.ttl });
+    const icmp = payload.payload;
+    info = t(`packets.icmp.${icmp.type}`, {
+      seq: icmp.seq,
+      ttl: payload.ttl,
+      target: icmp.original?.dst ?? '',
+      what: t(`packets.unreachable.${icmp.code ?? 'net'}`),
+    });
   }
   return {
     id: entry.id,

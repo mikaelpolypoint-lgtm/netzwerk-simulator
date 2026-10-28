@@ -27,6 +27,19 @@ export interface Device {
   /** Nur Endgeräte: Standardgateway und DNS-Server. */
   gateway?: string;
   dns?: string;
+  /** Nur Vermittlungsrechner: statische Routen. */
+  routes?: StaticRoute[];
+}
+
+export interface StaticRoute {
+  /** Zielnetz, z.B. "10.1.0.0". */
+  network: string;
+  /** Maske in Punktschreibweise. */
+  mask: string;
+  /** Nächster Router; fehlt, wenn das Ziel über `iface` direkt erreichbar ist. */
+  gateway?: string;
+  /** Ausgangsanschluss; fehlt er, ergibt er sich aus dem Gateway. */
+  iface?: number;
 }
 
 export interface Endpoint {

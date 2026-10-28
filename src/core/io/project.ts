@@ -1,8 +1,8 @@
 import { DEVICE_SPECS, isDeviceType } from '../model/devices';
 import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
-import { MAX_NAME_LENGTH, deviceSeq } from '../model/topology';
-import type { Cable, Device, Endpoint, NetInterface, Topology } from '../model/types';
+import { MAX_NAME_LENGTH, deviceSeq, findSwitchLoop } from '../model/topology';
+import type { Cable, Device, Endpoint, NetInterface, StaticRoute, Topology } from '../model/types';
 
 export const FORMAT_ID = 'netzwerk-simulator';
 export const FORMAT_VERSION = 1;
@@ -14,7 +14,7 @@ export interface ProjectFile {
   configuration: Record<string, unknown>;
 }
 
-export type ParseErrorCode = 'invalidJson' | 'notAProject' | 'unsupportedVersion' | 'invalidStructure';
+export type ParseErrorCode = 'invalidJson' | 'notAProject' | 'unsupportedVersion' | 'invalidStructure' | 'switchLoop';
 
 export interface ParseError {
   code: ParseErrorCode;
@@ -50,12 +50,20 @@ export function parseProject(text: string): ParseResult {
     return failure('invalidStructure', { path: 'meta.version' });
   }
   if (version > FORMAT_VERSION) return failure('unsupportedVersion', { version, supported: FORMAT_VERSION });
+  let topology: Topology;
   try {
-    return { ok: true, topology: readTopology(migrate(data, version).topology) };
+    topology = readTopology(migrate(data, version).topology);
   } catch (e) {
     if (e instanceof Invalid) return failure('invalidStructure', { path: e.path });
     throw e;
   }
+  // Eine Schleife zwischen Switches würde die Simulation mit einem Broadcast-Sturm lahmlegen.
+  const loop = findSwitchLoop(topology);
+  if (loop) {
+    const name = (id: string) => topology.devices.find((d) => d.id === id)?.name ?? id;
+    return failure('switchLoop', { a: name(loop.a.device), b: name(loop.b.device) });
+  }
+  return { ok: true, topology };
 }
 
 /** Hebt ältere Formatversionen schrittweise auf die aktuelle an. */
@@ -171,6 +179,22 @@ function readDevice(v: unknown, path: string): Device {
   const device: Device = { id, type, name, position, interfaces };
   if (o.gateway !== undefined) device.gateway = ip(o.gateway, `${path}.gateway`);
   if (o.dns !== undefined) device.dns = ip(o.dns, `${path}.dns`);
+  if (o.routes !== undefined) {
+    device.routes = arr(o.routes, `${path}.routes`).map((raw, i): StaticRoute => {
+      const p = `${path}.routes[${i}]`;
+      const r = obj(raw, p);
+      const prefix = parseMask(str(r.mask, `${p}.mask`));
+      if (prefix === null) throw new Invalid(`${p}.mask`);
+      const route: StaticRoute = { network: ip(r.network, `${p}.network`), mask: maskToText(prefix) };
+      if (r.gateway !== undefined) route.gateway = ip(r.gateway, `${p}.gateway`);
+      if (r.iface !== undefined) {
+        const iface = int(r.iface, `${p}.iface`);
+        if (iface < 0 || iface >= interfaces.length) throw new Invalid(`${p}.iface`);
+        route.iface = iface;
+      }
+      return route;
+    });
+  }
   return device;
 }
 
