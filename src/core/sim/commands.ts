@@ -47,8 +47,8 @@ export function runCommand(host: HostNode, line: string) {
       printConnections(host);
       return;
     case 'ssh':
-      // Die Oberfläche fragt das Passwort ab und ruft dann Simulation.ssh() auf.
-      ctx.print('cmd.usage.ssh');
+      // Mit Ziel fragt die Oberfläche das Passwort ab und ruft dann Simulation.ssh() auf.
+      if (!args[0] || !/@|-l/.test(args.join(' '))) ctx.print('cmd.usage.ssh');
       return;
     case 'cls':
     case 'clear':

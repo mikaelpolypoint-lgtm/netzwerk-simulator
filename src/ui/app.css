@@ -20,6 +20,7 @@
   --warning-soft: #fdf0d2;
   --console-bg: #18212c;
   --console-text: #e3e9f0;
+  --console-prompt: #8fd18f;
   --proto-arp: #f5e3b3;
   --proto-icmp: #d6e4fb;
   --proto-dhcp: #d3f2e5;
@@ -64,6 +65,7 @@
     --warning-soft: #3a2f14;
     --console-bg: #0b0f14;
     --console-text: #d7dee7;
+    --console-prompt: #8fd18f;
     --proto-arp: #4a3c14;
     --proto-icmp: #1c3252;
     --proto-dhcp: #123a2c;
@@ -171,6 +173,10 @@ button[aria-pressed='true'] {
 .proto-http {
   --proto: var(--proto-http);
   --dot: var(--dot-http);
+}
+.proto-ssh {
+  --proto: var(--proto-tcp);
+  --dot: #111827;
 }
 .proto-smtp,
 .proto-pop3 {

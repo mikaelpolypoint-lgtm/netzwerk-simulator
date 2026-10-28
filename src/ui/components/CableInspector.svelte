@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cableAt, getDevice, type Cable } from '../../core';
+  import { cableAt, getDevice, linkStatus, mediumOf, type Cable, type Medium } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -10,13 +10,20 @@
   // Feste Stufen statt freier Eingabe: einfacher am Beamer, und eigene Werte erlauben die Projektdatei.
   const LOSS_LEVELS = $derived([...new Set([0, 10, 25, 50, 75, 100, cable.loss ?? 0])].sort((a, b) => a - b));
 
+  const status = $derived(linkStatus(editor.topology, cable));
+  const medium = $derived(mediumOf(cable));
+  const MEDIA: Medium[] = ['tp', 'fiber', 'wireless'];
+
   const ends = $derived(
     (['a', 'b'] as const).flatMap((end) => {
       const device = getDevice(editor.topology, cable[end].device);
       if (!device) return [];
       // Wählbar sind der aktuelle und alle freien Anschlüsse desselben Geräts.
       const options = device.interfaces.filter(
-        (i) => i.index === cable[end].iface || !cableAt(editor.topology, { device: device.id, iface: i.index }),
+        (i) =>
+          (i.index === cable[end].iface || !cableAt(editor.topology, { device: device.id, iface: i.index })) &&
+          // Access Point: Funk nur auf Funkplätzen, Kabel nur an der LAN-Buchse.
+          (device.type !== 'accesspoint' || (i.index > 0) === (medium === 'wireless')),
       );
       return [{ end, device, options }];
     }),
@@ -25,8 +32,23 @@
 
 <dl class="facts">
   <dt>{t('inspector.type')}</dt>
-  <dd>{t('inspector.cable')}</dd>
+  <dd>{t(`medium.${medium}`)}</dd>
+  <dt>{t('link.status')}</dt>
+  <dd>
+    <span class="led" class:up={status.up}></span>
+    {status.up ? t('link.up') : t(`link.down.${status.reason ?? 'unknown'}`)}
+    {#if status.signal !== undefined}· {t('link.signal', { n: status.signal })}{/if}
+  </dd>
 </dl>
+
+<label class="end">
+  <span>{t('cable.medium')}</span>
+  <select value={medium} disabled={!editor.editable} onchange={(e) => editor.setCableMedium(cable.id, e.currentTarget.value as Medium)}>
+    {#each MEDIA as m (m)}
+      <option value={m}>{t(`medium.${m}`)}</option>
+    {/each}
+  </select>
+</label>
 
 <h3>{t('inspector.endpoints')}</h3>
 {#each ends as { end, device, options } (end)}
@@ -80,6 +102,17 @@
   }
   .facts dd {
     margin: 0;
+  }
+  .led {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #dc2626;
+    vertical-align: -1px;
+  }
+  .led.up {
+    background: #16a34a;
   }
   h3 {
     margin: 12px 0 6px;

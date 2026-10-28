@@ -1,0 +1,355 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "l3switch",
+        "name": "Core",
+        "position": {
+          "x": 0,
+          "y": -180
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "vlan": 99
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:01:01",
+            "trunk": true
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:01:02",
+            "trunk": true
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:01:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:01:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:01:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:01:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:01:07"
+          }
+        ],
+        "svis": [
+          {
+            "vlan": 10,
+            "ip": "10.10.0.1",
+            "mask": "255.255.255.0",
+            "dhcpRelay": "10.99.0.10"
+          },
+          {
+            "vlan": 20,
+            "ip": "10.20.0.1",
+            "mask": "255.255.255.0",
+            "dhcpRelay": "10.99.0.10"
+          },
+          {
+            "vlan": 99,
+            "ip": "10.99.0.1",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "vlanNames": [
+          {
+            "vlan": 10,
+            "name": "Stock1"
+          },
+          {
+            "vlan": 20,
+            "name": "Stock2"
+          },
+          {
+            "vlan": 99,
+            "name": "Server"
+          }
+        ]
+      },
+      {
+        "id": "d2",
+        "type": "switch",
+        "name": "Stock 1",
+        "position": {
+          "x": -260,
+          "y": 60
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "trunk": true
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:02:01",
+            "vlan": 10
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:02:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:02:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:02:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:02:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:02:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:02:07"
+          }
+        ],
+        "vlanNames": [
+          {
+            "vlan": 10,
+            "name": "Stock1"
+          }
+        ]
+      },
+      {
+        "id": "d3",
+        "type": "switch",
+        "name": "Stock 2",
+        "position": {
+          "x": 260,
+          "y": 60
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00",
+            "trunk": true
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:03:01",
+            "vlan": 20
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:03:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:03:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:03:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:03:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:03:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:03:07"
+          }
+        ],
+        "vlanNames": [
+          {
+            "vlan": 20,
+            "name": "Stock2"
+          }
+        ]
+      },
+      {
+        "id": "d4",
+        "type": "pc",
+        "name": "DHCP-Server",
+        "position": {
+          "x": 0,
+          "y": -370
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00",
+            "ip": "10.99.0.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "10.99.0.1",
+        "dhcpServer": {
+          "start": "10.99.0.100",
+          "end": "10.99.0.150",
+          "leaseTime": 3600,
+          "gateway": "10.99.0.1",
+          "scopes": [
+            {
+              "start": "10.10.0.100",
+              "end": "10.10.0.150",
+              "mask": "255.255.255.0",
+              "gateway": "10.10.0.1"
+            },
+            {
+              "start": "10.20.0.100",
+              "end": "10.20.0.150",
+              "mask": "255.255.255.0",
+              "gateway": "10.20.0.1"
+            }
+          ]
+        }
+      },
+      {
+        "id": "d5",
+        "type": "notebook",
+        "name": "Notebook 1",
+        "position": {
+          "x": -260,
+          "y": 200
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00"
+          }
+        ],
+        "dhcp": true
+      },
+      {
+        "id": "d6",
+        "type": "notebook",
+        "name": "Notebook 2",
+        "position": {
+          "x": 260,
+          "y": 200
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:06:00"
+          }
+        ],
+        "dhcp": true
+      }
+    ],
+    "cables": [
+      {
+        "id": "c7",
+        "a": {
+          "device": "d4",
+          "iface": 0
+        },
+        "b": {
+          "device": "d1",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c8",
+        "a": {
+          "device": "d1",
+          "iface": 1
+        },
+        "b": {
+          "device": "d2",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d1",
+          "iface": 2
+        },
+        "b": {
+          "device": "d3",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c10",
+        "a": {
+          "device": "d5",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c11",
+        "a": {
+          "device": "d6",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 1
+        }
+      }
+    ],
+    "nextId": 15,
+    "areas": [
+      {
+        "id": "a12",
+        "title": "Server",
+        "color": "purple",
+        "x": -150,
+        "y": -470,
+        "width": 300,
+        "height": 170,
+        "network": "10.99.0.0/24",
+        "vlan": 99
+      },
+      {
+        "id": "a13",
+        "title": "Stock 1",
+        "color": "blue",
+        "x": -400,
+        "y": -50,
+        "width": 280,
+        "height": 330,
+        "network": "10.10.0.0/24",
+        "vlan": 10
+      },
+      {
+        "id": "a14",
+        "title": "Stock 2",
+        "color": "green",
+        "x": 120,
+        "y": -50,
+        "width": 280,
+        "height": 330,
+        "network": "10.20.0.0/24",
+        "vlan": 20
+      }
+    ]
+  },
+  "configuration": {}
+}

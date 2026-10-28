@@ -54,13 +54,41 @@ import {
   type StaticRoute,
   type Topology,
   type TopologyError,
+  addArea,
+  addFloor,
+  removeArea,
+  removeFloor,
+  removeSubinterface,
+  removeSvi,
+  renameFloor,
+  setCableMedium,
+  setCliConfig,
+  setDeviceFloor,
+  setInterfaceColor,
+  setInterfaceDescription,
+  setInterfaceShutdown,
+  setIpRouting,
+  setSubinterface,
+  setSvi,
+  setVlanName,
+  setWifiClient,
+  setWlan,
+  updateArea,
+  MAX_SNAPSHOTS,
+  type CliConfig,
+  type DocArea,
+  type Medium,
+  type Snapshot,
+  type TagColor,
+  type WifiClient,
+  type WlanConfig,
 } from '../../core';
 import { t } from '../../i18n';
 import { errorText } from '../labels';
 
-export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: string } | null;
-export type Tool = 'select' | 'cable';
-export type Mode = 'design' | 'action';
+export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: string } | { kind: 'area'; id: string } | null;
+export type Tool = 'select' | 'cable' | 'area';
+export type Mode = 'design' | 'action' | 'doc';
 
 export interface View {
   /** Bildschirmposition des Welt-Ursprungs. */
@@ -101,6 +129,10 @@ class Editor {
   generation = $state(0);
   /** Aufgabe zum Projekt (aus einer Aufgabendatei); nicht Teil des Undo-Verlaufs. */
   tasks = $state.raw<TaskSet | null>(null);
+  /** Gespeicherte Zwischenstände; reisen mit der Projektdatei. */
+  snapshots = $state.raw<Snapshot[]>([]);
+  /** Medium für das Verbindungswerkzeug (TP-Kabel, Glasfaser, Funk). */
+  medium = $state<Medium>('tp');
 
   #undo = $state.raw<Topology[]>([]);
   #redo = $state.raw<Topology[]>([]);
@@ -111,6 +143,11 @@ class Editor {
 
   get editable() {
     return this.mode === 'design';
+  }
+
+  /** Simulation läuft (Aktionsmodus). */
+  get acting() {
+    return this.mode === 'action';
   }
 
   get canUndo() {
@@ -127,6 +164,16 @@ class Editor {
 
   get selectedCable() {
     return this.selection?.kind === 'cable' ? getCable(this.topology, this.selection.id) : undefined;
+  }
+
+  get selectedArea(): DocArea | undefined {
+    const selection = this.selection;
+    return selection?.kind === 'area' ? this.topology.areas?.find((a) => a.id === selection.id) : undefined;
+  }
+
+  /** Im Dokumentationsmodus dürfen Bereiche bearbeitet werden, die Topologie bleibt gesperrt. */
+  get documenting() {
+    return this.mode === 'doc';
   }
 
   // --- Meldungen -----------------------------------------------------------
@@ -177,13 +224,14 @@ class Editor {
   }
 
   #dropStaleReferences() {
-    if (this.selection && !this.selectedDevice && !this.selectedCable) this.selection = null;
+    if (this.selection && !this.selectedDevice && !this.selectedCable && !this.selectedArea) this.selection = null;
     if (this.cableSource && !getDevice(this.topology, this.cableSource)) this.cableSource = null;
   }
 
   /** Ersetzt die ganze Topologie, z.B. beim Laden einer Datei (mit deren Aufgabe, falls vorhanden). */
-  replace(next: Topology, { undoable, tasks = null }: { undoable: boolean; tasks?: TaskSet | null }) {
+  replace(next: Topology, { undoable, tasks = null, snapshots }: { undoable: boolean; tasks?: TaskSet | null; snapshots?: Snapshot[] }) {
     this.tasks = tasks;
+    if (snapshots !== undefined) this.snapshots = snapshots;
     if (undoable) {
       this.#commit(next);
     } else {
@@ -203,25 +251,27 @@ class Editor {
 
   clear() {
     if (!this.editable || (this.topology.devices.length === 0 && !this.tasks)) return;
-    this.replace(emptyTopology(), { undoable: true });
+    this.replace(emptyTopology(), { undoable: true, snapshots: [] });
     this.notify(t('status.cleared'));
   }
 
   // --- Bearbeiten ----------------------------------------------------------
 
-  addDevice(type: DeviceType, position: Point) {
+  /** Neues Gerät; ist ein Stockwerk gewählt, landet es dort. */
+  addDevice(type: DeviceType, position: Point, floor = 0) {
     if (!this.editable) return;
     const name = suggestName(this.topology, t(`defaultName.${type}`));
     const added = this.#check(addDevice(this.topology, type, name, { x: snap(position.x), y: snap(position.y) }));
     if (!added) return;
-    this.#commit(added.topology);
+    const placed = floor > 0 ? setDeviceFloor(added.topology, added.id, floor) : null;
+    this.#commit(placed?.ok ? placed.value : added.topology);
     this.selection = { kind: 'device', id: added.id };
   }
 
   /** Platziert ein Gerät möglichst in der Bildmitte, aber nicht auf einem anderen. */
-  addDeviceAtCenter(type: DeviceType) {
+  addDeviceAtCenter(type: DeviceType, floor = 0) {
     const center = this.screenToWorld(this.#size.width / 2, this.#size.height / 2);
-    this.addDevice(type, this.#freeSpotNear(center));
+    this.addDevice(type, this.#freeSpotNear(center), floor);
   }
 
   /** Sucht ringförmig um `p` die erste Stelle ohne Gerät in der Nähe. */
@@ -409,6 +459,12 @@ class Editor {
 
   deleteSelection() {
     const selection = this.selection;
+    if (selection?.kind === 'area' && (this.editable || this.documenting)) {
+      const next = this.#check(removeArea(this.topology, selection.id));
+      if (next) this.#commit(next);
+      this.selection = null;
+      return;
+    }
     if (!this.editable || !selection) return;
     const result =
       selection.kind === 'device' ? removeDevice(this.topology, selection.id) : removeCable(this.topology, selection.id);
@@ -431,6 +487,11 @@ class Editor {
     this.#dragBase = this.topology;
   }
 
+  /** Läuft gerade ein Ziehvorgang? */
+  get dragging() {
+    return this.#dragBase !== null;
+  }
+
   dragTo(id: string, position: Point) {
     if (!this.#dragBase) return;
     const moved = moveDevice(this.topology, id, { x: snap(position.x), y: snap(position.y) });
@@ -443,6 +504,172 @@ class Editor {
     if (base && base !== this.topology) this.#pushUndo(base);
   }
 
+  // --- Neue Einstellungen (Ports, WLAN, Pro-Funktionen) ----------------------
+
+  /** Allgemeiner Weg für einfache Änderungen im Entwurfsmodus: Fehler als Meldung. */
+  #edit(result: Result<Topology>) {
+    if (!this.editable) return;
+    const next = this.#check(result);
+    if (next) this.#commit(next);
+  }
+
+  setCableMedium(id: string, medium: Medium) {
+    this.#edit(setCableMedium(this.topology, id, medium));
+  }
+
+  setInterfaceShutdown(id: string, index: number, shutdown: boolean) {
+    this.#edit(setInterfaceShutdown(this.topology, id, index, shutdown));
+  }
+
+  /** Farbtags und Beschreibungen sind Dokumentation: auch im Dokumentationsmodus erlaubt. */
+  setInterfaceColor(id: string, index: number, color: TagColor | null) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(setInterfaceColor(this.topology, id, index, color));
+    if (next) this.#commit(next);
+  }
+
+  setInterfaceDescription(id: string, index: number, description: string) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(setInterfaceDescription(this.topology, id, index, description));
+    if (next) this.#commit(next);
+  }
+
+  setWlan(id: string, config: WlanConfig | null): TopologyError | null {
+    return this.#applyForm(setWlan(this.topology, id, config));
+  }
+
+  setWifiClient(id: string, client: WifiClient | null): TopologyError | null {
+    return this.#applyForm(setWifiClient(this.topology, id, client));
+  }
+
+  setSubinterface(id: string, parent: number, vlan: number, ip: string, mask: string): TopologyError | null {
+    return this.#applyForm(setSubinterface(this.topology, id, parent, vlan, ip, mask));
+  }
+
+  removeSubinterface(id: string, parent: number, vlan: number) {
+    this.#edit(removeSubinterface(this.topology, id, parent, vlan));
+  }
+
+  setSvi(id: string, vlan: number, ip: string, mask: string): TopologyError | null {
+    return this.#applyForm(setSvi(this.topology, id, vlan, ip, mask));
+  }
+
+  removeSvi(id: string, vlan: number) {
+    this.#edit(removeSvi(this.topology, id, vlan));
+  }
+
+  setIpRouting(id: string, enabled: boolean) {
+    this.#edit(setIpRouting(this.topology, id, enabled));
+  }
+
+  setVlanName(id: string, vlan: number, name: string): TopologyError | null {
+    return this.#applyForm(setVlanName(this.topology, id, vlan, name));
+  }
+
+  setCliConfig(id: string, cli: CliConfig): TopologyError | null {
+    return this.#applyForm(setCliConfig(this.topology, id, cli));
+  }
+
+  /**
+   * Änderungen aus der Befehlszeile: auch im Aktionsmodus erlaubt, denn
+   * echte Geräte konfiguriert man im laufenden Betrieb. Rückgängig machen
+   * geht danach im Entwurfsmodus.
+   */
+  applyConfig(next: Topology) {
+    if (next === this.topology) return;
+    this.#commit(next);
+    this.#dropStaleReferences();
+  }
+
+  // --- Stockwerke ------------------------------------------------------------
+
+  addFloor(name: string) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(addFloor(this.topology, name));
+    if (next) this.#commit(next);
+  }
+
+  renameFloor(index: number, name: string) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(renameFloor(this.topology, index, name));
+    if (next) this.#commit(next);
+  }
+
+  removeFloor(index: number) {
+    if (!this.editable) return;
+    const next = this.#check(removeFloor(this.topology, index));
+    if (next) this.#commit(next);
+  }
+
+  setDeviceFloor(id: string, floor: number) {
+    this.#edit(setDeviceFloor(this.topology, id, floor));
+  }
+
+  // --- Dokumentationsmodus: Bereiche -------------------------------------------
+
+  addArea(area: Omit<DocArea, 'id'>) {
+    if (!this.editable && !this.documenting) return;
+    const added = this.#check(addArea(this.topology, area));
+    if (!added) return;
+    this.#commit(added.topology);
+    this.selection = { kind: 'area', id: added.id };
+  }
+
+  updateArea(id: string, change: Partial<Omit<DocArea, 'id'>>) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(updateArea(this.topology, id, change));
+    if (next) this.#commit(next);
+  }
+
+  /** Bereich ziehen oder in der Grösse ändern: nur das Endergebnis landet im Verlauf. */
+  dragArea(id: string, change: Partial<Omit<DocArea, 'id'>>) {
+    if (!this.#dragBase) return;
+    const moved = updateArea(this.topology, id, change);
+    if (moved.ok) this.topology = moved.value;
+  }
+
+  // --- Snapshots ---------------------------------------------------------------
+
+  createSnapshot(name: string, auto = false) {
+    const last = this.snapshots.at(-1);
+    // Automatische Snapshots nur, wenn sich seit dem letzten etwas geändert hat.
+    if (auto && last && last.topology === this.topology) return;
+    const snapshot: Snapshot = {
+      id: `s${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`,
+      name: name.trim() || new Date().toLocaleString(),
+      created: new Date().toISOString(),
+      ...(auto ? { auto: true } : {}),
+      topology: this.topology,
+    };
+    // Automatische Snapshots verdrängen zuerst ältere automatische.
+    let list = [...this.snapshots, snapshot];
+    while (list.length > MAX_SNAPSHOTS) {
+      const oldestAuto = list.findIndex((s) => s.auto);
+      list.splice(oldestAuto >= 0 ? oldestAuto : 0, 1);
+    }
+    this.snapshots = list;
+    if (!auto) this.notify(t('snapshot.created', { name: snapshot.name }));
+  }
+
+  restoreSnapshot(id: string) {
+    const snapshot = this.snapshots.find((s) => s.id === id);
+    if (!snapshot || this.mode === 'action') return;
+    this.#commit(snapshot.topology);
+    this.selection = null;
+    this.#dropStaleReferences();
+    this.notify(t('snapshot.restored', { name: snapshot.name }));
+  }
+
+  renameSnapshot(id: string, name: string) {
+    const value = name.trim();
+    if (!value) return;
+    this.snapshots = this.snapshots.map((s) => (s.id === id ? { ...s, name: value.slice(0, 80) } : s));
+  }
+
+  deleteSnapshot(id: string) {
+    this.snapshots = this.snapshots.filter((s) => s.id !== id);
+  }
+
   // --- Werkzeuge und Modi --------------------------------------------------
 
   select(selection: Selection) {
@@ -451,12 +678,17 @@ class Editor {
 
   setTool(tool: Tool) {
     if (tool === 'cable' && !this.editable) return;
+    if (tool === 'area' && !this.documenting) return;
     this.tool = tool;
     this.cableSource = null;
   }
 
   setMode(mode: Mode) {
     this.endDrag();
+    // Vor dem Start der Simulation den Stand festhalten, damit man zurückkehren kann.
+    if (mode === 'action' && this.mode !== 'action' && this.topology.devices.length > 0) {
+      this.createSnapshot(t('snapshot.autoAction'), true);
+    }
     this.mode = mode;
     this.tool = 'select';
     this.cableSource = null;
@@ -481,7 +713,7 @@ class Editor {
       this.cableSource = null;
       return;
     }
-    const connected = this.#check(connect(this.topology, source, id));
+    const connected = this.#check(connect(this.topology, source, id, this.medium));
     if (!connected) return;
     this.#commit(connected.topology);
     this.selection = { kind: 'cable', id: connected.id };
@@ -535,12 +767,14 @@ class Editor {
     }
     this.#fitPending = false;
     const devices = this.topology.devices;
-    if (devices.length === 0) {
+    const areas = this.topology.areas ?? [];
+    if (devices.length === 0 && areas.length === 0) {
       this.view = { x: width / 2, y: height / 2, scale: 1 };
       return;
     }
-    const xs = devices.map((d) => d.position.x);
-    const ys = devices.map((d) => d.position.y);
+    // Bereiche zählen mit, damit ihr Titel nicht abgeschnitten wird.
+    const xs = [...devices.map((d) => d.position.x), ...areas.flatMap((a) => [a.x + FIT_MARGIN, a.x + a.width - FIT_MARGIN])];
+    const ys = [...devices.map((d) => d.position.y), ...areas.flatMap((a) => [a.y + FIT_MARGIN - 10, a.y + a.height - FIT_MARGIN])];
     const minX = Math.min(...xs) - FIT_MARGIN;
     const maxX = Math.max(...xs) + FIT_MARGIN;
     const minY = Math.min(...ys) - FIT_MARGIN;

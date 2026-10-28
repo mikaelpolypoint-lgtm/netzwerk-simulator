@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { DEVICE_SPECS, parseMask, type Device } from '../../core';
+  import { DEVICE_SPECS, floorsOf, hasCli, parseMask, type Device } from '../../core';
   import { t } from '../../i18n';
   import { typeLabel } from '../labels';
+  import { openCli } from '../state/cli.svelte';
   import { openDesktop } from '../state/desktop.svelte';
+  import { ui } from '../state/ui.svelte';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
   import DeviceIcon from './DeviceIcon.svelte';
@@ -10,10 +12,19 @@
   let {
     device,
     onpointerdown,
+    faded = false,
   }: {
     device: Device;
     onpointerdown: (event: PointerEvent, device: Device) => void;
+    faded?: boolean;
   } = $props();
+
+  /** Stockwerk-Kürzel, wenn mehrere Stockwerke existieren und alle angezeigt werden. */
+  const floorLabel = $derived.by(() => {
+    const floors = floorsOf(editor.topology);
+    if (floors.length < 2 || ui.floor !== 'all') return '';
+    return floors[device.floor ?? 0]?.name ?? '';
+  });
 
   const selected = $derived(editor.selection?.kind === 'device' && editor.selection.id === device.id);
   const isSource = $derived(editor.cableSource === device.id);
@@ -22,7 +33,7 @@
   /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche; per DHCP bezogene erst im Aktionsmodus. */
   const ip = $derived.by(() => {
     if (!isEndpoint) return '';
-    const live = device.dhcp && !editor.editable ? (simStore.tick, simStore.sim?.getDeviceState(device.id).address) : undefined;
+    const live = device.dhcp && editor.acting ? (simStore.tick, simStore.sim?.getDeviceState(device.id).address) : undefined;
     const address = device.dhcp ? live?.ip : device.interfaces[0]?.ip;
     const mask = device.dhcp ? live?.mask : device.interfaces[0]?.mask;
     if (!address) return device.dhcp ? t('canvas.dhcp') : '';
@@ -38,9 +49,10 @@
     else editor.select({ kind: 'device', id: device.id });
   }
 
-  /** Doppelklick im Aktionsmodus öffnet den Desktop des Endgeräts. */
+  /** Doppelklick: im Aktionsmodus Desktop des Endgeräts; Router und Switches öffnen ihre Befehlszeile. */
   function ondblclick() {
-    if (!editor.editable && isEndpoint) openDesktop(device.id);
+    if (editor.mode === 'action' && isEndpoint) openDesktop(device.id);
+    else if (hasCli(device.type) && editor.mode !== 'doc') openCli(device.id);
   }
 </script>
 
@@ -48,6 +60,7 @@
   class="device role-{DEVICE_SPECS[device.type].role}"
   class:selected
   class:source={isSource}
+  class:faded
   transform="translate({device.position.x} {device.position.y})"
   role="button"
   tabindex="0"
@@ -64,12 +77,30 @@
   {#if ip}
     <text class="ip" y="59">{ip}</text>
   {/if}
+  {#if floorLabel}
+    <g class="floor" transform="translate(30 -26)">
+      <rect x="-2" y="-9" width={floorLabel.length * 6.5 + 8} height="15" rx="4" />
+      <text x="2" y="2">{floorLabel}</text>
+    </g>
+  {/if}
 </g>
 
 <style>
   .device {
     cursor: pointer;
     outline: none;
+  }
+  .faded {
+    opacity: 0.18;
+  }
+  .floor rect {
+    fill: var(--surface-2);
+    stroke: var(--border);
+  }
+  .floor text {
+    font-size: 10px;
+    fill: var(--muted);
+    user-select: none;
   }
   .hit {
     fill: transparent;

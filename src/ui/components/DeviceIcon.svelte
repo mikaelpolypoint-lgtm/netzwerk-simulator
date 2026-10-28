@@ -17,6 +17,16 @@
   {:else if type === 'switch'}
     <rect x="-25" y="-12" width="50" height="24" rx="4" />
     <path class="line" d="M-14 -5 H14 M9 -8 L14 -5 L9 -2 M14 5 H-14 M-9 2 L-14 5 L-9 8" />
+  {:else if type === 'l3switch'}
+    <rect x="-25" y="-12" width="50" height="24" rx="4" />
+    <path class="line" d="M-14 -5 H6 M1 -8 L6 -5 L1 -2 M6 5 H-14 M-9 2 L-14 5 L-9 8" />
+    <circle cx="16" cy="0" r="6" />
+    <path class="line" d="M13 0 H19 M16 -3 V3" />
+  {:else if type === 'accesspoint'}
+    <rect x="-20" y="2" width="40" height="13" rx="4" />
+    <path class="line" d="M-11 -7 Q0 -17 11 -7 M-6.5 -3 Q0 -9 6.5 -3" />
+    <circle class="fill" cx="0" cy="1" r="2" />
+    <path class="line" d="M-12 9 H-10 M-6 9 H-4" />
   {:else if type === 'router'}
     <circle r="20" />
     <path
@@ -40,6 +50,9 @@
     fill: var(--role-soft);
     stroke: var(--role);
     stroke-width: 2;
+  }
+  .icon :global(circle.fill) {
+    fill: var(--role);
   }
   .icon :global(.line) {
     fill: none;

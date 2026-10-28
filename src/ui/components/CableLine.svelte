@@ -1,11 +1,18 @@
 <script lang="ts">
-  import type { Cable, Device } from '../../core';
+  import { isSwitchType, linkStatus, mediumOf, type Cable, type Device } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
+  import { TAG_HEX } from '../tags';
 
-  let { cable, a, b }: { cable: Cable; a: Device; b: Device } = $props();
+  let { cable, a, b, faded = false }: { cable: Cable; a: Device; b: Device; faded?: boolean } = $props();
+
+  /** Abstand der Status-LED vom Gerätemittelpunkt. */
+  const LED_DISTANCE = 40;
+
+  const medium = $derived(mediumOf(cable));
+  const status = $derived(linkStatus(editor.topology, cable));
 
   /** Abstand der Port-Beschriftung vom Gerätemittelpunkt, ausserhalb des Gerätenamens. */
   const LABEL_DISTANCE = 76;
@@ -16,7 +23,7 @@
   function portLabel(device: Device, index: number): string {
     const base = interfaceLabel(device, index);
     const iface = device.interfaces[index];
-    if (device.type !== 'switch' || !iface) return base;
+    if (!isSwitchType(device.type) || !iface) return base;
     if (iface.trunk) return `${base} · ${t('switch.trunkShort')}`;
     return iface.vlan ? `${base} · V${iface.vlan}` : base;
   }
@@ -26,10 +33,10 @@
 
   // Im Aktionsmodus: Ist ein Ende durch Spanning Tree blockiert?
   const blocked = $derived.by(() => {
-    if (editor.editable) return false;
+    if (!editor.acting) return false;
     void simStore.tick;
     return ([['a', a], ['b', b]] as const).some(([end, device]) => {
-      if (device.type !== 'switch' || !device.stp) return false;
+      if (!isSwitchType(device.type) || !device.stp) return false;
       const port = simStore.sim?.getDeviceState(device.id).stp?.ports.find((p) => p.port === cable[end].iface);
       return port?.state === 'blocking';
     });
@@ -40,17 +47,34 @@
     const dy = b.position.y - a.position.y;
     const length = Math.hypot(dx, dy);
     // Liegen die Geräte zu nah beieinander, hätten die Beschriftungen keinen Platz.
-    if (length < LABEL_DISTANCE * 2.2) return { length, labels: null };
-    const ux = dx / length;
-    const uy = dy / length;
+    const ux = length ? dx / length : 0;
+    const uy = length ? dy / length : 0;
+    const leds =
+      length > LED_DISTANCE * 2.4
+        ? {
+            a: { x: a.position.x + ux * LED_DISTANCE, y: a.position.y + uy * LED_DISTANCE },
+            b: { x: b.position.x - ux * LED_DISTANCE, y: b.position.y - uy * LED_DISTANCE },
+          }
+        : null;
+    if (length < LABEL_DISTANCE * 2.2) return { length, labels: null, leds };
     return {
       length,
+      leds,
       labels: {
         a: { x: a.position.x + ux * LABEL_DISTANCE, y: a.position.y + uy * LABEL_DISTANCE },
         b: { x: b.position.x - ux * LABEL_DISTANCE, y: b.position.y - uy * LABEL_DISTANCE },
       },
     };
   });
+
+  const ledEnds = $derived(
+    geometry.leds
+      ? [
+          { end: 'a' as const, device: a, p: geometry.leds.a },
+          { end: 'b' as const, device: b, p: geometry.leds.b },
+        ]
+      : [],
+  );
 
   function select(event: Event) {
     event.stopPropagation();
@@ -66,8 +90,10 @@
 </script>
 
 <g
-  class="cable"
+  class="cable medium-{medium}"
   class:selected
+  class:down={!status.up}
+  class:faded
   role="button"
   tabindex="0"
   aria-pressed={selected}
@@ -78,6 +104,32 @@
 >
   <line class="hit" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
   <line class="wire" class:damaged={!!cable.loss} class:blocked x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  {#if medium === 'wireless'}
+    <g class="wifi-badge" transform="translate({(a.position.x + b.position.x) / 2} {(a.position.y + b.position.y) / 2})">
+      <circle r="11" />
+      <path d="M-6 -1 Q0 -7 6 -1 M-3.5 2 Q0 -1.5 3.5 2" />
+      <circle class="dotc" cy="5" r="1.4" />
+      {#if status.signal !== undefined}
+        <text y="22">{status.signal} %</text>
+      {/if}
+    </g>
+  {/if}
+  {#if geometry.leds}
+    {#each ledEnds as { end, device, p } (end)}
+      {@const tag = device.interfaces[cable[end].iface]?.color}
+      <circle
+        class="led"
+        class:up={status.up}
+        cx={p.x}
+        cy={p.y}
+        r="4.5"
+        style:stroke={tag ? TAG_HEX[tag] : undefined}
+        style:stroke-width={tag ? 3.5 : undefined}
+      >
+        <title>{status.up ? t('link.up') : t(`link.down.${status.reason ?? 'unknown'}`)}</title>
+      </circle>
+    {/each}
+  {/if}
   {#if blocked}
     <text class="blocked-label" x={(a.position.x + b.position.x) / 2} y={(a.position.y + b.position.y) / 2 + 14}>{t('switch.blockedCable')}</text>
   {/if}
@@ -133,6 +185,52 @@
     stroke-width: 4px;
     stroke-linejoin: round;
     pointer-events: none;
+  }
+  .medium-fiber .wire {
+    stroke: var(--fiber, #ef6c00);
+    stroke-width: 3.5;
+  }
+  .medium-wireless .wire {
+    stroke: var(--wireless, #2563eb);
+    stroke-width: 2;
+    stroke-dasharray: 1 7;
+    stroke-linecap: round;
+  }
+  .down .wire {
+    opacity: 0.5;
+  }
+  .faded {
+    opacity: 0.15;
+  }
+  .wifi-badge circle:not(.dotc) {
+    fill: var(--surface);
+    stroke: var(--wireless, #2563eb);
+    stroke-width: 1.5;
+  }
+  .wifi-badge path {
+    fill: none;
+    stroke: var(--wireless, #2563eb);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+  .wifi-badge .dotc {
+    fill: var(--wireless, #2563eb);
+  }
+  .wifi-badge text {
+    font-size: 10px;
+    text-anchor: middle;
+    fill: var(--muted);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 3px;
+  }
+  .led {
+    fill: var(--led-down, #dc2626);
+    stroke: var(--bg);
+    stroke-width: 1.5;
+  }
+  .led.up {
+    fill: var(--led-up, #16a34a);
   }
   .cable:hover .wire {
     stroke-width: 3.5;

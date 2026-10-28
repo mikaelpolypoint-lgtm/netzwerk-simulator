@@ -3,6 +3,8 @@
   import { parseProject, serializeProject } from '../core';
   import { locale, t } from '../i18n';
   import Canvas from './components/Canvas.svelte';
+  import CliWindow from './components/CliWindow.svelte';
+  import FloorBar from './components/FloorBar.svelte';
   import Desktop from './components/Desktop.svelte';
   import SimControls from './components/SimControls.svelte';
   import Inspector from './components/Inspector.svelte';
@@ -17,6 +19,16 @@
   import { editor } from './state/editor.svelte';
   import { closeDesktop } from './state/desktop.svelte';
   import { simStore } from './state/sim.svelte';
+  import { ui, usesProFeatures } from './state/ui.svelte';
+  import type { Topology } from '../core';
+
+  /** Projekte mit VLANs, NAT usw. brauchen den Pro-Modus, sonst wären Einstellungen versteckt. */
+  function ensureLevel(topology: Topology) {
+    if (!ui.pro && usesProFeatures(topology)) {
+      ui.setLevel('pro');
+      editor.notify(t('level.switchedToPro'));
+    }
+  }
 
   let fileInput: HTMLInputElement;
 
@@ -40,9 +52,10 @@
   onMount(async () => {
     const text = await loadAutosave();
     const parsed = text ? parseProject(text) : null;
-    if (parsed?.ok && (parsed.topology.devices.length > 0 || parsed.tasks)) {
-      editor.replace(parsed.topology, { undoable: false, tasks: parsed.tasks ?? null });
+    if (parsed?.ok && (parsed.topology.devices.length > 0 || parsed.tasks || parsed.snapshots)) {
+      editor.replace(parsed.topology, { undoable: false, tasks: parsed.tasks ?? null, snapshots: parsed.snapshots ?? [] });
       editor.notify(t('status.restored'));
+      ensureLevel(parsed.topology);
     }
     restored = true;
   });
@@ -50,12 +63,12 @@
   // Erst nach dem Wiederherstellen speichern, sonst überschreibt das leere Startprojekt den alten Stand.
   let pendingSave: (() => void) | null = null;
   $effect(() => {
-    const { topology, tasks } = editor;
+    const { topology, tasks, snapshots } = editor;
     if (!restored) return;
     const flush = () => {
       clearTimeout(timer);
       pendingSave = null;
-      saveAutosave(serializeProject(topology, tasks));
+      saveAutosave(serializeProject(topology, tasks, snapshots));
     };
     const timer = setTimeout(flush, 400);
     pendingSave = flush;
@@ -73,7 +86,7 @@
 
   function save() {
     const filename = projectFilename();
-    downloadText(filename, serializeProject(editor.topology, editor.tasks));
+    downloadText(filename, serializeProject(editor.topology, editor.tasks, editor.snapshots));
     editor.notify(t('status.saved', { file: filename }));
   }
 
@@ -97,7 +110,8 @@
       editor.notify(errorText(parsed.error), 'error');
       return;
     }
-    editor.replace(parsed.topology, { undoable: true, tasks: parsed.tasks ?? null });
+    editor.replace(parsed.topology, { undoable: true, tasks: parsed.tasks ?? null, snapshots: parsed.snapshots ?? [] });
+    ensureLevel(parsed.topology);
     editor.notify(t(parsed.tasks ? 'status.loadedTask' : 'status.loaded', { file: file.name, title: parsed.tasks?.title ?? '' }));
   }
 
@@ -160,11 +174,13 @@
     <TaskPanel />
   </div>
   <main>
-    {#if !editor.editable}
+    {#if editor.mode === 'action'}
       <SimControls />
     {/if}
+    <FloorBar />
     <Canvas />
-    {#if !editor.editable}
+    <CliWindow />
+    {#if editor.mode === 'action'}
       <div class="packet-panel">
         <PacketList />
       </div>

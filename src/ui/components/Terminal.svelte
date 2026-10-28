@@ -3,6 +3,7 @@
   import type { Device } from '../../core';
   import { t } from '../../i18n';
   import { simStore } from '../state/sim.svelte';
+  import CliTerminal from './CliTerminal.svelte';
 
   let { device }: { device: Device } = $props();
 
@@ -29,13 +30,59 @@
     input?.focus();
   });
 
+  // --- SSH ---------------------------------------------------------------------
+  // «ssh benutzer@adresse» fragt hier das Passwort ab; nach erfolgreicher
+  // Anmeldung übernimmt die Befehlszeile des Zielgeräts das Fenster.
+
+  let passwordFor = $state<{ user: string; target: string } | null>(null);
+  let remote = $state<{ deviceId: string; target: string; intro: string[] } | null>(null);
+  let seen = $state(0);
+
+  $effect(() => {
+    const all = lines;
+    if (all.length < seen) seen = 0;
+    for (const entry of all.slice(seen)) {
+      if (entry.code === 'ssh.open' && entry.params?.device) {
+        remote = { deviceId: String(entry.params.device), target: String(entry.params.target), intro: [t('console.ssh.open', entry.params)] };
+      } else if (entry.code === 'ssh.closed' && remote) {
+        remote = null;
+      }
+    }
+    seen = all.length;
+  });
+
+  function parseSsh(command: string): { user: string; target: string } | null {
+    const parts = command.trim().split(/\s+/);
+    if (parts[0]?.toLowerCase() !== 'ssh') return null;
+    if (parts[1] === '-l' && parts[2] && parts[3]) return { user: parts[2], target: parts[3] };
+    const m = /^([^@\s]+)@(\S+)$/.exec(parts[1] ?? '');
+    return m ? { user: m[1]!, target: m[2]! } : null;
+  }
+
   function submit(event: SubmitEvent) {
     event.preventDefault();
     const command = line;
     line = '';
     historyIndex = -1;
+    if (passwordFor) {
+      const { user, target } = passwordFor;
+      passwordFor = null;
+      simStore.ssh(device.id, target, user, command);
+      return;
+    }
     if (command.trim()) history = [...history.filter((h) => h !== command), command].slice(-30);
+    const ssh = parseSsh(command);
+    if (ssh) {
+      simStore.runCommand(device.id, command);
+      passwordFor = ssh;
+      return;
+    }
     simStore.runCommand(device.id, command);
+  }
+
+  function closeRemote() {
+    simStore.sshClose(device.id);
+    remote = null;
   }
 
   /** Pfeiltasten blättern durch frühere Befehle wie in einer echten Konsole. */
@@ -52,6 +99,11 @@
   const prompt = 'C:\\>';
 </script>
 
+{#if remote}
+  {#key remote.deviceId + remote.target}
+    <CliTerminal deviceId={remote.deviceId} remote intro={remote.intro} onclose={closeRemote} onsend={(l) => simStore.sshSend(device.id, l)} />
+  {/key}
+{:else}
 <div class="terminal">
   <div class="output" bind:this={output} role="log" aria-live="polite" aria-label={t('desktop.terminal')}>
     {#if lines.length === 0}
@@ -66,19 +118,21 @@
     {/each}
   </div>
   <form onsubmit={submit}>
-    <label for="terminal-input" class="prompt">{prompt}</label>
+    <label for="terminal-input" class="prompt">{passwordFor ? t('terminal.sshPassword', passwordFor) : prompt}</label>
     <input
       id="terminal-input"
       bind:this={input}
       bind:value={line}
       {onkeydown}
+      type={passwordFor ? 'password' : 'text'}
       autocomplete="off"
       spellcheck="false"
       aria-label={t('terminal.input')}
-      placeholder={t('terminal.placeholder')}
+      placeholder={passwordFor ? '' : t('terminal.placeholder')}
     />
   </form>
 </div>
+{/if}
 
 <style>
   .terminal {

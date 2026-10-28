@@ -1,12 +1,15 @@
 <script lang="ts">
   import { LOCALES, locale, setLocale, t, type Locale } from '../../i18n';
   import { editor, type Mode } from '../state/editor.svelte';
+  import { ui } from '../state/ui.svelte';
   import AboutDialog from './AboutDialog.svelte';
+  import SnapshotDialog from './SnapshotDialog.svelte';
 
   let { onopen, onsave }: { onopen: () => void; onsave: () => void } = $props();
 
-  const modes: Mode[] = ['design', 'action'];
+  const modes: Mode[] = ['design', 'action', 'doc'];
   let about = $state(false);
+  let snapshots = $state(false);
 </script>
 
 <header class="toolbar">
@@ -31,15 +34,25 @@
     <button aria-pressed={editor.tool === 'select'} onclick={() => editor.setTool('select')}>
       {t('toolbar.select')}
     </button>
-    <button
-      aria-pressed={editor.tool === 'cable'}
-      disabled={!editor.editable}
-      onclick={() => editor.setTool(editor.tool === 'cable' ? 'select' : 'cable')}
-      title="{t('toolbar.cable')} (K)"
-    >
-      {t('toolbar.cable')}
-    </button>
+    {#if editor.documenting}
+      <button aria-pressed={editor.tool === 'area'} onclick={() => editor.setTool(editor.tool === 'area' ? 'select' : 'area')} title={t('toolbar.areaHint')}>
+        {t('toolbar.area')}
+      </button>
+    {:else}
+      <button
+        aria-pressed={editor.tool === 'cable'}
+        disabled={!editor.editable}
+        onclick={() => editor.setTool(editor.tool === 'cable' ? 'select' : 'cable')}
+        title="{t('toolbar.cable')} (K)"
+      >
+        {t('toolbar.cable')}
+      </button>
+    {/if}
   </div>
+
+  <button onclick={() => (snapshots = true)} title={t('toolbar.snapshotsHint')}>
+    {t('toolbar.snapshots')}{editor.snapshots.length ? ` (${editor.snapshots.length})` : ''}
+  </button>
 
   <div class="group" role="group">
     <button onclick={() => editor.zoomAt(1 / 1.2)} aria-label={t('toolbar.zoomOut')} title="{t('toolbar.zoomOut')} (−)">−</button>
@@ -57,6 +70,11 @@
     {/each}
   </div>
 
+  <div class="level" role="radiogroup" aria-label={t('level.label')} title={t('level.hint')}>
+    <button role="radio" aria-checked={!ui.pro} onclick={() => ui.setLevel('basic')}>{t('level.basic')}</button>
+    <button role="radio" aria-checked={ui.pro} onclick={() => ui.setLevel('pro')}>{t('level.pro')}</button>
+  </div>
+
   <label class="language">
     <span class="visually-hidden">{t('toolbar.language')}</span>
     <select value={locale()} onchange={(e) => setLocale(e.currentTarget.value as Locale)} title={t('toolbar.language')}>
@@ -71,6 +89,9 @@
 
 {#if about}
   <AboutDialog onclose={() => (about = false)} />
+{/if}
+{#if snapshots}
+  <SnapshotDialog onclose={() => (snapshots = false)} />
 {/if}
 
 <style>
@@ -107,6 +128,23 @@
     font-size: 0.85rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+  .level {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .level button {
+    border: none;
+    border-radius: 0;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+  }
+  .level button[aria-checked='true'] {
+    background: var(--text);
+    color: var(--surface);
+    font-weight: 600;
   }
   .modes {
     margin-left: auto;

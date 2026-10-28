@@ -70,6 +70,21 @@ class SimStore {
     this.tick++;
   }
 
+  ssh(deviceId: string, target: string, user: string, password: string) {
+    this.#sim?.ssh(deviceId, target, user, password);
+    this.tick++;
+  }
+
+  sshSend(deviceId: string, line: string) {
+    this.#sim?.sshSend(deviceId, line);
+    this.tick++;
+  }
+
+  sshClose(deviceId: string) {
+    this.#sim?.sshClose(deviceId);
+    this.tick++;
+  }
+
   browse(deviceId: string, url: string) {
     this.#sim?.browse(deviceId, url);
     this.tick++;

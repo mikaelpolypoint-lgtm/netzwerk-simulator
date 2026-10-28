@@ -1,9 +1,15 @@
 <script lang="ts">
-  import { DEVICE_SPECS, MAX_NAME_LENGTH, cableAt, getDevice, isRouterType, otherEnd, type Device } from '../../core';
+  import { DEVICE_SPECS, MAX_NAME_LENGTH, canUseWifi, floorsOf, hasCli, isRouterType } from '../../core';
   import { t } from '../../i18n';
-  import { interfaceLabel, roleLabel, typeLabel } from '../labels';
+  import { roleLabel, typeLabel } from '../labels';
+  import { openCli } from '../state/cli.svelte';
   import { editor } from '../state/editor.svelte';
+  import AreaForm from './AreaForm.svelte';
   import CableInspector from './CableInspector.svelte';
+  import PortTable from './PortTable.svelte';
+  import SviConfig from './SviConfig.svelte';
+  import WifiClientForm from './WifiClientForm.svelte';
+  import WlanConfig from './WlanConfig.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
   import MailAccountForm from './MailAccountForm.svelte';
   import Services from './Services.svelte';
@@ -14,6 +20,8 @@
 
   const device = $derived(editor.selectedDevice);
   const cable = $derived(editor.selectedCable);
+  const area = $derived(editor.selectedArea);
+  const floors = $derived(floorsOf(editor.topology));
   const spec = $derived(device ? DEVICE_SPECS[device.type] : undefined);
 
   let nameDraft = $state('');
@@ -33,14 +41,6 @@
     }
   }
 
-
-  function peer(d: Device, index: number): string | undefined {
-    const c = cableAt(editor.topology, { device: d.id, iface: index });
-    if (!c) return undefined;
-    const end = otherEnd(c, d.id);
-    const other = getDevice(editor.topology, end.device);
-    return other ? t('inspector.connectedTo', { device: other.name, iface: interfaceLabel(other, end.iface) }) : undefined;
-  }
 
   const shortcuts: [string, string][] = [
     ['K', 'shortcut.cable'],
@@ -77,9 +77,30 @@
       <dd>{roleLabel(device.type)}</dd>
     </dl>
 
-    {#if spec.role === 'endpoint'}
+    {#if floors.length > 1}
+      <label class="field">
+        <span>{t('floor.label')}</span>
+        <select value={device.floor ?? 0} disabled={!editor.editable} onchange={(e) => editor.setDeviceFloor(device.id, Number(e.currentTarget.value))}>
+          {#each floors as f, i (i)}<option value={i}>{f.name}</option>{/each}
+        </select>
+      </label>
+    {/if}
+
+    {#if hasCli(device.type) && !editor.documenting}
+      <button class="cli" onclick={() => openCli(device.id)} title={t('cli.openHint')}>›_ {t('cli.open')}</button>
+    {/if}
+
+    {#if editor.documenting}
+      <p class="muted">{t('doc.deviceHint')}</p>
+    {:else if spec.role === 'endpoint'}
       {#if editor.editable}
         <HostConfigForm {device} />
+        {#if canUseWifi(device)}
+          <details class="mail-account" open={!!device.wifi}>
+            <summary>{t('wifi.title')}</summary>
+            <WifiClientForm {device} />
+          </details>
+        {/if}
         <details class="mail-account" open={!!device.mailAccount}>
           <summary>{t('mailAccount.title')}</summary>
           <MailAccountForm {device} />
@@ -90,12 +111,18 @@
       {:else}
         <HostPanel {device} />
       {/if}
-    {:else if !editor.editable}
+    {:else if editor.acting}
       <NetDevicePanel {device} />
     {:else if isRouterType(device.type)}
       <RouterConfig {device} />
+    {:else if device.type === 'l3switch'}
+      <SviConfig {device} />
+      <SwitchConfig {device} />
+      <RouterConfig {device} routesOnly />
     {:else if device.type === 'switch'}
       <SwitchConfig {device} />
+    {:else if device.type === 'accesspoint'}
+      <WlanConfig {device} />
     {/if}
 
     {#if spec.minInterfaces !== spec.maxInterfaces && editor.editable}
@@ -118,31 +145,15 @@
     {/if}
 
     <h3>{t('inspector.interfaces')}</h3>
-    <table>
-      <thead>
-        <tr>
-          <th scope="col"></th>
-          <th scope="col">{t('inspector.mac')}</th>
-          <th scope="col"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each device.interfaces as iface (iface.index)}
-          {@const link = peer(device, iface.index)}
-          <tr>
-            <th scope="row">{interfaceLabel(device, iface.index)}</th>
-            <td class="mono">{iface.mac}</td>
-            <td class:free={!link}>{link ?? t('inspector.free')}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <PortTable {device} />
 
     {#if editor.editable}
       <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
     {/if}
   {:else if cable}
     <CableInspector {cable} />
+  {:else if area}
+    <AreaForm {area} />
   {:else}
     <p class="muted">{t('inspector.nothing')}</p>
     <h3>{t('inspector.shortcuts')}</h3>
@@ -209,30 +220,6 @@
     text-align: center;
     font-weight: 600;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.8rem;
-    margin-bottom: 16px;
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 3px 4px;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  thead th {
-    color: var(--muted);
-    font-weight: normal;
-  }
-  td:last-child {
-    white-space: normal;
-  }
-  .mono {
-    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  }
-  .free,
   .muted {
     color: var(--muted);
   }
@@ -247,6 +234,25 @@
     padding: 5px 0;
     font-size: 0.85rem;
     font-weight: 600;
+  }
+  select {
+    font: inherit;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .cli {
+    width: 100%;
+    margin-bottom: 8px;
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    background: var(--console-bg);
+    color: var(--console-text);
+    border-color: var(--console-bg);
+  }
+  .cli:hover:not(:disabled) {
+    background: #2b3440;
   }
   .danger {
     margin-top: 12px;

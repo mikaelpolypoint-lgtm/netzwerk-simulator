@@ -34,7 +34,22 @@ export interface ProjectFile {
   configuration: Record<string, unknown>;
   /** Nur in Aufgabendateien: Lernziele mit automatischer Prüfung. */
   tasks?: TaskSet;
+  /** Gespeicherte Zwischenstände (Snapshots), neueste zuletzt. */
+  snapshots?: Snapshot[];
 }
+
+/** Zwischenstand der Topologie mit Namen und Zeitpunkt. */
+export interface Snapshot {
+  id: string;
+  name: string;
+  /** ISO-Zeitpunkt der Aufnahme. */
+  created: string;
+  /** Automatisch angelegt (z.B. beim Wechsel in den Aktionsmodus). */
+  auto?: boolean;
+  topology: Topology;
+}
+
+export const MAX_SNAPSHOTS = 50;
 
 export type ParseErrorCode = 'invalidJson' | 'notAProject' | 'unsupportedVersion' | 'invalidStructure' | 'switchLoop';
 
@@ -43,14 +58,15 @@ export interface ParseError {
   params?: Record<string, string | number>;
 }
 
-export type ParseResult = { ok: true; topology: Topology; tasks?: TaskSet } | { ok: false; error: ParseError };
+export type ParseResult = { ok: true; topology: Topology; tasks?: TaskSet; snapshots?: Snapshot[] } | { ok: false; error: ParseError };
 
-export function serializeProject(topology: Topology, tasks?: TaskSet | null): string {
+export function serializeProject(topology: Topology, tasks?: TaskSet | null, snapshots?: Snapshot[] | null): string {
   const file: ProjectFile = {
     meta: { format: FORMAT_ID, version: FORMAT_VERSION },
     topology,
     configuration: {},
     ...(tasks ? { tasks } : {}),
+    ...(snapshots?.length ? { snapshots } : {}),
   };
   return JSON.stringify(file, null, 2) + '\n';
 }
@@ -75,9 +91,11 @@ export function parseProject(text: string): ParseResult {
   if (version > FORMAT_VERSION) return failure('unsupportedVersion', { version, supported: FORMAT_VERSION });
   let topology: Topology;
   let tasks: TaskSet | undefined;
+  let snapshots: Snapshot[] | undefined;
   try {
     const current = migrate(data, version);
     topology = readTopology(current.topology);
+    if (current.snapshots !== undefined) snapshots = readSnapshots(current.snapshots);
     if (current.tasks !== undefined) {
       tasks = readTasks(current.tasks, (path) => {
         throw new Invalid(path);
@@ -93,7 +111,30 @@ export function parseProject(text: string): ParseResult {
     const name = (id: string) => topology.devices.find((d) => d.id === id)?.name ?? id;
     return failure('switchLoop', { a: name(loop.a.device), b: name(loop.b.device) });
   }
-  return tasks ? { ok: true, topology, tasks } : { ok: true, topology };
+  return { ok: true, topology, ...(tasks ? { tasks } : {}), ...(snapshots?.length ? { snapshots } : {}) };
+}
+
+function readSnapshots(v: unknown): Snapshot[] {
+  const ids = new Set<string>();
+  return arr(v, 'snapshots')
+    .slice(-MAX_SNAPSHOTS)
+    .map((raw, i): Snapshot => {
+      const path = `snapshots[${i}]`;
+      const o = obj(raw, path);
+      const id = text(o.id, `${path}.id`, 40);
+      if (ids.has(id)) throw new Invalid(`${path}.id`);
+      ids.add(id);
+      const created = text(o.created, `${path}.created`, 40);
+      if (Number.isNaN(Date.parse(created))) throw new Invalid(`${path}.created`);
+      let topology: Topology;
+      try {
+        topology = readTopology(o.topology);
+      } catch (e) {
+        if (e instanceof Invalid) throw new Invalid(`${path}.${e.path}`);
+        throw e;
+      }
+      return { id, name: text(o.name, `${path}.name`, 80), created, ...(o.auto === true ? { auto: true } : {}), topology };
+    });
 }
 
 /** Hebt ältere Formatversionen schrittweise auf die aktuelle an. */

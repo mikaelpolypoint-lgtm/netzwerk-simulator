@@ -1,0 +1,272 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "router",
+        "name": "Router",
+        "position": {
+          "x": 0,
+          "y": -200
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:01:01"
+          }
+        ],
+        "subinterfaces": [
+          {
+            "parent": 0,
+            "vlan": 10,
+            "ip": "192.168.10.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "parent": 0,
+            "vlan": 20,
+            "ip": "192.168.20.1",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "cli": {
+          "ssh": true,
+          "users": [
+            {
+              "name": "admin",
+              "password": "Netz2026"
+            }
+          ],
+          "banner": "Nur fuer berechtigte Personen"
+        }
+      },
+      {
+        "id": "d2",
+        "type": "switch",
+        "name": "Switch",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "trunk": true,
+            "description": "Trunk zum Router",
+            "color": "yellow"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:02:01",
+            "vlan": 10,
+            "color": "blue"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:02:02",
+            "vlan": 10,
+            "color": "blue"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:02:03",
+            "vlan": 20,
+            "color": "green"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:02:04",
+            "vlan": 20,
+            "color": "green"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:02:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:02:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:02:07"
+          }
+        ],
+        "vlanNames": [
+          {
+            "vlan": 10,
+            "name": "Verwaltung"
+          },
+          {
+            "vlan": 20,
+            "name": "Unterricht"
+          }
+        ]
+      },
+      {
+        "id": "d3",
+        "type": "pc",
+        "name": "PC Verwaltung",
+        "position": {
+          "x": -330,
+          "y": 260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00",
+            "ip": "192.168.10.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.10.1"
+      },
+      {
+        "id": "d4",
+        "type": "pc",
+        "name": "PC Lehrer",
+        "position": {
+          "x": -110,
+          "y": 260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00",
+            "ip": "192.168.10.11",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.10.1"
+      },
+      {
+        "id": "d5",
+        "type": "pc",
+        "name": "PC Schüler 1",
+        "position": {
+          "x": 110,
+          "y": 260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00",
+            "ip": "192.168.20.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.20.1"
+      },
+      {
+        "id": "d6",
+        "type": "pc",
+        "name": "PC Schüler 2",
+        "position": {
+          "x": 330,
+          "y": 260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:06:00",
+            "ip": "192.168.20.11",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.20.1"
+      }
+    ],
+    "cables": [
+      {
+        "id": "c7",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c8",
+        "a": {
+          "device": "d3",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d4",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 2
+        }
+      },
+      {
+        "id": "c10",
+        "a": {
+          "device": "d5",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 3
+        }
+      },
+      {
+        "id": "c11",
+        "a": {
+          "device": "d6",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 4
+        }
+      }
+    ],
+    "nextId": 14,
+    "areas": [
+      {
+        "id": "a12",
+        "title": "VLAN 10 – Verwaltung",
+        "color": "blue",
+        "x": -400,
+        "y": 100,
+        "width": 420,
+        "height": 230,
+        "network": "192.168.10.0/24",
+        "vlan": 10
+      },
+      {
+        "id": "a13",
+        "title": "VLAN 20 – Unterricht",
+        "color": "green",
+        "x": 40,
+        "y": 100,
+        "width": 420,
+        "height": 230,
+        "network": "192.168.20.0/24",
+        "vlan": 20
+      }
+    ]
+  },
+  "configuration": {}
+}

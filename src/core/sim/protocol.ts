@@ -1,7 +1,7 @@
 import type { EthernetFrame } from './frames';
 
 /** Bekannte TCP-Ports und ihr Anwendungsprotokoll. */
-export const TCP_APPS: Record<number, string> = { 80: 'HTTP', 25: 'SMTP', 110: 'POP3', 143: 'IMAP' };
+export const TCP_APPS: Record<number, string> = { 22: 'SSH', 80: 'HTTP', 25: 'SMTP', 110: 'POP3', 143: 'IMAP' };
 
 /** Oberstes erkennbares Protokoll eines Rahmens, wie ein Paketanalysator es anzeigt. */
 export function protocolOf(frame: EthernetFrame): string {
