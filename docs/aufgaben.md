@@ -61,3 +61,9 @@ Statische Prüfungen schauen nur auf das gebaute Netz. **Dynamische** Prüfungen
 ## Sicherheit
 
 Aufgabendateien enthalten nur Daten. Unbekannte Prüfbausteine werden beim Öffnen abgelehnt, ausführbarer Code ist nicht möglich. Seiten von simulierten Webservern laufen ohne Skripte.
+
+## Abgaben auswerten
+
+Im Aufgabenbereich öffnet **«Abgaben auswerten …»** einen Dialog für Lehrpersonen: Dort wählt man alle `.json`-Dateien der Klasse auf einmal. Der Simulator prüft jede Datei gegen die geladene Aufgabe (ist keine geladen, gegen die Aufgabe in der Datei) und zeigt eine Tabelle Datei × Ziel mit Punktzahl. Fährt man mit der Maus über ein ✗, erscheint der Grund. «Als CSV speichern» erzeugt eine Tabelle für Excel (Semikolon-getrennt, 1 = erfüllt, 0 = nicht erfüllt, – = nicht prüfbar).
+
+Ziele vom Typ `packetSeen` hängen davon ab, was die Lernenden im Aktionsmodus selbst ausgelöst haben. Das steht nicht in der Datei, darum werden sie bei der Auswertung übersprungen und zählen nicht zur Punktzahl. Alle Dateien bleiben auf dem Gerät der Lehrperson.

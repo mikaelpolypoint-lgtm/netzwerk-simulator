@@ -728,5 +728,22 @@
   "error.notAProject": "Die Datei ist kein Projekt des Netzwerk-Simulators.",
   "error.unsupportedVersion": "Die Datei stammt aus einer neueren Version (Format {version}, unterstützt: {supported}).",
   "error.invalidStructure": "Die Datei ist beschädigt (Problem bei {path}).",
-  "error.readFailed": "Die Datei konnte nicht gelesen werden."
+  "error.readFailed": "Die Datei konnte nicht gelesen werden.",
+  "error.noTasks": "Die Datei enthält keine Aufgabe, und im Simulator ist keine geladen.",
+
+  "review.open": "Abgaben auswerten …",
+  "review.openHint": "Für Lehrpersonen: mehrere Projektdateien der Lernenden gegen die Aufgabe prüfen",
+  "review.title": "Abgaben auswerten",
+  "review.help": "Wähle die .json-Dateien der Lernenden (mehrere auf einmal möglich). Ohne geladene Aufgabe gilt die Aufgabe in der jeweiligen Datei. Ziele zu selbst ausgelösten Paketen lassen sich aus einer Datei nicht prüfen und zählen nicht. Die Dateien bleiben auf diesem Gerät.",
+  "review.helpTask": "Geprüft wird gegen die geladene Aufgabe «{title}».",
+  "review.choose": "Dateien wählen …",
+  "review.running": "Prüfe {n} Dateien …",
+  "review.file": "Datei",
+  "review.score": "Punkte",
+  "review.error": "Fehler",
+  "review.skipped": "nicht prüfbar",
+  "review.ownTasks": "eigene Aufgabe der Datei",
+  "review.csv": "Als CSV speichern",
+  "review.close": "Schliessen",
+  "review.empty": "Noch keine Dateien gewählt."
 }

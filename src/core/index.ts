@@ -10,6 +10,7 @@ export * from './net/routing';
 export * from './net/mail';
 export * from './sim/protocol';
 export * from './tasks/tasks';
+export * from './tasks/review';
 export type { MailClientState, ReceivedMail, MailStep } from './sim/mail';
 export * from './net/dhcp';
 export * from './net/dns';

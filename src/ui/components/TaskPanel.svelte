@@ -3,12 +3,14 @@
   import { t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
+  import ReviewDialog from './ReviewDialog.svelte';
   import TaskEditor from './TaskEditor.svelte';
 
   /** Aufgabe mit Lernzielen; "Prüfen" wertet das aktuelle Netz automatisch aus. */
   let results = $state<GoalResult[] | null>(null);
   let editing = $state(false);
   let checking = $state(false);
+  let reviewing = $state(false);
 
   const tasks = $derived(editor.tasks);
   const passedCount = $derived(results?.filter((r) => r.passed).length ?? 0);
@@ -75,10 +77,14 @@
       <p class="summary" role="status">{t('tasks.summary', { passed: passedCount, total: tasks.goals.length })}</p>
     {/if}
   {/if}
+  <button class="small review" onclick={() => (reviewing = true)} title={t('review.openHint')}>{t('review.open')}</button>
 </section>
 
 {#if editing}
   <TaskEditor onclose={() => (editing = false)} />
+{/if}
+{#if reviewing}
+  <ReviewDialog onclose={() => (reviewing = false)} />
 {/if}
 
 <style>
@@ -139,6 +145,9 @@
   .check {
     width: 100%;
     font-weight: 600;
+  }
+  .review {
+    margin-top: 10px;
   }
   .summary {
     margin: 6px 0 0;
