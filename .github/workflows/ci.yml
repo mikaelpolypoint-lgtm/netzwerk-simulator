@@ -1,0 +1,49 @@
+# Prüft jeden Push und Pull Request: Typen, Tests, Build, die verteilte
+# Datei und die Oberfläche. Läuft ohne Geheimnisse und ohne Schreibrechte.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Typprüfung, Kern-Tests, Build und Offline-Prüfung der verteilten Datei.
+      - run: npm run release
+
+      - name: release/netzwerk-simulator.html ist aktuell
+        run: |
+          if ! git diff --quiet -- release/; then
+            echo "::error file=release/netzwerk-simulator.html::Die verteilte Datei passt nicht zum Code. Lokal 'npm run release' ausführen und das Ergebnis committen."
+            git diff --stat -- release/
+            exit 1
+          fi
+
+      # Oberflächentests mit dem auf dem Runner installierten Chrome.
+      - run: npx playwright test
+        env:
+          PW_CHANNEL: chrome
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-ergebnisse
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

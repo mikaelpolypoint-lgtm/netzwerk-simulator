@@ -1,6 +1,8 @@
 # Netzwerk-Simulator
 
-Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EFZ). Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste.
+[![CI](https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator/actions/workflows/ci.yml)
+
+Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EFZ). Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste. Oberfläche auf Deutsch und Französisch.
 
 Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konzept.md).
 
@@ -23,6 +25,8 @@ Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Instal
 | M5 | DNS, TCP/UDP, HTTP | ✅ |
 | M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | ✅ |
 | M7 | Deployment (Variante A und B) | ✅ |
+| + | Kabel umstecken/beschädigen, DHCP-Relay, Internet mit NAT, VLANs und Spanning Tree, schnelle Paketliste | ✅ |
+| + | Aufgaben-Formular, Abgaben auswerten, Französisch, Oberflächentests, CI | ✅ |
 
 ## Entwicklung
 
@@ -42,6 +46,8 @@ npm run e2e      # Oberflächentests (Playwright) gegen den Build
 Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den installierten: unter Windows Edge, sonst Chrome (anderer Kanal mit `PW_CHANNEL`, z.B. `PW_CHANNEL=chromium` nach `npx playwright install chromium`).
 
 `npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält oder die CSP fehlt. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/netzwerk-simulator.html` nicht zum Code passt.
 
 Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/installation.md#b-schulserver-mit-docker)).
 
@@ -87,7 +93,7 @@ Regeln, die das Projekt technisch absichert:
 
 ## Aufgaben
 
-Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruck prüft (z.B. «PC 1 erreicht PC 2 per Ping»). Lehrpersonen erstellen sie direkt im Simulator. Beschreibung aller Prüfbausteine: [docs/aufgaben.md](docs/aufgaben.md). Musteraufgabe: [docs/aufgaben/zwei-subnetze.json](docs/aufgaben/zwei-subnetze.json).
+Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruck prüft (z.B. «PC 1 erreicht PC 2 per Ping»). Lehrpersonen erstellen sie direkt im Simulator in einem Formular (oder als JSON) und werten mit «Abgaben auswerten …» die Dateien einer ganzen Klasse auf einmal aus, mit Export als CSV für Excel. Beschreibung aller Prüfbausteine: [docs/aufgaben.md](docs/aufgaben.md). Musteraufgabe: [docs/aufgaben/zwei-subnetze.json](docs/aufgaben/zwei-subnetze.json).
 
 ## Beispiele
 
