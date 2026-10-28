@@ -1,4 +1,5 @@
 import { DEVICE_SPECS, isDeviceType } from '../model/devices';
+import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
 import { MAX_NAME_LENGTH, deviceSeq } from '../model/topology';
 import type { Cable, Device, Endpoint, NetInterface, Topology } from '../model/types';
@@ -158,12 +159,26 @@ function readDevice(v: unknown, path: string): Device {
     const mac = str(io.mac, `${p}.mac`).toUpperCase();
     if (!MAC_PATTERN.test(mac)) throw new Invalid(`${p}.mac`);
     const iface: NetInterface = { index: i, mac };
-    if (io.ip !== undefined) iface.ip = str(io.ip, `${p}.ip`);
-    if (io.mask !== undefined) iface.mask = str(io.mask, `${p}.mask`);
+    if (io.ip !== undefined) iface.ip = ip(io.ip, `${p}.ip`);
+    if (io.mask !== undefined) {
+      const prefix = parseMask(str(io.mask, `${p}.mask`));
+      if (prefix === null) throw new Invalid(`${p}.mask`);
+      iface.mask = maskToText(prefix);
+    }
     return iface;
   });
 
-  return { id, type, name, position, interfaces };
+  const device: Device = { id, type, name, position, interfaces };
+  if (o.gateway !== undefined) device.gateway = ip(o.gateway, `${path}.gateway`);
+  if (o.dns !== undefined) device.dns = ip(o.dns, `${path}.dns`);
+  return device;
+}
+
+/** Nur syntaktisch geprüft: Fehlkonfigurationen für Übungen sind erlaubt. */
+function ip(v: unknown, path: string): string {
+  const text = str(v, path).trim();
+  if (parseIp(text) === null) throw new Invalid(path);
+  return text;
 }
 
 function readEndpoint(v: unknown, path: string, devices: Map<string, Device>, used: Set<string>): Endpoint {

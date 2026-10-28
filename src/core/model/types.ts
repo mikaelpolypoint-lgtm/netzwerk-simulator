@@ -11,8 +11,9 @@ export interface Point {
 export interface NetInterface {
   index: number;
   mac: string;
-  /** IPv4-Konfiguration folgt mit dem Simulationskern (M2/M3). */
+  /** IPv4-Adresse als Text, z.B. "192.168.0.10"; fehlt, solange nicht konfiguriert. */
   ip?: string;
+  /** Subnetzmaske in Punktschreibweise, z.B. "255.255.255.0". */
   mask?: string;
 }
 
@@ -23,6 +24,9 @@ export interface Device {
   name: string;
   position: Point;
   interfaces: NetInterface[];
+  /** Nur Endgeräte: Standardgateway und DNS-Server. */
+  gateway?: string;
+  dns?: string;
 }
 
 export interface Endpoint {

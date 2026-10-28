@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { getDevice, isDeviceType, type Device, type Point } from '../../core';
   import { t } from '../../i18n';
   import { DEVICE_MIME } from '../dnd';
@@ -14,7 +15,11 @@
   /** Abstand Gerätemitte – Mauszeiger beim Greifen, damit das Gerät nicht springt. */
   let drag: { id: string; offset: Point } | null = null;
 
-  $effect(() => editor.setCanvasSize(width, height));
+  // untrack: setCanvasSize liest und verschiebt die Ansicht, das darf diesen Effekt nicht erneut auslösen.
+  $effect(() => {
+    const size = { width, height };
+    untrack(() => editor.setCanvasSize(size.width, size.height));
+  });
 
   // Wheel-Listener müssen aktiv (nicht passiv) sein, damit die Seite nicht scrollt.
   $effect(() => {

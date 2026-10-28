@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { parseProject, serializeProject } from '../core';
   import { t } from '../i18n';
   import Canvas from './components/Canvas.svelte';
   import Inspector from './components/Inspector.svelte';
+  import PacketList from './components/PacketList.svelte';
   import Palette from './components/Palette.svelte';
   import Toast from './components/Toast.svelte';
   import Toolbar from './components/Toolbar.svelte';
@@ -11,8 +12,15 @@
   import { downloadText, projectFilename } from './persist/files';
   import { loadAutosave, saveAutosave } from './persist/storage';
   import { editor } from './state/editor.svelte';
+  import { simStore } from './state/sim.svelte';
 
   let fileInput: HTMLInputElement;
+
+  // Im Aktionsmodus läuft die Simulation, beim Zurückwechseln pausiert sie (Zustände bleiben).
+  $effect(() => {
+    const { mode, topology, generation } = editor;
+    untrack(() => (mode === 'action' ? simStore.activate(topology, generation) : simStore.deactivate()));
+  });
   let restored = $state(false);
 
   onMount(async () => {
@@ -139,6 +147,11 @@
       <p class="mode-hint">{t('mode.actionHint')}</p>
     {/if}
     <Canvas />
+    {#if !editor.editable}
+      <div class="packet-panel">
+        <PacketList />
+      </div>
+    {/if}
   </main>
   <Inspector />
 </div>
@@ -188,6 +201,10 @@
   main > :global(.canvas) {
     flex: 1;
     min-height: 0;
+  }
+  .packet-panel {
+    height: 38%;
+    min-height: 160px;
   }
   @media (max-width: 1100px) {
     .app {

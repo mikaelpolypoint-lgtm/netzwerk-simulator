@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEVICE_SPECS, type Device } from '../../core';
+  import { DEVICE_SPECS, parseMask, type Device } from '../../core';
   import { t } from '../../i18n';
   import { typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -15,6 +15,13 @@
 
   const selected = $derived(editor.selection?.kind === 'device' && editor.selection.id === device.id);
   const isSource = $derived(editor.cableSource === device.id);
+  /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche. */
+  const ip = $derived.by(() => {
+    const iface = device.interfaces[0];
+    if (DEVICE_SPECS[device.type].role !== 'endpoint' || !iface?.ip) return '';
+    const prefix = iface.mask ? parseMask(iface.mask) : null;
+    return prefix === null ? iface.ip : `${iface.ip}/${prefix}`;
+  });
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -41,6 +48,9 @@
   <rect class="hit" x="-36" y="-30" width="72" height="60" rx="10" />
   <DeviceIcon type={device.type} />
   <text class="label" y="44">{device.name}</text>
+  {#if ip}
+    <text class="ip" y="59">{ip}</text>
+  {/if}
 </g>
 
 <style>
@@ -67,6 +77,17 @@
   .device:focus-visible .hit {
     stroke: var(--focus);
     stroke-width: 3;
+  }
+  .ip {
+    font-size: 11px;
+    text-anchor: middle;
+    fill: var(--muted);
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+    user-select: none;
   }
   .label {
     font-size: 13px;

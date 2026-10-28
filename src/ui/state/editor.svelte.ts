@@ -1,5 +1,6 @@
 import {
   addDevice,
+  configureHost,
   connect,
   emptyTopology,
   freeInterface,
@@ -12,9 +13,11 @@ import {
   setInterfaceCount,
   suggestName,
   type DeviceType,
+  type HostConfigInput,
   type Point,
   type Result,
   type Topology,
+  type TopologyError,
 } from '../../core';
 import { t } from '../../i18n';
 import { errorText } from '../labels';
@@ -58,6 +61,8 @@ class Editor {
   cableSource = $state<string | null>(null);
   view = $state.raw<View>({ x: 0, y: 0, scale: 1 });
   message = $state.raw<Message | null>(null);
+  /** Steigt, wenn ein anderes Projekt geladen wird; die Simulation beginnt dann neu. */
+  generation = $state(0);
 
   #undo = $state.raw<Topology[]>([]);
   #redo = $state.raw<Topology[]>([]);
@@ -149,6 +154,7 @@ class Editor {
     }
     this.selection = null;
     this.cableSource = null;
+    this.generation++;
     this.fit();
   }
 
@@ -198,6 +204,15 @@ class Editor {
     if (!next) return false;
     this.#commit(next);
     return true;
+  }
+
+  /** Liefert den Fehler zurück, damit das Formular ihn beim betroffenen Feld zeigen kann. */
+  configureHost(id: string, input: HostConfigInput): TopologyError | null {
+    if (!this.editable) return null;
+    const result = configureHost(this.topology, id, input);
+    if (!result.ok) return result.error;
+    this.#commit(result.value);
+    return null;
   }
 
   setInterfaceCount(id: string, count: number) {
@@ -296,9 +311,17 @@ class Editor {
 
   // --- Ansicht -------------------------------------------------------------
 
+  /** Bei Grössenänderung (z.B. Paketliste ein-/ausgeblendet) bleibt die Bildmitte, wo sie war. */
   setCanvasSize(width: number, height: number) {
+    const previous = this.#size;
+    if (previous.width === width && previous.height === height) return;
     this.#size = { width, height };
-    if (this.#fitPending && width > 0 && height > 0) this.fit();
+    if (this.#fitPending && width > 0 && height > 0) {
+      this.fit();
+    } else if (previous.width > 0 && previous.height > 0) {
+      const v = this.view;
+      this.view = { ...v, x: v.x + (width - previous.width) / 2, y: v.y + (height - previous.height) / 2 };
+    }
   }
 
   screenToWorld(sx: number, sy: number): Point {

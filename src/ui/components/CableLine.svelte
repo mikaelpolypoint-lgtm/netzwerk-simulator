@@ -7,7 +7,7 @@
   let { cable, a, b }: { cable: Cable; a: Device; b: Device } = $props();
 
   /** Abstand der Port-Beschriftung vom Gerätemittelpunkt, ausserhalb des Gerätenamens. */
-  const LABEL_DISTANCE = 66;
+  const LABEL_DISTANCE = 76;
 
   const selected = $derived(editor.selection?.kind === 'cable' && editor.selection.id === cable.id);
   const labelA = $derived(interfaceLabel(a, cable.a.iface));
@@ -18,7 +18,7 @@
     const dy = b.position.y - a.position.y;
     const length = Math.hypot(dx, dy);
     // Liegen die Geräte zu nah beieinander, hätten die Beschriftungen keinen Platz.
-    if (length < LABEL_DISTANCE * 2.5) return { length, labels: null };
+    if (length < LABEL_DISTANCE * 2.2) return { length, labels: null };
     const ux = dx / length;
     const uy = dy / length;
     return {

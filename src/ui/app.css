@@ -17,6 +17,11 @@
   --cable: #4a5566;
   --danger: #b42318;
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  --warning-soft: #fdf0d2;
+  --console-bg: #18212c;
+  --console-text: #e3e9f0;
+  --proto-arp: #f5e3b3;
+  --proto-icmp: #d6e4fb;
 
   --endpoint: #1d5fd6;
   --endpoint-soft: #dde8fc;
@@ -44,6 +49,11 @@
     --cable: #9aa7b8;
     --danger: #f2756a;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --warning-soft: #3a2f14;
+    --console-bg: #0b0f14;
+    --console-text: #d7dee7;
+    --proto-arp: #4a3c14;
+    --proto-icmp: #1c3252;
 
     --endpoint: #6aa5ff;
     --endpoint-soft: #1c3252;

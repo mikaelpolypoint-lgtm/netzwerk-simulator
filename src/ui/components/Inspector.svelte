@@ -3,6 +3,8 @@
   import { t } from '../../i18n';
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import HostConfigForm from './HostConfigForm.svelte';
+  import HostPanel from './HostPanel.svelte';
 
   const device = $derived(editor.selectedDevice);
   const cable = $derived(editor.selectedCable);
@@ -73,7 +75,17 @@
       <dd>{roleLabel(device.type)}</dd>
     </dl>
 
-    {#if spec.minInterfaces !== spec.maxInterfaces}
+    {#if spec.role === 'endpoint'}
+      {#if editor.editable}
+        <HostConfigForm {device} />
+      {:else}
+        <HostPanel {device} />
+      {/if}
+    {:else if !editor.editable}
+      <p class="muted note">{t(device.type === 'switch' ? 'actions.switchFlood' : 'actions.notYet')}</p>
+    {/if}
+
+    {#if spec.minInterfaces !== spec.maxInterfaces && editor.editable}
       <div class="field">
         <span id="port-count">{t('inspector.portCount')}</span>
         <div class="stepper" role="group" aria-labelledby="port-count">
@@ -113,9 +125,9 @@
       </tbody>
     </table>
 
-    <button class="danger" disabled={!editor.editable} onclick={() => editor.deleteSelection()}>
-      {t('inspector.delete')}
-    </button>
+    {#if editor.editable}
+      <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
+    {/if}
   {:else if cable}
     <dl class="facts">
       <dt>{t('inspector.type')}</dt>
@@ -218,6 +230,9 @@
   .free,
   .muted {
     color: var(--muted);
+  }
+  .note {
+    font-size: 0.85rem;
   }
   .danger {
     margin-top: 12px;

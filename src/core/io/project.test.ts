@@ -61,6 +61,27 @@ describe('Projektdatei', () => {
     }
   });
 
+  it('lädt IP-Konfigurationen und vereinheitlicht Masken', () => {
+    const text = fileWith((f) => {
+      f.topology.devices[0].interfaces[0].ip = '10.0.0.1';
+      f.topology.devices[0].interfaces[0].mask = '/8';
+      f.topology.devices[0].gateway = '10.0.0.254';
+    });
+    const result = parseProject(text);
+    expect(result.ok && result.topology.devices[0]).toMatchObject({
+      gateway: '10.0.0.254',
+      interfaces: [{ ip: '10.0.0.1', mask: '255.0.0.0' }],
+    });
+  });
+
+  it('lehnt unlesbare Adressen ab', () => {
+    const text = fileWith((f) => (f.topology.devices[1].dns = 'dns.example'));
+    expect(parseProject(text)).toEqual({
+      ok: false,
+      error: { code: 'invalidStructure', params: { path: 'topology.devices[1].dns' } },
+    });
+  });
+
   it('übernimmt nur bekannte Felder', () => {
     const text = fileWith((f) => {
       f.topology.devices[0].script = 'alert(1)';

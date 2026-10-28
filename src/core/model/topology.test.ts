@@ -3,6 +3,7 @@ import { macFor } from './mac';
 import {
   addDevice,
   cablesOf,
+  configureHost,
   connect,
   emptyTopology,
   getDevice,
@@ -10,6 +11,7 @@ import {
   removeCable,
   removeDevice,
   renameDevice,
+  setInterfaceAddress,
   setInterfaceCount,
   suggestName,
   type Result,
@@ -126,6 +128,45 @@ describe('Kabel', () => {
     t = add(t, 'pc', 'PC 1').topology;
     const { topology } = unwrap(connect(t, 'd6', 'd3'));
     expect(cablesOf(topology, 'd6')[0]!.b).toEqual({ device: 'd3', iface: 0 });
+  });
+});
+
+describe('IP-Konfiguration', () => {
+  it('speichert Masken einheitlich und entfernt leere Felder', () => {
+    let t = add(emptyTopology(), 'pc', 'PC 1').topology;
+    t = unwrap(configureHost(t, 'd1', { ip: ' 192.168.0.10 ', mask: '/24', gateway: '192.168.0.1', dns: '' }));
+    const device = getDevice(t, 'd1')!;
+    expect(device.interfaces[0]).toMatchObject({ ip: '192.168.0.10', mask: '255.255.255.0' });
+    expect(device.gateway).toBe('192.168.0.1');
+    expect('dns' in device).toBe(false);
+
+    t = unwrap(configureHost(t, 'd1', { ip: '', mask: '' }));
+    expect(getDevice(t, 'd1')!.interfaces[0]).toEqual({ index: 0, mac: macFor(1, 0) });
+    expect('gateway' in getDevice(t, 'd1')!).toBe(false);
+  });
+
+  it('nennt das fehlerhafte Feld', () => {
+    const t = add(emptyTopology(), 'pc', 'PC 1').topology;
+    expect(configureHost(t, 'd1', { ip: '10.0.0.1', mask: '255.0.255.0' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalidMask', field: 'mask' },
+    });
+  });
+
+  it('übernimmt fachlich falsche, aber lesbare Konfigurationen (für Übungen)', () => {
+    const t = add(emptyTopology(), 'pc', 'PC 1').topology;
+    expect(configureHost(t, 'd1', { ip: '10.0.0.0', mask: '24', gateway: '10.9.9.9' }).ok).toBe(true);
+  });
+
+  it('setzt einzelne Interfaces, aber nur Endgeräte haben eine Host-Konfiguration', () => {
+    const t = add(emptyTopology(), 'router', 'R1').topology;
+    expect(configureHost(t, 'd1', { ip: '10.0.0.1', mask: '24' })).toMatchObject({
+      ok: false,
+      error: { code: 'notAnEndpoint' },
+    });
+    const r = unwrap(setInterfaceAddress(t, 'd1', 1, '10.0.1.1', '24'));
+    expect(getDevice(r, 'd1')!.interfaces[1]).toMatchObject({ ip: '10.0.1.1', mask: '255.255.255.0' });
+    expect(setInterfaceAddress(t, 'd1', 5, '10.0.1.1', '24')).toMatchObject({ ok: false, error: { code: 'unknownInterface' } });
   });
 });
 

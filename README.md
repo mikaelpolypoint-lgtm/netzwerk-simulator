@@ -9,7 +9,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 | Etappe | Inhalt | Status |
 |---|---|---|
 | M1 | Topologie-Editor, Speichern/Laden als .json | ✅ |
-| M2 | Simulationskern, ARP, IPv4 im gleichen Subnetz, Paketliste | offen |
+| M2 | Simulationskern, ARP, IPv4 im gleichen Subnetz, Paketliste | ✅ |
 | M3 | Switch-Lerntabelle, Subnetting, Router mit statischen Routen | offen |
 | M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | offen |
 | M5 | DNS, TCP/UDP, HTTP | offen |
@@ -47,6 +47,16 @@ Regeln, die das Projekt technisch absichert:
 - **Fehlermeldungen kommen aus den Sprachdateien.** Der Kern liefert nur Code und Parameter (z.B. `noFreeInterface`), die Oberfläche übersetzt.
 - **Deterministische MAC-Adressen** aus der Gerätenummer (`02:00:…`, lokal administriert).
 
+## Simulation
+
+`core/sim/simulation.ts` ist eine diskrete Ereignis-Simulation: Jede Kabelübertragung und jeder Timer ist ein Ereignis mit virtuellem Zeitstempel in einer Prioritätswarteschlange (`core/sim/queue.ts`). Ereignisse zur gleichen Zeit laufen in Einfügereihenfolge, darum ergibt derselbe Ablauf immer dieselbe Paketfolge, und Tests können sie exakt prüfen.
+
+- Schnittstelle für die Oberfläche: `step()`, `runUntil(t)`, `getPacketLog()`, `getDeviceState(id)`, `ping(id, ziel)`.
+- Pakete sind verschachtelte Objekte (`core/sim/frames.ts`): Ethernet-Rahmen → ARP oder IPv4 → ICMP.
+- Jedes Kabel braucht 1 ms. Im Aktionsmodus läuft die virtuelle Zeit synchron zur echten; im Entwurfsmodus pausiert sie, Zustände wie ARP-Tabellen bleiben erhalten.
+- Wird ein Kabel während einer Übertragung entfernt, geht der Rahmen verloren und ist in der Paketliste so markiert.
+- Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
+
 ## Datenschutz
 
 - Keine Konten, kein Tracking, keine Cookies, keine externen Schriften oder CDNs.
@@ -55,7 +65,7 @@ Regeln, die das Projekt technisch absichert:
 
 ## Projektdatei
 
-Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse mit MAC, Kabel) und `configuration` (folgt ab M2). Beim Öffnen wird die Datei vollständig geprüft; unbekannte Felder werden verworfen, und Fehler nennen die betroffene Stelle (z.B. `topology.devices[2].type`).
+Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse mit MAC, IP und Maske, Kabel) und `configuration` (geräteübergreifende Einstellungen, derzeit leer). Gerätebezogene Einstellungen wie Gateway und DNS-Server liegen direkt beim Gerät. Beim Öffnen wird die Datei vollständig geprüft; unbekannte Felder werden verworfen, und Fehler nennen die betroffene Stelle (z.B. `topology.devices[2].type`).
 
 ## Herkunft
 

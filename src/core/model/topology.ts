@@ -1,3 +1,4 @@
+import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { DEVICE_SPECS } from './devices';
 import { macFor } from './mac';
 import type { Cable, Device, DeviceType, Endpoint, NetInterface, Point, Topology } from './types';
@@ -14,12 +15,20 @@ export type ErrorCode =
   | 'nameTooLong'
   | 'nameTaken'
   | 'interfaceCountOutOfRange'
-  | 'interfaceConnected';
+  | 'interfaceConnected'
+  | 'notAnEndpoint'
+  | 'unknownInterface'
+  | 'invalidIp'
+  | 'invalidMask'
+  | 'maskRequired'
+  | 'gatewayWithoutAddress';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
   code: ErrorCode;
   params?: Record<string, string | number>;
+  /** Betroffenes Eingabefeld, damit die Oberfläche den Fehler dort anzeigen kann. */
+  field?: string;
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: TopologyError };
@@ -177,4 +186,67 @@ export function setInterfaceCount(t: Topology, id: string, count: number): Resul
   }
   const added = makeInterfaces(deviceSeq(id), current, count);
   return ok(updateDevice(t, id, (d) => ({ ...d, interfaces: [...d.interfaces, ...added] })));
+}
+
+/** Leere Felder entfernen den Eintrag; Masken werden in Punktschreibweise gespeichert. */
+function normalized(ip: string, mask: string): Pick<NetInterface, 'ip' | 'mask'> {
+  const prefix = mask.trim() ? parseMask(mask) : null;
+  return {
+    ...(ip.trim() ? { ip: ip.trim() } : {}),
+    ...(prefix !== null ? { mask: maskToText(prefix) } : {}),
+  };
+}
+
+/**
+ * Setzt IP, Maske, Gateway und DNS eines Endgeräts in einem Schritt.
+ * Nur unlesbare Eingaben werden abgelehnt; fachliche Warnungen liefert
+ * `checkHostConfig` getrennt.
+ */
+export function configureHost(t: Topology, id: string, input: HostConfigInput): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (DEVICE_SPECS[device.type].role !== 'endpoint') return fail('notAnEndpoint');
+  const { errors } = checkHostConfig(input);
+  const first = errors[0];
+  if (first) return { ok: false, error: { code: first.code as ErrorCode, params: first.params, field: first.field } };
+
+  const gateway = input.gateway?.trim() ?? '';
+  const dns = input.dns?.trim() ?? '';
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { gateway: _g, dns: _d, ...rest } = d;
+      return {
+        ...rest,
+        interfaces: d.interfaces.map((i, n) => {
+          if (n !== 0) return i;
+          const { ip: _ip, mask: _mask, ...base } = i;
+          return { ...base, ...normalized(input.ip, input.mask) };
+        }),
+        ...(gateway ? { gateway } : {}),
+        ...(dns ? { dns } : {}),
+      };
+    }),
+  );
+}
+
+/** IP und Maske eines einzelnen Anschlusses, z.B. eines Router-Interfaces. */
+export function setInterfaceAddress(t: Topology, id: string, index: number, ip: string, mask: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  if (ip.trim() && parseIp(ip) === null) return { ok: false, error: { code: 'invalidIp', params: { value: ip.trim() }, field: 'ip' } };
+  if (mask.trim() && parseMask(mask) === null) {
+    return { ok: false, error: { code: 'invalidMask', params: { value: mask.trim() }, field: 'mask' } };
+  }
+  if (ip.trim() && !mask.trim()) return { ok: false, error: { code: 'maskRequired', field: 'mask' } };
+  return ok(
+    updateDevice(t, id, (d) => ({
+      ...d,
+      interfaces: d.interfaces.map((i) => {
+        if (i.index !== index) return i;
+        const { ip: _ip, mask: _mask, ...base } = i;
+        return { ...base, ...normalized(ip, mask) };
+      }),
+    })),
+  );
 }
