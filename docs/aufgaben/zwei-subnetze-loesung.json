@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "pc",
+        "name": "PC 1",
+        "position": {
+          "x": -260,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "ip": "192.168.1.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.1.1"
+      },
+      {
+        "id": "d2",
+        "type": "router",
+        "name": "Router 1",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "ip": "192.168.1.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:02:01",
+            "ip": "192.168.2.1",
+            "mask": "255.255.255.0"
+          }
+        ]
+      },
+      {
+        "id": "d3",
+        "type": "pc",
+        "name": "PC 2",
+        "position": {
+          "x": 260,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00",
+            "ip": "192.168.2.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.2.1"
+      }
+    ],
+    "cables": [
+      {
+        "id": "c4",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c5",
+        "a": {
+          "device": "d3",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 1
+        }
+      }
+    ],
+    "nextId": 6
+  },
+  "configuration": {},
+  "tasks": {
+    "title": "Netz mit zwei Subnetzen aufbauen",
+    "description": "PC 1 soll im Netz 192.168.1.0/24 liegen, PC 2 im Netz 192.168.2.0/24. Verbinde beide über Router 1 und konfiguriere alle Geräte so, dass PC 1 den PC 2 per Ping erreicht. Benenne die Geräte nicht um.",
+    "goals": [
+      {
+        "id": "kabel-pc1",
+        "text": "PC 1 ist mit Router 1 verkabelt.",
+        "check": {
+          "type": "connected",
+          "a": "PC 1",
+          "b": "Router 1"
+        }
+      },
+      {
+        "id": "kabel-pc2",
+        "text": "PC 2 ist mit Router 1 verkabelt.",
+        "check": {
+          "type": "connected",
+          "a": "PC 2",
+          "b": "Router 1"
+        }
+      },
+      {
+        "id": "netz-pc1",
+        "text": "PC 1 liegt im Netz 192.168.1.0/24.",
+        "check": {
+          "type": "inNetwork",
+          "device": "PC 1",
+          "network": "192.168.1.0/24"
+        }
+      },
+      {
+        "id": "netz-pc2",
+        "text": "PC 2 liegt im Netz 192.168.2.0/24.",
+        "check": {
+          "type": "inNetwork",
+          "device": "PC 2",
+          "network": "192.168.2.0/24"
+        }
+      },
+      {
+        "id": "verschieden",
+        "text": "Die beiden PCs liegen in verschiedenen Netzen.",
+        "check": {
+          "type": "differentNetworks",
+          "devices": [
+            "PC 1",
+            "PC 2"
+          ]
+        }
+      },
+      {
+        "id": "gw-pc1",
+        "text": "PC 1 hat ein Standardgateway.",
+        "check": {
+          "type": "gateway",
+          "device": "PC 1"
+        },
+        "hint": "Das Standardgateway ist die Adresse von Router 1 im Netz von PC 1."
+      },
+      {
+        "id": "gw-pc2",
+        "text": "PC 2 hat ein Standardgateway.",
+        "check": {
+          "type": "gateway",
+          "device": "PC 2"
+        },
+        "hint": "Das Standardgateway ist die Adresse von Router 1 im Netz von PC 2."
+      },
+      {
+        "id": "ping",
+        "text": "PC 1 erreicht PC 2 per Ping.",
+        "check": {
+          "type": "ping",
+          "from": "PC 1",
+          "to": "PC 2"
+        },
+        "hint": "Hat Router 1 in beiden Netzen eine Adresse? Zeigen die Gateways der PCs auf diese Adressen?"
+      },
+      {
+        "id": "selbst-gepingt",
+        "text": "Du hast im Aktionsmodus selbst einen Ping von PC 1 gesendet.",
+        "check": {
+          "type": "packetSeen",
+          "protocol": "ICMP",
+          "from": "PC 1"
+        },
+        "hint": "Wechsle in den Aktionsmodus, öffne den Desktop von PC 1 und gib in der Befehlszeile «ping 192.168.2.10» ein (bzw. die Adresse von PC 2)."
+      }
+    ]
+  }
+}

@@ -1,8 +1,13 @@
 import {
   addDevice,
   addDnsRecord,
+  addMailbox,
   addStaticRoute,
   removeDnsRecord,
+  removeMailbox,
+  setMailAccount,
+  setMailDomain,
+  setMailServerEnabled,
   removeWebFile,
   saveWebFile,
   setDnsServerEnabled,
@@ -26,6 +31,9 @@ import {
   type DhcpServerConfig,
   type DnsRecord,
   type HostConfigInput,
+  type MailAccount,
+  type Mailbox,
+  type TaskSet,
   type WebFile,
   type Point,
   type Result,
@@ -77,6 +85,8 @@ class Editor {
   message = $state.raw<Message | null>(null);
   /** Steigt, wenn ein anderes Projekt geladen wird; die Simulation beginnt dann neu. */
   generation = $state(0);
+  /** Aufgabe zum Projekt (aus einer Aufgabendatei); nicht Teil des Undo-Verlaufs. */
+  tasks = $state.raw<TaskSet | null>(null);
 
   #undo = $state.raw<Topology[]>([]);
   #redo = $state.raw<Topology[]>([]);
@@ -157,8 +167,9 @@ class Editor {
     if (this.cableSource && !getDevice(this.topology, this.cableSource)) this.cableSource = null;
   }
 
-  /** Ersetzt die ganze Topologie, z.B. beim Laden einer Datei. */
-  replace(next: Topology, { undoable }: { undoable: boolean }) {
+  /** Ersetzt die ganze Topologie, z.B. beim Laden einer Datei (mit deren Aufgabe, falls vorhanden). */
+  replace(next: Topology, { undoable, tasks = null }: { undoable: boolean; tasks?: TaskSet | null }) {
+    this.tasks = tasks;
     if (undoable) {
       this.#commit(next);
     } else {
@@ -172,8 +183,12 @@ class Editor {
     this.fit();
   }
 
+  setTasks(tasks: TaskSet | null) {
+    this.tasks = tasks;
+  }
+
   clear() {
-    if (!this.editable || this.topology.devices.length === 0) return;
+    if (!this.editable || (this.topology.devices.length === 0 && !this.tasks)) return;
     this.replace(emptyTopology(), { undoable: true });
     this.notify(t('status.cleared'));
   }
@@ -264,6 +279,30 @@ class Editor {
 
   saveWebFile(id: string, file: WebFile, previousPath?: string): TopologyError | null {
     return this.#applyForm(saveWebFile(this.topology, id, file, previousPath));
+  }
+
+  setMailServerEnabled(id: string, enabled: boolean) {
+    if (!this.editable) return;
+    const next = this.#check(setMailServerEnabled(this.topology, id, enabled));
+    if (next) this.#commit(next);
+  }
+
+  setMailDomain(id: string, domain: string): TopologyError | null {
+    return this.#applyForm(setMailDomain(this.topology, id, domain));
+  }
+
+  addMailbox(id: string, mailbox: Mailbox): TopologyError | null {
+    return this.#applyForm(addMailbox(this.topology, id, mailbox));
+  }
+
+  removeMailbox(id: string, user: string) {
+    if (!this.editable) return;
+    const next = this.#check(removeMailbox(this.topology, id, user));
+    if (next) this.#commit(next);
+  }
+
+  setMailAccount(id: string, account: MailAccount | null): TopologyError | null {
+    return this.#applyForm(setMailAccount(this.topology, id, account));
   }
 
   removeWebFile(id: string, path: string) {

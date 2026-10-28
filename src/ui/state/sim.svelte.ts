@@ -75,6 +75,16 @@ class SimStore {
     this.tick++;
   }
 
+  sendMail(deviceId: string, message: { to: string[]; subject: string; body: string }) {
+    this.#sim?.sendMail(deviceId, message);
+    this.tick++;
+  }
+
+  fetchMail(deviceId: string) {
+    this.#sim?.fetchMail(deviceId);
+    this.tick++;
+  }
+
   clearPacketLog() {
     this.#sim?.clearPacketLog();
     this.tick++;

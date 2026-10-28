@@ -8,6 +8,7 @@ import { DnsResolver, DnsServer, type DnsCacheEntry } from './dns';
 import { DHCP_CLIENT_PORT, DHCP_SERVER_PORT, DNS_PORT, type Ipv4Packet, type TcpSegment, type UdpDatagram } from './frames';
 import { HttpClient, HttpServer, type BrowserState } from './http';
 import { IpNode, type ArpEntry } from './ip';
+import { MailClient, MailServer, type MailClientState } from './mail';
 import type { NodeContext } from './simulation';
 import { TcpStack, type TcpState } from './tcp';
 
@@ -37,6 +38,8 @@ export interface HostState {
   dnsCache: DnsCacheEntry[];
   connections: ConnectionInfo[];
   browser?: BrowserState;
+  mail: MailClientState;
+  mailboxes?: { user: string; count: number }[];
 }
 
 type Command = 'ping' | 'tracert';
@@ -49,6 +52,8 @@ export class HostNode extends IpNode {
   readonly dnsService: DnsServer;
   readonly tcp: TcpStack;
   readonly browser: HttpClient;
+  readonly mailServer: MailServer;
+  readonly mail: MailClient;
   #ping: IcmpApp | null = null;
   #trace: IcmpApp | null = null;
   #icmpId = 0;
@@ -63,6 +68,8 @@ export class HostNode extends IpNode {
     this.tcp = new TcpStack(this, seq);
     this.browser = new HttpClient(this);
     new HttpServer(this);
+    this.mailServer = new MailServer(this);
+    this.mail = new MailClient(this);
   }
 
   /** Im DHCP-Modus gelten Adresse, Gateway und DNS aus der Lease (oder gar keine). */
@@ -213,14 +220,18 @@ export class HostNode extends IpNode {
 
   override state(): HostState {
     const browser = this.browser.state;
+    const mail = this.mail.state;
+    const device = this.ctx.device();
     return {
       arp: this.arpEntries(),
       address: this.address(),
       dnsCache: this.resolver.cacheEntries(),
       connections: this.connections(),
-      ...(this.ctx.device()?.dhcpServer ? { dhcpLeases: this.dhcpServer.leases() } : {}),
-      // Kopie, damit die Oberfläche eine unveränderliche Momentaufnahme erhält.
+      ...(device?.dhcpServer ? { dhcpLeases: this.dhcpServer.leases() } : {}),
+      // Kopien, damit die Oberfläche eine unveränderliche Momentaufnahme erhält.
       ...(browser ? { browser: { ...browser, steps: [...browser.steps] } } : {}),
+      mail: { ...mail, steps: [...mail.steps], inbox: [...mail.inbox], sent: [...mail.sent] },
+      ...(device?.mailServer ? { mailboxes: this.mailServer.mailboxes() } : {}),
     };
   }
 }

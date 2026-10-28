@@ -7,6 +7,7 @@ import type { EthernetFrame } from './frames';
 import type { DnsCacheEntry } from './dns';
 import { HostNode, type AddressState, type ConnectionInfo } from './host';
 import type { BrowserState } from './http';
+import type { MailClientState } from './mail';
 import { RouterNode, type ArpEntry } from './ip';
 import { EventQueue } from './queue';
 import { ModemNode, SwitchNode, type MacEntry } from './switch';
@@ -44,6 +45,8 @@ export interface DeviceState {
   dnsCache?: DnsCacheEntry[];
   connections?: ConnectionInfo[];
   browser?: BrowserState;
+  mail?: MailClientState;
+  mailboxes?: { user: string; count: number }[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -181,6 +184,16 @@ export class Simulation {
   /** Ruft im Webbrowser des Geräts eine URL auf, z.B. "http://webserver1/index.html". */
   browse(deviceId: string, url: string) {
     this.#host(deviceId)?.browse(url);
+  }
+
+  /** E-Mail-Programm: Nachricht über den SMTP-Server des Kontos senden. */
+  sendMail(deviceId: string, message: { to: string[]; subject: string; body: string }) {
+    this.#host(deviceId)?.mail.send(message);
+  }
+
+  /** E-Mail-Programm: Posteingang per POP3 oder IMAP abholen. */
+  fetchMail(deviceId: string) {
+    this.#host(deviceId)?.mail.fetch();
   }
 
   /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */

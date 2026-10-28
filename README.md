@@ -13,7 +13,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 | M3 | Switch-Lerntabelle, Subnetting, Router mit statischen Routen | ✅ |
 | M4 | Aktionsmodus mit Desktop: Ping, Traceroute, DHCP; Schichtenansicht | ✅ |
 | M5 | DNS, TCP/UDP, HTTP | ✅ |
-| M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | offen |
+| M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | ✅ |
 | M7 | Deployment (Variante A und B) | offen |
 
 ## Entwicklung
@@ -62,13 +62,18 @@ Regeln, die das Projekt technisch absichert:
 - DNS: Rechner können DNS-Server mit eigener Zone sein (A- und MX-Einträge, ohne Rekursion). Clients haben einen Cache gemäss TTL; `nslookup`, `ipconfig /displaydns` und `/flushdns` machen ihn sichtbar. `ping` und `tracert` akzeptieren Namen.
 - TCP: Drei-Wege-Handshake, Sequenz- und Bestätigungsnummern (in Zeichen), Aufteilung in Segmente, Wiederholung nach 1 s (höchstens 3-mal), Abbau mit FIN, RST bei geschlossenem Port; `netstat` zeigt Verbindungen.
 - HTTP: Rechner können Webserver mit editierbaren HTML-Seiten sein. Der Webbrowser zeigt jeden Schritt (DNS, TCP, GET, Antwort) und die Seite; Links darin lösen simulierte Abrufe aus. Seiten laufen in einem Sandbox-Frame ohne Skripte.
-- Paketliste mit Schichtenansicht (Ethernet → ARP/IPv4 → ICMP/UDP/TCP → DHCP/DNS/HTTP); Vereinfachungen sind pro Schicht vermerkt. Zeitlauf-Regler mit Anhalten, Einzelschritt und Zeitlupe, in der die Rahmen als Punkte über die Kabel wandern.
+- E-Mail: Rechner können Mailserver sein (Domain, Postfächer). SMTP zum Versenden, auch zwischen Domains über MX-Einträge; POP3 (abholen und löschen) und IMAP (Nachrichten bleiben auf dem Server). Das E-Mail-Programm zeigt den ganzen Protokolldialog.
+- Paketliste mit Schichtenansicht (Ethernet → ARP/IPv4 → ICMP/UDP/TCP → DHCP/DNS/HTTP/SMTP/POP3/IMAP); Vereinfachungen sind pro Schicht vermerkt. Zeitlauf-Regler mit Anhalten, Einzelschritt und Zeitlupe, in der die Rahmen als Punkte über die Kabel wandern.
 - Schleifen zwischen Switches lässt der Editor nicht zu (es gibt kein Spanning Tree, sonst entstünde ein Broadcast-Sturm).
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
 
+## Aufgaben
+
+Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruck prüft (z.B. «PC 1 erreicht PC 2 per Ping»). Lehrpersonen erstellen sie direkt im Simulator. Beschreibung aller Prüfbausteine: [docs/aufgaben.md](docs/aufgaben.md). Musteraufgabe: [docs/aufgaben/zwei-subnetze.json](docs/aufgaben/zwei-subnetze.json).
+
 ## Beispiele
 
-[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) und `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) und `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 

@@ -5,7 +5,9 @@
   import { editor } from '../state/editor.svelte';
   import AddressView from './AddressView.svelte';
   import Browser from './Browser.svelte';
+  import { simStore } from '../state/sim.svelte';
   import DhcpServerView from './DhcpServerView.svelte';
+  import MailApp from './MailApp.svelte';
   import ServiceLog from './ServiceLog.svelte';
   import Terminal from './Terminal.svelte';
 
@@ -14,11 +16,18 @@
   const apps = $derived([
     'terminal',
     'browser',
+    'mail',
     'network',
     ...(device?.dhcpServer ? ['dhcpServer'] : []),
     ...(device?.dnsServer ? ['dnsServer'] : []),
     ...(device?.webServer ? ['webServer'] : []),
+    ...(device?.mailServer ? ['mailServer'] : []),
   ]);
+  const mailboxSummary = $derived(
+    ((simStore.tick, desktop.deviceId && simStore.sim?.getDeviceState(desktop.deviceId).mailboxes) || []).map((m) =>
+      t('mailServer.boxSummary', { address: `${m.user}@${device?.mailServer?.domain ?? ''}`, count: m.count }),
+    ),
+  );
   const dnsSummary = $derived((device?.dnsServer?.records ?? []).map((r) => `${r.name}  ${r.type}  ${r.value}  (TTL ${r.ttl} s)`));
 
   function onkeydown(event: KeyboardEvent) {
@@ -51,6 +60,10 @@
         <DhcpServerView {device} />
       {:else if desktop.app === 'dnsServer'}
         <ServiceLog {device} prefix="dnsServer." summary={dnsSummary.length ? dnsSummary : [t('dnsServer.noRecords')]} />
+      {:else if desktop.app === 'mail'}
+        <MailApp {device} />
+      {:else if desktop.app === 'mailServer'}
+        <ServiceLog {device} prefix={['smtp.', 'pop3.', 'imap.']} summary={mailboxSummary.length ? mailboxSummary : [t('mailServer.noMailboxes')]} />
       {:else if desktop.app === 'webServer'}
         <ServiceLog {device} prefix="http." summary={(device.webServer?.files ?? []).map((f) => f.path)} />
       {:else}

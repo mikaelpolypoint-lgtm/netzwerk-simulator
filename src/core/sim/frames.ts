@@ -110,3 +110,4 @@ export const DNS_PORT = 53;
 export const HTTP_PORT = 80;
 export const SMTP_PORT = 25;
 export const POP3_PORT = 110;
+export const IMAP_PORT = 143;

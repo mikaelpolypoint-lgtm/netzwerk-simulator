@@ -4,6 +4,7 @@
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
   import HostConfigForm from './HostConfigForm.svelte';
+  import MailAccountForm from './MailAccountForm.svelte';
   import Services from './Services.svelte';
   import HostPanel from './HostPanel.svelte';
   import NetDevicePanel from './NetDevicePanel.svelte';
@@ -81,6 +82,10 @@
     {#if spec.role === 'endpoint'}
       {#if editor.editable}
         <HostConfigForm {device} />
+        <details class="mail-account" open={!!device.mailAccount}>
+          <summary>{t('mailAccount.title')}</summary>
+          <MailAccountForm {device} />
+        </details>
         {#if device.type === 'pc'}
           <Services {device} />
         {/if}
@@ -238,6 +243,18 @@
   .free,
   .muted {
     color: var(--muted);
+  }
+  .mail-account {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 0 0 6px;
+    padding: 0 8px;
+  }
+  .mail-account summary {
+    cursor: pointer;
+    padding: 5px 0;
+    font-size: 0.85rem;
+    font-weight: 600;
   }
   .danger {
     margin-top: 12px;

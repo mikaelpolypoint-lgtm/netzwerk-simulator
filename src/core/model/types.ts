@@ -35,6 +35,10 @@ export interface Device {
   dnsServer?: DnsServerConfig;
   /** Nur Rechner: Webserver mit seinen Seiten. */
   webServer?: WebServerConfig;
+  /** Nur Rechner: Mailserver (SMTP, POP3, IMAP) mit Postfächern. */
+  mailServer?: MailServerConfig;
+  /** Endgeräte: E-Mail-Konto für die Anwendung "E-Mail". */
+  mailAccount?: MailAccount;
   /** Nur Vermittlungsrechner: statische Routen. */
   routes?: StaticRoute[];
 }
@@ -63,6 +67,31 @@ export interface WebFile {
 
 export interface WebServerConfig {
   files: WebFile[];
+}
+
+export interface Mailbox {
+  /** Teil vor dem @, z.B. "anna". */
+  user: string;
+  /** Nur für die Simulation, im Klartext gespeichert: keine echten Passwörter verwenden. */
+  password: string;
+}
+
+export interface MailServerConfig {
+  /** Domain, für die der Server Post annimmt, z.B. "schule.ch". */
+  domain: string;
+  mailboxes: Mailbox[];
+}
+
+export type MailProtocol = 'pop3' | 'imap';
+
+export interface MailAccount {
+  address: string;
+  password: string;
+  /** Name oder IP des Servers für ausgehende Post (SMTP). */
+  smtpServer: string;
+  /** Name oder IP des Servers für eingehende Post (POP3 oder IMAP). */
+  incomingServer: string;
+  protocol: MailProtocol;
 }
 
 export interface DhcpServerConfig {

@@ -1,6 +1,7 @@
 import { checkDhcpServer, normalizeDhcpServer } from '../net/dhcp';
-import { checkDnsRecord, normalizeRecord } from '../net/dns';
+import { checkDnsRecord, isValidName, normalizeName, normalizeRecord } from '../net/dns';
 import { isValidPath } from '../net/http';
+import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, normalizeRoute } from '../net/routing';
 import { DEVICE_SPECS } from './devices';
@@ -12,6 +13,8 @@ import type {
   DhcpServerConfig,
   DnsRecord,
   Endpoint,
+  MailAccount,
+  Mailbox,
   NetInterface,
   Point,
   StaticRoute,
@@ -58,7 +61,13 @@ export type ErrorCode =
   | 'invalidPath'
   | 'duplicatePath'
   | 'unknownFile'
-  | 'serviceDisabled';
+  | 'serviceDisabled'
+  | 'invalidMailUser'
+  | 'passwordRequired'
+  | 'duplicateMailbox'
+  | 'unknownMailbox'
+  | 'invalidMailAddress'
+  | 'invalidHost';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -404,6 +413,70 @@ export function removeWebFile(t: Topology, id: string, path: string): Result<Top
   if (!device?.webServer?.files.some((f) => f.path === path)) return fail('unknownFile');
   const files = device.webServer.files.filter((f) => f.path !== path);
   return ok(updateDevice(t, id, (d) => ({ ...d, webServer: { files } })));
+}
+
+// --- E-Mail ------------------------------------------------------------------
+
+export function setMailServerEnabled(t: Topology, id: string, enabled: boolean, domain = 'schule.ch'): Result<Topology> {
+  const device = serverDevice(t, id);
+  if (!device.ok) return device;
+  if (enabled === !!device.value.mailServer) return ok(t);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { mailServer: _m, ...rest } = d;
+      return enabled ? { ...rest, mailServer: { domain: normalizeName(domain), mailboxes: [] } } : rest;
+    }),
+  );
+}
+
+export function setMailDomain(t: Topology, id: string, domain: string): Result<Topology> {
+  const device = getDevice(t, id);
+  const config = device?.mailServer;
+  if (!config) return fail('serviceDisabled');
+  if (!isValidName(domain)) return { ok: false, error: { code: 'invalidDnsName', params: { value: domain }, field: 'domain' } };
+  return ok(updateDevice(t, id, (d) => ({ ...d, mailServer: { ...config, domain: normalizeName(domain) } })));
+}
+
+export function addMailbox(t: Topology, id: string, mailbox: Mailbox): Result<Topology> {
+  const config = getDevice(t, id)?.mailServer;
+  if (!config) return fail('serviceDisabled');
+  const issue = checkMailbox(config, mailbox);
+  if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  const entry = { user: mailbox.user.trim().toLowerCase(), password: mailbox.password };
+  return ok(updateDevice(t, id, (d) => ({ ...d, mailServer: { ...config, mailboxes: [...config.mailboxes, entry] } })));
+}
+
+export function removeMailbox(t: Topology, id: string, user: string): Result<Topology> {
+  const config = getDevice(t, id)?.mailServer;
+  if (!config?.mailboxes.some((m) => m.user === user)) return fail('unknownMailbox');
+  const mailboxes = config.mailboxes.filter((m) => m.user !== user);
+  return ok(updateDevice(t, id, (d) => ({ ...d, mailServer: { ...config, mailboxes } })));
+}
+
+/** E-Mail-Konto eines Endgeräts einrichten oder entfernen (`null`). */
+export function setMailAccount(t: Topology, id: string, account: MailAccount | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (DEVICE_SPECS[device.type].role !== 'endpoint') return fail('notAnEndpoint');
+  if (account) {
+    const issue = checkMailAccount(account);
+    if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  }
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { mailAccount: _a, ...rest } = d;
+      if (!account) return rest;
+      return {
+        ...rest,
+        mailAccount: {
+          ...account,
+          address: account.address.trim().toLowerCase(),
+          smtpServer: account.smtpServer.trim().toLowerCase(),
+          incomingServer: account.incomingServer.trim().toLowerCase(),
+        },
+      };
+    }),
+  );
 }
 
 export function addStaticRoute(t: Topology, id: string, route: StaticRoute): Result<Topology> {

@@ -33,6 +33,15 @@ describe('Beispielprojekte', () => {
     expect(sim.getDeviceState('d1').browser?.response?.body).toContain('Stundenplan');
   });
 
+  it('mail.json: Anna schreibt Ben, Ben holt per IMAP ab', () => {
+    const sim = new Simulation(load('mail.json'));
+    sim.sendMail('d3', { to: ['ben@schule.ch'], subject: 'Hallo', body: 'Test' });
+    sim.runUntil(2000);
+    sim.fetchMail('d4');
+    sim.runUntil(4000);
+    expect(sim.getDeviceState('d4').mail?.inbox).toMatchObject([{ from: 'anna@schule.ch', subject: 'Hallo' }]);
+  });
+
   it('dhcp.json: alle drei Clients erhalten eine Adresse', () => {
     const sim = new Simulation(load('dhcp.json'));
     sim.runUntil(10_000);

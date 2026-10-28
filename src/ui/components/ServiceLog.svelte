@@ -4,10 +4,11 @@
   import { simStore } from '../state/sim.svelte';
 
   /** Desktop-Anwendung eines Server-Dienstes (DNS, Web, Mail): Konfiguration in Kurzform und Protokoll. */
-  let { device, prefix, summary }: { device: Device; prefix: string; summary: string[] } = $props();
+  let { device, prefix, summary }: { device: Device; prefix: string | string[]; summary: string[] } = $props();
 
+  const prefixes = $derived(Array.isArray(prefix) ? prefix : [prefix]);
   const log = $derived(
-    ((simStore.tick, simStore.sim?.getDeviceState(device.id).console) ?? []).filter((l) => l.code.startsWith(prefix)),
+    ((simStore.tick, simStore.sim?.getDeviceState(device.id).console) ?? []).filter((l) => prefixes.some((p) => l.code.startsWith(p))),
   );
 </script>
 

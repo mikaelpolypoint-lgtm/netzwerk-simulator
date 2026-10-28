@@ -32,7 +32,7 @@ describe('Sprachdatei', () => {
     let checked = 0;
     for (const file of sourceFiles(join(__dirname, '../core'))) {
       const text = readFileSync(file, 'utf8');
-      for (const match of text.matchAll(/(?:print|#step|#fail)\(\s*'([a-zA-Z0-9_.]+)'/g)) {
+      for (const match of text.matchAll(/(?:print|#step|#fail|#report|report)\(\s*'([a-zA-Z0-9_.]+)'/g)) {
         checked++;
         if (!(`console.${match[1]}` in de)) missing.add(`console.${match[1]} (${file})`);
       }
@@ -50,7 +50,12 @@ describe('Sprachdatei', () => {
       ...['refused', 'timeout', 'reset', ...sendErrors].map((e) => `console.browser.tcp.${e}`),
       'console.browser.invalidUrl',
       'console.browser.httpsUnsupported',
+      ...dnsErrors.concat('invalidName', 'nxdomain').map((e) => `console.mail.dns.${e}`),
+      ...['refused', 'timeout', 'reset', ...sendErrors].map((e) => `console.mail.tcp.${e}`),
     ];
+    // Gründe der Aufgabenprüfung
+    const reasons = readFileSync(join(__dirname, '../core/tasks/tasks.ts'), 'utf8').matchAll(/fail\(id, '([a-zA-Z]+)'/g);
+    for (const [, code] of reasons) if (!(`tasks.reason.${code}` in de)) missing.add(`tasks.reason.${code}`);
     for (const key of dynamic) if (!(key in de)) missing.add(key);
     expect(checked).toBeGreaterThan(30);
     expect([...missing]).toEqual([]);

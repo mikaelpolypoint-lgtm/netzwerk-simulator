@@ -13,7 +13,7 @@
   let input: HTMLInputElement | undefined = $state();
 
   // Meldungen der Server-Dienste gehören in deren eigene Fenster.
-  const SERVICE_PREFIXES = ['dhcpServer.', 'dnsServer.', 'http.', 'smtp.', 'pop3.'];
+  const SERVICE_PREFIXES = ['dhcpServer.', 'dnsServer.', 'http.', 'smtp.', 'pop3.', 'imap.'];
   const lines = $derived(
     ((simStore.tick, simStore.sim?.getDeviceState(device.id).console) ?? []).filter(
       (l) => !SERVICE_PREFIXES.some((p) => l.code.startsWith(p)),

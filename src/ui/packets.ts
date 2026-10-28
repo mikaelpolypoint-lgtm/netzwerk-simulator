@@ -1,4 +1,4 @@
-import { BROADCAST_MAC, getDevice, type EthernetFrame, type PacketLogEntry, type Topology } from '../core';
+import { BROADCAST_MAC, TCP_APPS, getDevice, protocolOf, type EthernetFrame, type PacketLogEntry, type Topology } from '../core';
 import { t } from '../i18n';
 import { interfaceLabel } from './labels';
 
@@ -13,20 +13,7 @@ export interface PacketRow {
   lost: boolean;
 }
 
-/** Bekannte Ports und ihr Anwendungsprotokoll. */
-const TCP_APPS: Record<number, string> = { 80: 'HTTP', 25: 'SMTP', 110: 'POP3' };
-
-/** Oberstes erkennbares Protokoll, wie ein Paketanalysator es anzeigt. */
-export function protocolOf(frame: EthernetFrame): string {
-  const p = frame.payload;
-  if (p.kind === 'arp') return 'ARP';
-  const inner = p.payload;
-  if (inner.kind === 'icmp') return 'ICMP';
-  if (inner.kind === 'udp') return inner.payload.kind.toUpperCase();
-  // TCP-Segmente mit Nutzdaten zählen zum Anwendungsprotokoll, reine Steuersegmente zu TCP.
-  const app = TCP_APPS[inner.dstPort] ?? TCP_APPS[inner.srcPort];
-  return inner.data && app ? app : 'TCP';
-}
+export { protocolOf };
 
 function portLabel(port: number): string {
   const names: Record<number, string> = { 53: 'DNS', 67: 'DHCP-Server', 68: 'DHCP-Client', ...TCP_APPS };
@@ -55,10 +42,10 @@ function info(frame: EthernetFrame): string {
     const numbers = t('packets.tcp.numbers', { seq: inner.seq, ack: inner.ack, len: inner.data.length });
     const app = protocolOf(frame);
     if (app === 'TCP') return `${portLabel(inner.srcPort)} → ${portLabel(inner.dstPort)} ${flags} ${numbers}`;
-    // Bei Anwendungsdaten die erste Zeile zeigen, wie ein Paketanalysator.
-    const first = inner.data.split('\r\n')[0] ?? '';
-    const looksLikeStart = /^(GET|POST|HTTP\/|[A-Z]{3,4}( |$)|\+OK|-ERR|\d{3}[ -])/.test(first);
-    return `${looksLikeStart ? first : t('packets.tcp.continuation')} ${numbers}`;
+    // Bei Anwendungsdaten die erste Zeile zeigen, wie ein Paketanalysator; HTTP-Folgesegmente als Fortsetzung.
+    const first = (inner.data.split('\r\n')[0] ?? '').slice(0, 80);
+    const continuation = app === 'HTTP' && !/^(GET|POST|HEAD|HTTP\/)/.test(first);
+    return `${continuation ? t('packets.tcp.continuation') : first} ${numbers}`;
   }
   const msg = inner.payload;
   if (msg.kind === 'dns') {

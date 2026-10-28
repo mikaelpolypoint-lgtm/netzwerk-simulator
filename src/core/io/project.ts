@@ -8,6 +8,8 @@ import type {
   DhcpServerConfig,
   DnsRecord,
   Endpoint,
+  MailAccount,
+  Mailbox,
   NetInterface,
   StaticRoute,
   Topology,
@@ -15,6 +17,8 @@ import type {
 } from '../model/types';
 import { isValidName, normalizeName } from '../net/dns';
 import { isValidPath } from '../net/http';
+import { checkMailAccount } from '../net/mail';
+import { readTasks, type TaskSet } from '../tasks/tasks';
 
 export const FORMAT_ID = 'netzwerk-simulator';
 export const FORMAT_VERSION = 1;
@@ -22,8 +26,10 @@ export const FORMAT_VERSION = 1;
 export interface ProjectFile {
   meta: { format: typeof FORMAT_ID; version: number };
   topology: Topology;
-  /** DHCP-Bereiche, DNS-Zonen, Routen usw. folgen in späteren Etappen. */
+  /** Geräteübergreifende Einstellungen; Gerätebezogenes liegt direkt beim Gerät. */
   configuration: Record<string, unknown>;
+  /** Nur in Aufgabendateien: Lernziele mit automatischer Prüfung. */
+  tasks?: TaskSet;
 }
 
 export type ParseErrorCode = 'invalidJson' | 'notAProject' | 'unsupportedVersion' | 'invalidStructure' | 'switchLoop';
@@ -33,13 +39,14 @@ export interface ParseError {
   params?: Record<string, string | number>;
 }
 
-export type ParseResult = { ok: true; topology: Topology } | { ok: false; error: ParseError };
+export type ParseResult = { ok: true; topology: Topology; tasks?: TaskSet } | { ok: false; error: ParseError };
 
-export function serializeProject(topology: Topology): string {
+export function serializeProject(topology: Topology, tasks?: TaskSet | null): string {
   const file: ProjectFile = {
     meta: { format: FORMAT_ID, version: FORMAT_VERSION },
     topology,
     configuration: {},
+    ...(tasks ? { tasks } : {}),
   };
   return JSON.stringify(file, null, 2) + '\n';
 }
@@ -63,8 +70,15 @@ export function parseProject(text: string): ParseResult {
   }
   if (version > FORMAT_VERSION) return failure('unsupportedVersion', { version, supported: FORMAT_VERSION });
   let topology: Topology;
+  let tasks: TaskSet | undefined;
   try {
-    topology = readTopology(migrate(data, version).topology);
+    const current = migrate(data, version);
+    topology = readTopology(current.topology);
+    if (current.tasks !== undefined) {
+      tasks = readTasks(current.tasks, (path) => {
+        throw new Invalid(path);
+      });
+    }
   } catch (e) {
     if (e instanceof Invalid) return failure('invalidStructure', { path: e.path });
     throw e;
@@ -75,7 +89,7 @@ export function parseProject(text: string): ParseResult {
     const name = (id: string) => topology.devices.find((d) => d.id === id)?.name ?? id;
     return failure('switchLoop', { a: name(loop.a.device), b: name(loop.b.device) });
   }
-  return { ok: true, topology };
+  return tasks ? { ok: true, topology, tasks } : { ok: true, topology };
 }
 
 /** Hebt ältere Formatversionen schrittweise auf die aktuelle an. */
@@ -235,6 +249,36 @@ function readDevice(v: unknown, path: string): Device {
       return { path: filePath, content: str(f.content, `${fp}.content`) };
     });
     device.webServer = { files };
+  }
+  if (o.mailServer !== undefined) {
+    const p = `${path}.mailServer`;
+    const m = obj(o.mailServer, p);
+    const domain = normalizeName(str(m.domain, `${p}.domain`));
+    if (!isValidName(domain)) throw new Invalid(`${p}.domain`);
+    const mailboxes = arr(m.mailboxes, `${p}.mailboxes`).map((raw, i): Mailbox => {
+      const bp = `${p}.mailboxes[${i}]`;
+      const b = obj(raw, bp);
+      const user = str(b.user, `${bp}.user`).toLowerCase();
+      if (!/^[a-z0-9._-]{1,32}$/.test(user)) throw new Invalid(`${bp}.user`);
+      return { user, password: str(b.password, `${bp}.password`) };
+    });
+    device.mailServer = { domain, mailboxes };
+  }
+  if (o.mailAccount !== undefined) {
+    const p = `${path}.mailAccount`;
+    const a = obj(o.mailAccount, p);
+    const protocol = a.protocol;
+    if (protocol !== 'pop3' && protocol !== 'imap') throw new Invalid(`${p}.protocol`);
+    const account: MailAccount = {
+      address: str(a.address, `${p}.address`).toLowerCase(),
+      password: str(a.password, `${p}.password`),
+      smtpServer: str(a.smtpServer, `${p}.smtpServer`).toLowerCase(),
+      incomingServer: str(a.incomingServer, `${p}.incomingServer`).toLowerCase(),
+      protocol,
+    };
+    const issue = checkMailAccount(account);
+    if (issue) throw new Invalid(`${p}.${issue.field}`);
+    device.mailAccount = account;
   }
   if (o.routes !== undefined) {
     device.routes = arr(o.routes, `${path}.routes`).map((raw, i): StaticRoute => {

@@ -3,8 +3,11 @@ import {
   addDevice,
   addDnsRecord,
   addStaticRoute,
+  addMailbox,
   saveWebFile,
   setDnsServerEnabled,
+  setMailAccount,
+  setMailServerEnabled,
   setWebServerEnabled,
   configureHost,
   connect,
@@ -74,6 +77,27 @@ export class NetBuilder {
     for (const [name, value, ttl = 60] of records) {
       this.topology = unwrap(addDnsRecord(this.topology, id, { name, type: 'A', value, ttl }));
     }
+  }
+
+  setDns(id: string, dns: string) {
+    this.topology = {
+      ...this.topology,
+      devices: this.topology.devices.map((d) => (d.id === id ? { ...d, dns } : d)),
+    };
+  }
+
+  dnsRecord(id: string, name: string, type: 'A' | 'MX', value: string) {
+    if (!getDevice(this.topology, id)?.dnsServer) this.topology = unwrap(setDnsServerEnabled(this.topology, id, true));
+    this.topology = unwrap(addDnsRecord(this.topology, id, { name, type, value, ttl: 60 }));
+  }
+
+  mailServer(id: string, domain: string, users: string[]) {
+    this.topology = unwrap(setMailServerEnabled(this.topology, id, true, domain));
+    for (const user of users) this.topology = unwrap(addMailbox(this.topology, id, { user, password: 'geheim' }));
+  }
+
+  mailAccount(id: string, address: string, server: string, protocol: 'pop3' | 'imap' = 'pop3', password = 'geheim') {
+    this.topology = unwrap(setMailAccount(this.topology, id, { address, password, smtpServer: server, incomingServer: server, protocol }));
   }
 
   webServer(id: string, files: Record<string, string>) {

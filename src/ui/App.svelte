@@ -8,6 +8,7 @@
   import Inspector from './components/Inspector.svelte';
   import PacketList from './components/PacketList.svelte';
   import Palette from './components/Palette.svelte';
+  import TaskPanel from './components/TaskPanel.svelte';
   import Toast from './components/Toast.svelte';
   import Toolbar from './components/Toolbar.svelte';
   import { errorText } from './labels';
@@ -33,8 +34,8 @@
   onMount(async () => {
     const text = await loadAutosave();
     const parsed = text ? parseProject(text) : null;
-    if (parsed?.ok && parsed.topology.devices.length > 0) {
-      editor.replace(parsed.topology, { undoable: false });
+    if (parsed?.ok && (parsed.topology.devices.length > 0 || parsed.tasks)) {
+      editor.replace(parsed.topology, { undoable: false, tasks: parsed.tasks ?? null });
       editor.notify(t('status.restored'));
     }
     restored = true;
@@ -43,12 +44,12 @@
   // Erst nach dem Wiederherstellen speichern, sonst überschreibt das leere Startprojekt den alten Stand.
   let pendingSave: (() => void) | null = null;
   $effect(() => {
-    const topology = editor.topology;
+    const { topology, tasks } = editor;
     if (!restored) return;
     const flush = () => {
       clearTimeout(timer);
       pendingSave = null;
-      saveAutosave(serializeProject(topology));
+      saveAutosave(serializeProject(topology, tasks));
     };
     const timer = setTimeout(flush, 400);
     pendingSave = flush;
@@ -66,7 +67,7 @@
 
   function save() {
     const filename = projectFilename();
-    downloadText(filename, serializeProject(editor.topology));
+    downloadText(filename, serializeProject(editor.topology, editor.tasks));
     editor.notify(t('status.saved', { file: filename }));
   }
 
@@ -90,8 +91,8 @@
       editor.notify(errorText(parsed.error), 'error');
       return;
     }
-    editor.replace(parsed.topology, { undoable: true });
-    editor.notify(t('status.loaded', { file: file.name }));
+    editor.replace(parsed.topology, { undoable: true, tasks: parsed.tasks ?? null });
+    editor.notify(t(parsed.tasks ? 'status.loadedTask' : 'status.loaded', { file: file.name, title: parsed.tasks?.title ?? '' }));
   }
 
   const ARROWS: Record<string, [number, number]> = {
@@ -148,7 +149,10 @@
 
 <div class="app">
   <Toolbar onopen={open} onsave={save} />
-  <Palette />
+  <div class="left">
+    <Palette />
+    <TaskPanel />
+  </div>
   <main>
     {#if !editor.editable}
       <SimControls />
@@ -176,19 +180,21 @@
 <style>
   .app {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr) 300px;
+    grid-template-columns: 220px minmax(0, 1fr) 300px;
     grid-template-rows: auto minmax(0, 1fr);
     height: 100vh;
   }
   .app > :global(header) {
     grid-column: 1 / -1;
   }
-  .app > :global(nav),
+  .left,
   .app > :global(aside) {
     background: var(--surface);
   }
-  .app > :global(nav) {
+  .left {
     border-right: 1px solid var(--border);
+    overflow-y: auto;
+    min-height: 0;
   }
   .app > :global(aside) {
     border-left: 1px solid var(--border);

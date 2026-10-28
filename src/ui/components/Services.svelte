@@ -3,6 +3,7 @@
   import { t } from '../../i18n';
   import DhcpServerForm from './DhcpServerForm.svelte';
   import DnsServerForm from './DnsServerForm.svelte';
+  import MailServerForm from './MailServerForm.svelte';
   import WebServerForm from './WebServerForm.svelte';
 
   /** Entwurfsmodus, Rechner: Server-Dienste, jeweils aufklappbar. */
@@ -12,6 +13,7 @@
     { key: 'dhcp', active: !!device.dhcpServer },
     { key: 'dns', active: !!device.dnsServer },
     { key: 'web', active: !!device.webServer },
+    { key: 'mail', active: !!device.mailServer },
   ]);
 </script>
 
@@ -27,8 +29,10 @@
         <DhcpServerForm {device} />
       {:else if service.key === 'dns'}
         <DnsServerForm {device} />
-      {:else}
+      {:else if service.key === 'web'}
         <WebServerForm {device} />
+      {:else}
+        <MailServerForm {device} />
       {/if}
     </div>
   </details>
