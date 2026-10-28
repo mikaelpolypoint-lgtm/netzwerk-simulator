@@ -1,9 +1,10 @@
-# Testversion auf Plesk
+# Webversion auf Plesk (Node.js)
 
-Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn direkt von GitHub und liefert die fertige Datei `release/netzwerk-simulator.html` aus. Auf dem Server wird nichts gebaut, Node.js ist nicht nötig.
+Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn von GitHub und startet den kleinen Node.js-Server aus `server/`. Er liefert die fertige Datei `release/netzwerk-simulator.html` aus und bietet zusätzlich Sessions mit Code, Klassen-Sessions, Rückmeldungen und die Admin-Konsole. Auf dem Server wird nichts gebaut, und es werden keine npm-Pakete installiert: Der Server nutzt nur Node.js-Bordmittel.
 
 ```
-Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)──►  test.deine-domain.ch
+Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)──►  simulator-test.deine-domain.ch
+                                                                      └─ Node.js: server/start.cjs
 ```
 
 ## Einmalig einrichten
@@ -12,13 +13,38 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
 2. **Git hinzufügen**: bei der Subdomain auf **Git** klicken.
    - Repository: **Remote-Git-Hosting**
    - URL: `https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git`
-     (bei einem privaten Repository die SSH-URL `git@github.com:mikaelpolypoint-lgtm/netzwerk-simulator.git` wählen und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
+     (bei einem privaten Repository die SSH-URL `git@github.com:mikaelpolypoint-lgtm/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
    - Bereitstellungsmodus: **Automatisch**
    - Serverpfad: `/httpdocs`
-3. Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
-4. **Dokumentstamm** der Subdomain auf `httpdocs/release` ändern (Hosting-Einstellungen). So ist nur der fertige Simulator erreichbar, nicht der Quellcode.
-5. Die Datei `release/.htaccess` sorgt dafür, dass die Adresse ohne Dateinamen direkt den Simulator öffnet, und setzt dieselben Sicherheits-Header wie der Docker-Server.
-6. **SSL/TLS** für die Subdomain aktivieren (Let's Encrypt in Plesk).
+   - Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
+   - Unter **Zusätzliche Bereitstellungsaktionen** eintragen, damit der Server nach jedem Pull neu startet:
+     ```
+     mkdir -p tmp && touch tmp/restart.txt
+     ```
+3. **Node.js aktivieren** (bei der Subdomain auf **Node.js**):
+   - Node.js-Version: **18 oder neuer** (empfohlen: die neueste LTS)
+   - Anwendungsmodus: `production`
+   - Anwendungsstamm: `/httpdocs`
+   - Dokumentstamm: `/httpdocs/server/public` (absichtlich leer, so ist der Quellcode nicht direkt erreichbar)
+   - Anwendungsstartdatei: `server/start.cjs`
+   - **Benutzerdefinierte Umgebungsvariablen**:
+     | Name | Wert | Zweck |
+     |---|---|---|
+     | `ADMIN_PASSWORD` | ein langes, zufälliges Passwort | öffnet die Admin-Konsole; ohne diese Variable ist sie gesperrt |
+     | `DATA_DIR` | optional, z.B. `/var/www/vhosts/deine-domain.ch/simulator-data` | Ablage der Sessions; Standard ist `httpdocs/data` (ausserhalb des Dokumentstamms) |
+   - *NPM install* ist nicht nötig. Auf **Node.js aktivieren** bzw. **App neu starten** klicken.
+4. **SSL/TLS** für die Subdomain aktivieren (Let's Encrypt in Plesk) und *Permanente SEO-sichere 301-Weiterleitung von HTTP zu HTTPS* einschalten.
+5. **Zugriffsprotokolle** (Datenschutz): Plesk speichert standardmässig IP-Adressen im Access-Log des Webservers. Unter *Protokolle → Protokollrotation* die Aufbewahrung auf wenige Tage begrenzen oder die Protokollierung für die Subdomain abschalten (siehe [datenschutz.md](datenschutz.md#webserver-protokolle)).
+
+Danach unter der Adresse der Subdomain den Simulator öffnen. Oben rechts erscheint der Session-Code, unter **Einstellungen → Admin-Konsole** die Anmeldung.
+
+## Admin-Konsole
+
+- **Klassen**: Klassen-Sessions eröffnen (nur eine Bezeichnung wie «INF22a», keine Namen), den Klassencode verteilen, die Arbeiten der Klasse öffnen und die Klasse schliessen.
+- **Rückmeldungen**: Probleme und Ideen der Lernenden, mit Status *neu / in Arbeit / erledigt*.
+- **Einstellungen**: erlaubte Modi (Entwurf, Aktion, Dokumentation), Pro-Version erlaubt ja/nein, Aufbewahrung von Sessions, Klassen und Rückmeldungen, Rückmeldungen ein/aus.
+
+In der lokalen HTML-Datei und in der Desktop-Version gibt es keinen Server; dort ist die Admin-Konsole ausgegraut und alles erlaubt.
 
 ## Automatisch aktualisieren nach jedem Push
 
@@ -29,7 +55,7 @@ In Plesk unter *Git → Repository-Einstellungen* steht eine **Webhook-URL**. Di
 - Content type: `application/json`
 - Events: *Just the push event*
 
-Ohne Webhook in Plesk einfach auf **Pull Updates** klicken.
+Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Bereitstellungsaktion eingetragen ist, auf **App neu starten**).
 
 ## Ablauf im Alltag
 
@@ -38,22 +64,36 @@ git switch develop
 git pull                 # Stand von GitHub holen
 # … ändern …
 npm run release          # Tests, Build, release/netzwerk-simulator.html neu erzeugen
+npm run test:server      # Server-Tests
 git add -A
 git commit -m "Was geändert wurde"
 git push                 # Plesk zieht den neuen Stand
 ```
 
-Wichtig: Plesk liefert die **eingecheckte** Datei `release/netzwerk-simulator.html` aus. Ohne `npm run release` vor dem Commit bleibt die Testversion auf dem alten Stand. Die CI auf GitHub meldet das mit einem roten Kreuz.
+Wichtig: Der Server liefert die **eingecheckte** Datei `release/netzwerk-simulator.html` aus. Ohne `npm run release` vor dem Commit bleibt die Webversion auf dem alten Stand. Die CI auf GitHub meldet das mit einem roten Kreuz.
+
+Lokal lässt sich die Webversion so ausprobieren:
+
+```bash
+ADMIN_PASSWORD=test npm run server     # http://localhost:3000
+```
 
 ## Stabile Version
 
-Ist der Stand auf `develop` gut, wird er nach `main` übernommen (Pull Request auf GitHub oder lokal `git switch main && git merge develop && git push`). Eine zweite Subdomain kann auf gleiche Weise den Branch `main` ausliefern.
+Ist der Stand auf `develop` gut, wird er nach `main` übernommen (Pull Request auf GitHub oder lokal `git switch main && git merge develop && git push`). Eine zweite Subdomain kann auf gleiche Weise den Branch `main` ausliefern; jede Subdomain hat ihre eigenen Sessions und ihr eigenes Admin-Passwort.
 
-## Hinweise
+## Ohne Node.js (nur statisch)
 
-- Plesk mit **reinem Nginx** (ohne Apache) liest `.htaccess` nicht. Dann unter *Apache & nginx-Einstellungen → Zusätzliche nginx-Anweisungen* eintragen:
-  ```
-  index netzwerk-simulator.html;
-  add_header Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'" always;
-  ```
-- Der Simulator speichert nichts auf dem Server. Arbeitsstände bleiben im Browser der Lernenden oder als `.json`-Datei bei ihnen.
+Bietet das Hosting kein Node.js, kann die Datei auch rein statisch ausgeliefert werden: Dokumentstamm auf `httpdocs/release` setzen; `release/.htaccess` öffnet den Simulator ohne Dateinamen und setzt die Sicherheits-Header. Sessions, Klassen, Rückmeldungen und Admin-Konsole gibt es dann nicht; die Seite verhält sich wie die lokale Datei.
+
+Plesk mit **reinem Nginx** (ohne Apache) liest `.htaccess` nicht. Dann unter *Apache & nginx-Einstellungen → Zusätzliche nginx-Anweisungen* eintragen:
+```
+index netzwerk-simulator.html;
+add_header Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'" always;
+```
+
+## Sicherung und Löschung
+
+- Alle Daten liegen als JSON-Dateien in `DATA_DIR` (`sessions/`, `classes/`, `feedback/`, `settings.json`). Abgelaufene Einträge löscht der Server selbständig (beim Start und danach regelmässig).
+- Eine Sicherung ist nicht nötig und aus Datenschutzsicht auch nicht erwünscht: Sessions sind kurzlebige Arbeitsstände. Wer `DATA_DIR` trotzdem sichert, muss die Sicherungen ebenso kurz aufbewahren.
+- Alles sofort löschen: App stoppen, Ordner `DATA_DIR` leeren, App starten.

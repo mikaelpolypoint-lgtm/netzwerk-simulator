@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEVICE_SPECS, MAX_NAME_LENGTH, canUseWifi, floorsOf, hasCli, isRouterType, isSwitchType } from '../../core';
+  import { DEVICE_SPECS, MAX_NAME_LENGTH, canUseWifi, copperPorts, floorsOf, hasCli, isRackable, isRouterType, isSwitchType } from '../../core';
   import { t } from '../../i18n';
   import { roleLabel, typeLabel } from '../labels';
   import { openCli } from '../state/cli.svelte';
@@ -23,6 +23,8 @@
   const cable = $derived(editor.selectedCable);
   const area = $derived(editor.selectedArea);
   const floors = $derived(floorsOf(editor.topology));
+  const copper = $derived(device ? copperPorts(device).length : 0);
+  const racks = $derived((editor.topology.areas ?? []).filter((a) => a.kind === 'rack'));
   const spec = $derived(device ? DEVICE_SPECS[device.type] : undefined);
 
   let nameDraft = $state('');
@@ -87,6 +89,20 @@
       </label>
     {/if}
 
+    {#if isRackable(device.type) && racks.length > 0}
+      <label class="field">
+        <span>{t('rack.mount')}</span>
+        <select
+          value={device.rack ?? ''}
+          disabled={!editor.editable && !editor.documenting}
+          onchange={(e) => editor.setDeviceRack(device.id, e.currentTarget.value || null)}
+        >
+          <option value="">{t('rack.notMounted')}</option>
+          {#each racks as r (r.id)}<option value={r.id}>{r.title}</option>{/each}
+        </select>
+      </label>
+    {/if}
+
     {#if hasCli(device.type) && !editor.documenting}
       <button class="cli" onclick={() => openCli(device.id)} title={t('cli.openHint')}>›_ {t('cli.open')}</button>
     {/if}
@@ -132,14 +148,14 @@
         <div class="stepper" role="group" aria-labelledby="port-count">
           <button
             aria-label={t('inspector.portLess')}
-            disabled={!editor.editable || device.interfaces.length <= spec.minInterfaces}
-            onclick={() => editor.setInterfaceCount(device.id, device.interfaces.length - 1)}>−</button
+            disabled={!editor.editable || copper <= spec.minInterfaces}
+            onclick={() => editor.setInterfaceCount(device.id, copper - 1)}>−</button
           >
-          <output aria-live="polite">{device.interfaces.length}</output>
+          <output aria-live="polite">{copper}</output>
           <button
             aria-label={t('inspector.portMore')}
-            disabled={!editor.editable || device.interfaces.length >= spec.maxInterfaces}
-            onclick={() => editor.setInterfaceCount(device.id, device.interfaces.length + 1)}>+</button
+            disabled={!editor.editable || copper >= spec.maxInterfaces}
+            onclick={() => editor.setInterfaceCount(device.id, copper + 1)}>+</button
           >
         </div>
       </div>

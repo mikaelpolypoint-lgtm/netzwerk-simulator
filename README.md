@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator/actions/workflows/ci.yml)
 
-Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EFZ). Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste. Oberfläche auf Deutsch und Französisch.
+Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EFZ). Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste. Oberfläche auf Deutsch und Englisch, mit hellem und dunklem Design.
 
 Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konzept.md).
 
@@ -12,7 +12,7 @@ Die vollständige Anforderungsbeschreibung steht in [docs/konzept.md](docs/konze
 git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
 ```
 
-Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md), dazu [Webhosting mit Plesk](docs/plesk.md) und die [Desktop-Version für Windows, macOS und Linux](docs/desktop.md).
+Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md), dazu die [Webversion mit Node.js auf Plesk](docs/plesk.md) (Sessions mit Code, Klassen, Rückmeldungen, Admin-Konsole) und die [Desktop-Version für Windows, macOS und Linux](docs/desktop.md).
 
 ## Stand
 
@@ -26,11 +26,14 @@ Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Instal
 | M6 | E-Mail, Aufgabenformat mit automatischer Prüfung | ✅ |
 | M7 | Deployment (Variante A und B) | ✅ |
 | + | Kabel umstecken/beschädigen, DHCP-Relay, Internet mit NAT, VLANs und Spanning Tree, schnelle Paketliste | ✅ |
-| + | Aufgaben-Formular, Abgaben auswerten, Französisch, Oberflächentests, CI | ✅ |
+| + | Aufgaben-Formular, Abgaben auswerten, Oberflächentests, CI | ✅ |
 | + | Basis-/Pro-Modus, Router-on-a-Stick, Layer-3-Switch, Befehlszeile (FRRouting-Stil), SSH | ✅ |
 | + | WLAN mit Access Point, Mesh über Stockwerke, TP/Glasfaser/Funk, Link-LEDs, Farbtags | ✅ |
 | + | Dokumentationsmodus mit Bereichen, Stockwerke, Snapshots, Rack-Ansicht | ✅ |
 | + | Desktop-Installer (Tauri), Plesk-Testumgebung, Lizenzhinweise im Build | ✅ |
+| + | SFP-Module für Glasfaser, Racks auf der Karte, Bereiche kopieren, hell/dunkel, Englisch statt Französisch | ✅ |
+| + | Webversion mit Node.js: Sessions mit Code, Klassen-Sessions, Rückmeldungen, Admin-Konsole (erlaubte Modi, Pro, Aufbewahrung) | ✅ |
+| + | Aufgabenkatalog mit Schwierigkeit 1–5 Sterne | ✅ |
 
 ## Entwicklung
 
@@ -42,9 +45,11 @@ Voraussetzung: Node.js 20 oder neuer.
 npm ci
 npm run dev      # Entwicklungsserver auf http://localhost:5173
 npm test         # Tests des Simulationskerns
+npm run test:server    # Tests des Node.js-Servers (Webversion)
+npm run server   # Webversion lokal auf http://localhost:3000 (ADMIN_PASSWORD setzen für die Admin-Konsole)
 npm run check    # Typprüfung (UI und DOM-freier Kern)
 npm run build    # erzeugt dist/index.html
-npm run verify   # alles zusammen: Typprüfung, Tests, Build (vor jedem Commit)
+npm run verify   # alles zusammen: Typprüfung, Tests, Server-Tests, Build (vor jedem Commit)
 npm run release  # verify + release/netzwerk-simulator.html neu erzeugen und offline prüfen
 npm run e2e      # Oberflächentests (Playwright) gegen den Build
 npm run desktop:dev    # Desktop-Fenster (Tauri, braucht Rust)
@@ -55,7 +60,7 @@ Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den i
 
 `npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und bricht ab, falls sie externe Ressourcen enthält, die CSP fehlt oder Lizenzhinweise fehlen. **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
 
-GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/netzwerk-simulator.html` nicht zum Code passt.
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` (inklusive Server-Tests) und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/netzwerk-simulator.html` nicht zum Code passt.
 
 Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/installation.md#b-schulserver-mit-docker)).
 
@@ -65,8 +70,9 @@ Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/i
 src/
   core/   Simulationskern und Dateiformat: reines TypeScript, ohne DOM
   ui/     Svelte-Oberfläche (Editor, Palette, Inspektor)
-  i18n/   Sprachdateien (de.json, fr.json; ein Test prüft gleiche Schlüssel)
-docs/     Konzept-Spezifikation
+  i18n/   Sprachdateien (de.json, en.json; ein Test prüft gleiche Schlüssel)
+server/   Node.js-Server der Webversion (ohne Abhängigkeiten): Sessions, Klassen, Rückmeldungen, Admin
+docs/     Konzept, Installation, Plesk, Desktop, Befehlszeile, Datenschutz
 ```
 
 Regeln, die das Projekt technisch absichert:
@@ -119,9 +125,11 @@ Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruc
 
 ## Datenschutz
 
-- Keine Konten, kein Tracking, keine Cookies, keine externen Schriften oder CDNs.
-- Der Build setzt eine Content-Security-Policy mit `connect-src 'none'`: Die Seite kann technisch keine Netzwerkverbindung aufbauen.
-- Projekte werden automatisch in IndexedDB im Browserprofil zwischengespeichert und lassen sich als `.json` exportieren. Der Simulator selbst verarbeitet keine Personendaten.
+Ausgelegt auf revDSG und DSGVO, Details und eine Textvorlage für Schulen in [docs/datenschutz.md](docs/datenschutz.md):
+
+- Keine Konten, keine Namen, keine E-Mail-Adressen, kein Tracking, keine Cookies, keine externen Schriften oder CDNs.
+- Lokale Datei und Desktop-Version: Content-Security-Policy mit `connect-src 'none'`, die Seite kann technisch keine Netzwerkverbindung aufbauen. Projekte liegen in IndexedDB im Browserprofil und lassen sich als `.json` exportieren.
+- Webversion: Sessions enthalten nur die Netzwerk-Konfiguration unter einem Zufallscode und werden automatisch gelöscht (Standard 24 Stunden, einstellbar). Klassen tragen nur eine Bezeichnung wie «INF22a». IP-Adressen werden nicht gespeichert.
 
 ## Projektdatei
 
@@ -133,6 +141,6 @@ Die Idee orientiert sich am öffentlich dokumentierten Konzept der Lernsoftware 
 
 ## Lizenz
 
-[MIT](LICENSE) © 2026 Mikael von Allmen. Freie Nutzung, Anpassung und Weitergabe, auch an andere Schulen, solange der Lizenzhinweis erhalten bleibt.
+[MIT](LICENSE) © 2026 Mikael von Allmen & vonam-git. Freie Nutzung, Anpassung und Weitergabe, auch an andere Schulen, solange der Lizenzhinweis erhalten bleibt.
 
 Eingebaute Software anderer (z.B. die Svelte-Laufzeit) steht unter MIT-kompatiblen Lizenzen; die Hinweise liegen in [release/THIRD_PARTY_NOTICES.md](release/THIRD_PARTY_NOTICES.md) und erscheinen im Simulator unter **Über**. Der Build prüft die Lizenzen und bricht bei einer nicht freigegebenen ab. Die Desktop-Version liefert zusätzlich die Lizenzen der Rust-Pakete mit ([docs/desktop.md](docs/desktop.md)). Die Befehlszeile bildet die Syntax von FRRouting nur nach und enthält keinen Code daraus ([docs/cli.md](docs/cli.md#lizenzen)).

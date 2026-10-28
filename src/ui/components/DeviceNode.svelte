@@ -13,10 +13,13 @@
     device,
     onpointerdown,
     faded = false,
+    racked = false,
   }: {
     device: Device;
     onpointerdown: (event: PointerEvent, device: Device) => void;
     faded?: boolean;
+    /** Im Rack eingebaut: mit Frontplatte (1 Höheneinheit) dargestellt. */
+    racked?: boolean;
   } = $props();
 
   /** Stockwerk-Kürzel, wenn mehrere Stockwerke existieren und alle angezeigt werden. */
@@ -71,9 +74,20 @@
   {onkeydown}
   {ondblclick}
 >
+  {#if racked}
+    <rect class="plate" x="-86" y="-28" width="172" height="56" rx="3" />
+    <circle class="screw" cx="-80" cy="-21" r="2" />
+    <circle class="screw" cx="-80" cy="21" r="2" />
+    <circle class="screw" cx="80" cy="-21" r="2" />
+    <circle class="screw" cx="80" cy="21" r="2" />
+  {/if}
   <rect class="hit" x="-36" y="-30" width="72" height="60" rx="10" />
   <DeviceIcon type={device.type} />
-  <text class="label" y="44">{device.name}</text>
+  {#if racked}
+    <text class="rack-label" x="-74" y="4">{device.name}</text>
+  {:else}
+    <text class="label" y="44">{device.name}</text>
+  {/if}
   {#if ip}
     <text class="ip" y="59">{ip}</text>
   {/if}
@@ -92,6 +106,21 @@
   }
   .faded {
     opacity: 0.18;
+  }
+  .plate {
+    fill: #2b3440;
+    stroke: #475569;
+    stroke-width: 1.5;
+  }
+  .screw {
+    fill: #64748b;
+  }
+  .rack-label {
+    font-size: 11px;
+    font-weight: 600;
+    fill: #e2e8f0;
+    user-select: none;
+    pointer-events: none;
   }
   .floor rect {
     fill: var(--surface-2);

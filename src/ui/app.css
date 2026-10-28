@@ -44,8 +44,9 @@
   --routing-soft: #fbe6cf;
 }
 
+/* Dunkles Schema: folgt der Systemeinstellung, ausser die Person wählt «Hell» oder «Dunkel». */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #12161c;
     --surface: #1b2129;
     --surface-2: #252d38;
@@ -88,6 +89,55 @@
     --routing: #f5b041;
     --routing-soft: #3d2c12;
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #12161c;
+  --surface: #1b2129;
+  --surface-2: #252d38;
+  --border: #374252;
+  --text: #e6ebf1;
+  --muted: #9eaaba;
+  --accent: #6aa5ff;
+  --on-accent: #0b1220;
+  --focus: #fbbf24;
+  --focus-soft: rgba(251, 191, 36, 0.35);
+  --hover: rgba(106, 165, 255, 0.08);
+  --selected-soft: rgba(106, 165, 255, 0.16);
+  --grid: #2b3440;
+  --cable: #9aa7b8;
+  --danger: #f2756a;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --warning-soft: #3a2f14;
+  --console-bg: #0b0f14;
+  --console-text: #d7dee7;
+  --console-prompt: #8fd18f;
+  --proto-arp: #4a3c14;
+  --proto-icmp: #1c3252;
+  --proto-dhcp: #123a2c;
+  --proto-dns: #33244f;
+  --proto-tcp: #2b3440;
+  --proto-http: #4a1f22;
+  --proto-mail: #133a44;
+  --dot-arp: #f5b041;
+  --dot-icmp: #6aa5ff;
+  --dot-dhcp: #3ccf96;
+  --dot-dns: #b794f6;
+  --dot-tcp: #9eaaba;
+  --dot-http: #f2756a;
+  --dot-mail: #5fd0e8;
+
+  --endpoint: #6aa5ff;
+  --endpoint-soft: #1c3252;
+  --distribution: #3ccf96;
+  --distribution-soft: #123a2c;
+  --routing: #f5b041;
+  --routing-soft: #3d2c12;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 *,

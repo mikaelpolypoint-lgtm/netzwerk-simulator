@@ -36,7 +36,7 @@ Router(config-if)#         Router(config-vlan)#    Router(config-line)#
 | Gerät | Namen |
 |---|---|
 | Router | `eth0`, `eth1` …; Subinterfaces `eth0.10` (VLAN 10) |
-| Switch | `port1`, `port2` … (wie auf der Frontplatte); auch `gi0/1` oder `fa0/1` |
+| Switch | `port1`, `port2` … (wie auf der Frontplatte); auch `gi0/1` oder `fa0/1`. SFP-Einschübe für Glasfaser zählen separat: `sfp1`, `sfp2` … (auch `te0/1`) |
 | Layer-3-Switch | wie Switch, dazu `vlan10` bzw. `interface vlan 10` |
 
 ## Befehle

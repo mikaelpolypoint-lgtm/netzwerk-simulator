@@ -73,10 +73,27 @@ test('Aufgabe im Formular erstellen', async ({ page }) => {
   await expect(page.locator('.tasks')).toContainText('Notebook 1 erhält eine Adresse per DHCP.');
 });
 
-test('Sprache wechseln und behalten', async ({ page }) => {
-  await page.getByRole('combobox', { name: 'Sprache' }).selectOption('fr');
-  await expect(page.getByRole('button', { name: 'Enregistrer' })).toBeVisible();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+test('Sprache und Darstellung wechseln und behalten', async ({ page }) => {
+  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await page.getByRole('radio', { name: 'English' }).click();
+  await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByRole('radio', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Simulateur de réseau' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Network Simulator' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('Admin-Konsole ist in der lokalen Datei ausgegraut', async ({ page }) => {
+  await page.getByRole('button', { name: 'Einstellungen' }).click();
+  await expect(page.getByRole('menuitem', { name: /Admin-Konsole/ })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: /Rückmeldung/ })).toBeDisabled();
+});
+
+test('Aufgabe aus dem Katalog laden', async ({ page }) => {
+  await page.getByRole('button', { name: /Katalog/ }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: /Starten|Laden|Übernehmen/ }).first().click();
+  await expect(page.locator('.tasks')).not.toBeEmpty();
 });

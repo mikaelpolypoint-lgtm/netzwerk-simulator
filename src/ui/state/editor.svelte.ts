@@ -25,7 +25,7 @@ import {
   configureHost,
   connect,
   emptyTopology,
-  freeInterface,
+  freeInterfaceFor,
   getCable,
   getDevice,
   moveDevice,
@@ -74,7 +74,13 @@ import {
   setWifiClient,
   setWlan,
   updateArea,
+  insertSfpModule,
+  isRackable,
+  rackAt,
+  setDeviceRack,
+  setSfpModule,
   MAX_SNAPSHOTS,
+  type SfpModule,
   type CliConfig,
   type DocArea,
   type Medium,
@@ -84,7 +90,7 @@ import {
   type WlanConfig,
 } from '../../core';
 import { t } from '../../i18n';
-import { errorText } from '../labels';
+import { errorText, interfaceLabel } from '../labels';
 
 export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: string } | { kind: 'area'; id: string } | null;
 export type Tool = 'select' | 'cable' | 'area';
@@ -266,6 +272,11 @@ class Editor {
     const placed = floor > 0 ? setDeviceFloor(added.topology, added.id, floor) : null;
     this.#commit(placed?.ok ? placed.value : added.topology);
     this.selection = { kind: 'device', id: added.id };
+  }
+
+  /** Weltkoordinaten der Bildmitte (z.B. für neue Bereiche). */
+  viewCenter(): Point {
+    return this.screenToWorld(this.#size.width / 2, this.#size.height / 2);
   }
 
   /** Platziert ein Gerät möglichst in der Bildmitte, aber nicht auf einem anderen. */
@@ -504,6 +515,79 @@ class Editor {
     if (base && base !== this.topology) this.#pushUndo(base);
   }
 
+  /**
+   * Ende des Ziehens eines Geräts: Über einem Rack abgelegt wird es eingebaut,
+   * aus seinem Rack herausgezogen wird es ausgebaut. Ein Schritt im Verlauf.
+   */
+  endDeviceDrag(id: string) {
+    const base = this.#dragBase;
+    const device = getDevice(this.topology, id);
+    if (base && device && base !== this.topology && isRackable(device.type)) {
+      const floor = device.floor ?? 0;
+      const target = rackAt(this.topology, device.position.x, device.position.y, floor);
+      const next = target ? setDeviceRack(this.topology, id, target.id, true) : device.rack ? setDeviceRack(this.topology, id, null) : null;
+      if (next?.ok) this.topology = next.value;
+    }
+    this.endDrag();
+  }
+
+  // --- SFP-Module und Racks ---------------------------------------------------
+
+  /** Modul aus der Palette in das gewählte (oder angegebene) Gerät stecken. */
+  insertSfp(module: SfpModule, deviceId = this.selectedDevice?.id) {
+    if (!this.editable) return;
+    if (!deviceId) {
+      this.notify(t('sfp.selectDevice'), 'error');
+      return;
+    }
+    const inserted = this.#check(insertSfpModule(this.topology, deviceId, module));
+    if (!inserted) return;
+    this.#commit(inserted.topology);
+    const device = getDevice(this.topology, deviceId);
+    this.notify(t('sfp.inserted', { module, device: device?.name ?? '', slot: device ? interfaceLabel(device, inserted.index) : '' }));
+  }
+
+  setSfpModule(id: string, index: number, module: SfpModule | null) {
+    this.#edit(setSfpModule(this.topology, id, index, module));
+  }
+
+  setDeviceRack(id: string, rack: string | null) {
+    if (!this.editable && !this.documenting) return;
+    const next = this.#check(setDeviceRack(this.topology, id, rack));
+    if (next) this.#commit(next);
+  }
+
+  // --- Bereiche kopieren und einfügen -------------------------------------------
+
+  #clipboard: Omit<DocArea, 'id'> | null = null;
+
+  get canPaste() {
+    return this.#clipboard !== null && (this.editable || this.documenting);
+  }
+
+  copyArea(): boolean {
+    const area = this.selectedArea;
+    if (!area) return false;
+    const { id: _id, ...rest } = area;
+    this.#clipboard = rest;
+    this.notify(t('area.copied', { title: area.title }));
+    return true;
+  }
+
+  /** Fügt die kopierte Fläche versetzt ein (mehrfach einfügen: jedes Mal weiter versetzt). */
+  pasteArea(): boolean {
+    const copy = this.#clipboard;
+    if (!copy || (!this.editable && !this.documenting)) return false;
+    const offset = 40;
+    this.addArea({ ...copy, x: copy.x + offset, y: copy.y + offset, title: t('area.copyTitle', { title: copy.title }) });
+    this.#clipboard = { ...copy, x: copy.x + offset, y: copy.y + offset };
+    return true;
+  }
+
+  duplicateArea() {
+    if (this.copyArea()) this.pasteArea();
+  }
+
   // --- Neue Einstellungen (Ports, WLAN, Pro-Funktionen) ----------------------
 
   /** Allgemeiner Weg für einfache Änderungen im Entwurfsmodus: Fehler als Meldung. */
@@ -701,8 +785,9 @@ class Editor {
     if (!source) {
       const device = getDevice(this.topology, id);
       if (!device) return;
-      if (!freeInterface(this.topology, device)) {
-        this.notify(errorText({ code: 'noFreeInterface', params: { device: device.name } }), 'error');
+      if (!freeInterfaceFor(this.topology, device, this.medium)) {
+        const code = this.medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface';
+        this.notify(errorText({ code, params: { device: device.name } }), 'error');
         return;
       }
       this.cableSource = id;

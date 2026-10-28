@@ -23,7 +23,7 @@
 
 <dl class="facts">
   <dt>{t('inspector.type')}</dt>
-  <dd>{t('area.type')}</dd>
+  <dd>{t(area.kind === 'rack' ? 'areaPreset.rack' : 'area.type')}</dd>
 </dl>
 
 <label class="field">
@@ -101,7 +101,10 @@
 </label>
 
 {#if canEdit}
-  <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
+  <div class="buttons">
+    <button onclick={() => editor.duplicateArea()} title="{t('key.ctrl')}+C / {t('key.ctrl')}+V">{t('area.duplicate')}</button>
+    <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
+  </div>
 {/if}
 
 <style>
@@ -174,5 +177,9 @@
   .danger {
     color: var(--danger);
     border-color: var(--danger);
+  }
+  .buttons {
+    display: flex;
+    gap: 8px;
   }
 </style>

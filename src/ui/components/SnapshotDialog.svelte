@@ -34,7 +34,7 @@
   }
 
   const when = (iso: string) =>
-    new Date(iso).toLocaleString(locale() === 'fr' ? 'fr-CH' : 'de-CH', { dateStyle: 'short', timeStyle: 'short' });
+    new Date(iso).toLocaleString(locale() === 'en' ? 'en-GB' : 'de-CH', { dateStyle: 'short', timeStyle: 'short' });
 </script>
 
 <dialog bind:this={dialog} aria-labelledby="snapshot-title" onclose={onclose}>

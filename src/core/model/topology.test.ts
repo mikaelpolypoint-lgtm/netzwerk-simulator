@@ -15,6 +15,7 @@ import {
   setInterfaceAddress,
   setInterfaceCount,
   suggestName,
+  copperPorts,
   type Result,
 } from './topology';
 import type { DeviceType, Topology } from './types';
@@ -39,7 +40,9 @@ describe('Geräte', () => {
     expect(pc.id).toBe('d1');
     expect(sw.id).toBe('d2');
     expect(getDevice(t, 'd1')!.interfaces).toHaveLength(1);
-    expect(getDevice(t, 'd2')!.interfaces).toHaveLength(8);
+    // Switch: 8 RJ45-Ports, danach 2 SFP-Einschübe für Glasfaser.
+    expect(copperPorts(getDevice(t, 'd2')!)).toHaveLength(8);
+    expect(getDevice(t, 'd2')!.interfaces.slice(8).map((i) => i.sfpSlot)).toEqual([true, true]);
   });
 
   it('erzeugt deterministische, eindeutige MAC-Adressen', () => {
@@ -184,7 +187,13 @@ describe('Anzahl Ports', () => {
   it('erweitert mit passenden MAC-Adressen', () => {
     const t = add(emptyTopology(), 'router', 'R1').topology;
     const more = unwrap(setInterfaceCount(t, 'd1', 3));
-    expect(getDevice(more, 'd1')!.interfaces.map((i) => i.mac)).toEqual([macFor(1, 0), macFor(1, 1), macFor(1, 2)]);
+    // Der SFP-Einschub behält seine MAC und rückt ans Ende; der neue Port erhält eine freie.
+    expect(getDevice(more, 'd1')!.interfaces.map((i) => [i.index, i.mac, !!i.sfpSlot])).toEqual([
+      [0, macFor(1, 0), false],
+      [1, macFor(1, 1), false],
+      [2, macFor(1, 3), false],
+      [3, macFor(1, 2), true],
+    ]);
   });
 
   it('entfernt keine belegten Ports und hält die Grenzen ein', () => {
@@ -196,6 +205,6 @@ describe('Anzahl Ports', () => {
 
     expect(setInterfaceCount(t, 'd1', 2)).toMatchObject({ ok: false, error: { code: 'interfaceConnected' } });
     expect(setInterfaceCount(t, 'd1', 1)).toMatchObject({ ok: false, error: { code: 'interfaceCountOutOfRange' } });
-    expect(getDevice(unwrap(setInterfaceCount(t, 'd1', 3)), 'd1')!.interfaces).toHaveLength(3);
+    expect(copperPorts(getDevice(unwrap(setInterfaceCount(t, 'd1', 3)), 'd1')!)).toHaveLength(3);
   });
 });

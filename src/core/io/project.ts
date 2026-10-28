@@ -14,11 +14,13 @@ import type {
   DocArea,
   Floor,
   NetInterface,
+  SfpModule,
   StaticRoute,
   TagColor,
   Topology,
   WebFile,
 } from '../model/types';
+import { SFP_MODULES } from '../model/types';
 import { isValidName, normalizeName } from '../net/dns';
 import { isValidPath } from '../net/http';
 import { checkMailAccount } from '../net/mail';
@@ -251,8 +253,10 @@ function readTopology(v: unknown): Topology {
     const id = str(o.id, `${path}.id`);
     if (!/^a\d+$/.test(id) || areaIds.has(id)) throw new Invalid(`${path}.id`);
     areaIds.add(id);
+    if (o.kind !== undefined && o.kind !== 'rack') throw new Invalid(`${path}.kind`);
     const area: DocArea = {
       id,
+      ...(o.kind === 'rack' ? { kind: 'rack' as const } : {}),
       title: text(o.title, `${path}.title`, 80),
       color: color(o.color, `${path}.color`),
       x: num(o.x, `${path}.x`),
@@ -272,6 +276,10 @@ function readTopology(v: unknown): Topology {
   }));
 
   const highest = Math.max(0, ...devices.map((d) => deviceSeq(d.id)), ...cables.map((c) => deviceSeq(c.id)));
+  // Geräte verweisen nur auf vorhandene Racks.
+  for (const [i, d] of devices.entries()) {
+    if (d.rack && !areas.some((a) => a.id === d.rack && a.kind === 'rack')) throw new Invalid(`topology.devices[${i}].rack`);
+  }
   const highestAll = Math.max(highest, ...areas.map((a) => deviceSeq(a.id)));
   const nextId = typeof t.nextId === 'number' && Number.isInteger(t.nextId) && t.nextId > highestAll ? t.nextId : highestAll + 1;
   return { devices, cables, nextId, ...(areas.length ? { areas } : {}), ...(floors.length ? { floors } : {}) };
@@ -290,7 +298,10 @@ function readDevice(v: unknown, path: string): Device {
 
   const spec = DEVICE_SPECS[type];
   const rawIfaces = arr(o.interfaces, `${path}.interfaces`);
-  if (rawIfaces.length < spec.minInterfaces || rawIfaces.length > spec.maxInterfaces) {
+  // Die Grenzen gelten für RJ45-Anschlüsse; dazu höchstens 8 SFP-Einschübe.
+  const slotCount = rawIfaces.filter((raw) => isObject(raw) && raw.sfpSlot === true).length;
+  const copperCount = rawIfaces.length - slotCount;
+  if (copperCount < spec.minInterfaces || copperCount > spec.maxInterfaces || slotCount > 8) {
     throw new Invalid(`${path}.interfaces`);
   }
   const interfaces = rawIfaces.map((raw, i): NetInterface => {
@@ -323,6 +334,11 @@ function readDevice(v: unknown, path: string): Device {
     if (io.shutdown !== undefined && bool(io.shutdown, `${p}.shutdown`)) iface.shutdown = true;
     if (io.color !== undefined) iface.color = color(io.color, `${p}.color`);
     if (io.description !== undefined) iface.description = text(io.description, `${p}.description`, 80);
+    if (io.sfpSlot !== undefined && bool(io.sfpSlot, `${p}.sfpSlot`)) iface.sfpSlot = true;
+    if (io.sfp !== undefined) {
+      if (!iface.sfpSlot || !(SFP_MODULES as readonly unknown[]).includes(io.sfp)) throw new Invalid(`${p}.sfp`);
+      iface.sfp = io.sfp as SfpModule;
+    }
     return iface;
   });
 
@@ -526,6 +542,11 @@ function readDevice(v: unknown, path: string): Device {
       seen.add(vlan);
       return { vlan, name: text(v.name, `${p}.name`, 32) };
     });
+  }
+  if (o.rack !== undefined) {
+    const rack = str(o.rack, `${path}.rack`);
+    if (!/^a\d+$/.test(rack)) throw new Invalid(`${path}.rack`);
+    device.rack = rack;
   }
   // Routen dürfen auch auf Subinterfaces und SVIs zeigen.
   if (device.routes) {

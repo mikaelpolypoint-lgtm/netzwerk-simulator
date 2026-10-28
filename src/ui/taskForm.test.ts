@@ -3,7 +3,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CHECK_TYPES, parseProject } from '../core';
 import de from '../i18n/de.json';
+import { setLocale } from '../i18n';
 import { CHECK_FIELDS, emptyGoal, fromDraft, suggestedText, toDraft } from './taskForm';
+
+// Node meldet «en-US» als Sprache; die erwarteten Texte sind deutsch.
+setLocale('de');
 
 const parsed = parseProject(readFileSync(join(__dirname, '../../docs/aufgaben/zwei-subnetze.json'), 'utf8'));
 const tasks = parsed.ok ? parsed.tasks! : null;

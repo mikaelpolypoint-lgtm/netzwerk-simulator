@@ -77,7 +77,7 @@ export function thirdPartyLicenses({ outFile = 'dist/third-party-licenses.json' 
         if (problems.length) throw new Error('Lizenzprüfung fehlgeschlagen:\n  ' + problems.join('\n  '));
         // Als Kommentar für alle, die die Datei im Editor öffnen …
         const comment =
-          '<!--\n  Netzwerk-Simulator – MIT-Lizenz, Copyright (c) 2026 Mikael von Allmen.\n' +
+          '<!--\n  Netzwerk-Simulator – MIT-Lizenz, Copyright (c) 2026 Mikael von Allmen & vonam-git.\n' +
           '  Enthält Code folgender Pakete (vollständige Lizenztexte unter «Über / Lizenzen»):\n' +
           packages.map((p) => `    ${p.name} ${p.version} (${p.license})`).join('\n') +
           '\n-->';

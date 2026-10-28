@@ -30,7 +30,7 @@
 
   const OWN_LICENSE = `MIT License
 
-Copyright (c) 2026 Mikael von Allmen
+Copyright (c) 2026 Mikael von Allmen & vonam-git
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -66,7 +66,7 @@ SOFTWARE.`;
 
   <h3>{t('about.ownLicense')}</h3>
   <details>
-    <summary>MIT · © 2026 Mikael von Allmen</summary>
+    <summary>MIT · © 2026 Mikael von Allmen & vonam-git</summary>
     <pre>{OWN_LICENSE}</pre>
   </details>
 

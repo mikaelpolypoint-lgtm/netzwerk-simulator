@@ -19,6 +19,7 @@
   import { editor } from './state/editor.svelte';
   import { closeDesktop } from './state/desktop.svelte';
   import { simStore } from './state/sim.svelte';
+  import { session } from './state/session.svelte';
   import { ui, usesProFeatures } from './state/ui.svelte';
   import type { Topology } from '../core';
 
@@ -26,9 +27,25 @@
   function ensureLevel(topology: Topology) {
     if (!ui.pro && usesProFeatures(topology)) {
       ui.setLevel('pro');
-      editor.notify(t('level.switchedToPro'));
+      editor.notify(t(ui.pro ? 'level.switchedToPro' : 'level.proLockedProject'));
     }
   }
+
+  // Hell/Dunkel: «auto» folgt dem System.
+  $effect(() => {
+    const root = document.documentElement;
+    if (ui.theme === 'auto') delete root.dataset.theme;
+    else root.dataset.theme = ui.theme;
+  });
+
+  // Vom Admin gesperrte Modi verlassen (Webversion).
+  $effect(() => {
+    const mode = editor.mode;
+    if (!ui.allowed(mode)) {
+      const fallback = (['design', 'doc', 'action'] as const).find((m) => ui.allowed(m));
+      if (fallback) untrack(() => editor.setMode(fallback));
+    }
+  });
 
   let fileInput: HTMLInputElement;
 
@@ -50,6 +67,19 @@
   let restored = $state(false);
 
   onMount(async () => {
+    // Webversion: Regeln des Admins laden und eine laufende Session fortsetzen.
+    if (ui.online) {
+      const config = await session.loadConfig();
+      if (config) ui.policy = config.policy;
+      const remote = await session.restore();
+      if (remote) {
+        editor.replace(remote.topology, { undoable: false, tasks: remote.tasks ?? null, snapshots: remote.snapshots ?? [] });
+        editor.notify(t('session.restored', { code: session.code ?? '' }));
+        ensureLevel(remote.topology);
+        restored = true;
+        return;
+      }
+    }
     const text = await loadAutosave();
     const parsed = text ? parseProject(text) : null;
     if (parsed?.ok && (parsed.topology.devices.length > 0 || parsed.tasks || parsed.snapshots)) {
@@ -68,7 +98,9 @@
     const flush = () => {
       clearTimeout(timer);
       pendingSave = null;
-      saveAutosave(serializeProject(topology, tasks, snapshots));
+      const json = serializeProject(topology, tasks, snapshots);
+      saveAutosave(json);
+      if (ui.online) session.schedule(json, topology.devices.length > 0);
     };
     const timer = setTimeout(flush, 400);
     pendingSave = flush;
@@ -78,6 +110,7 @@
   // Beim Schliessen oder Neuladen nicht auf das Zeitfenster warten.
   function onpagehide() {
     pendingSave?.();
+    void session.flush();
   }
 
   function onvisibilitychange() {
@@ -130,6 +163,8 @@
       else if (key === 'z') editor.undo();
       else if (key === 'y') editor.redo();
       else if (key === 's') save();
+      else if (key === 'c' && editor.selection?.kind === 'area') editor.copyArea();
+      else if (key === 'v' && editor.canPaste) editor.pasteArea();
       else if (key === 'o') open();
       else return;
       event.preventDefault();

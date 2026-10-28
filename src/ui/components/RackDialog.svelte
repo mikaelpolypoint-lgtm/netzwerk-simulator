@@ -19,16 +19,17 @@
 
   const RACK_TYPES = new Set(['switch', 'l3switch', 'router', 'modem']);
   const floors = $derived(floorsOf(editor.topology));
-  const racks = $derived(
-    floors
-      .map((floor, index) => ({
-        name: floor.name || t('rack.single'),
-        devices: editor.topology.devices
-          .filter((d) => RACK_TYPES.has(d.type) && (d.floor ?? 0) === index)
-          .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x),
-      }))
-      .filter((r) => r.devices.length > 0),
-  );
+  const byY = (a: Device, b: Device) => a.position.y - b.position.y || a.position.x - b.position.x;
+  // Echte Racks von der Karte; nicht eingebaute Geräte pro Stockwerk in einem «freien» Rack.
+  const racks = $derived([
+    ...(editor.topology.areas ?? [])
+      .filter((a) => a.kind === 'rack')
+      .map((a) => ({ name: a.title, devices: editor.topology.devices.filter((d) => d.rack === a.id).sort(byY) })),
+    ...floors.map((floor, index) => ({
+      name: t('rack.unmounted', { floor: floor.name || t('rack.single') }),
+      devices: editor.topology.devices.filter((d) => RACK_TYPES.has(d.type) && !d.rack && (d.floor ?? 0) === index).sort(byY),
+    })),
+  ].filter((r) => r.devices.length > 0));
 
   const units = (d: Device) => (d.interfaces.length > 24 ? 2 : 1);
 </script>

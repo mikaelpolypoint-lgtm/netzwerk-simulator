@@ -3,7 +3,9 @@
   import { t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
+  import CatalogDialog from './CatalogDialog.svelte';
   import ReviewDialog from './ReviewDialog.svelte';
+  import Stars from './Stars.svelte';
   import TaskEditor from './TaskEditor.svelte';
 
   /** Aufgabe mit Lernzielen; "Prüfen" wertet das aktuelle Netz automatisch aus. */
@@ -11,6 +13,7 @@
   let editing = $state(false);
   let checking = $state(false);
   let reviewing = $state(false);
+  let catalog = $state(false);
 
   const tasks = $derived(editor.tasks);
   const passedCount = $derived(results?.filter((r) => r.passed).length ?? 0);
@@ -43,9 +46,12 @@
     </button>
   </div>
 
+  <button class="catalog" onclick={() => (catalog = true)} title={t('catalog.openHint')} disabled={editor.mode === 'action'}>★ {t('catalog.open')}</button>
+
   {#if !tasks}
     <p class="muted">{t('tasks.none')}</p>
   {:else}
+    {#if tasks.difficulty}<Stars n={tasks.difficulty} />{/if}
     <h3>{tasks.title}</h3>
     {#if tasks.description}
       <p class="description">{tasks.description}</p>
@@ -86,12 +92,20 @@
 {#if reviewing}
   <ReviewDialog onclose={() => (reviewing = false)} />
 {/if}
+{#if catalog}
+  <CatalogDialog onclose={() => (catalog = false)} />
+{/if}
 
 <style>
   .tasks {
     padding: 12px;
     border-top: 1px solid var(--border);
     font-size: 0.8rem;
+  }
+  .catalog {
+    width: 100%;
+    margin: 4px 0 8px;
+    font-weight: 600;
   }
   .head {
     display: flex;

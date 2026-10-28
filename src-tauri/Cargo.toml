@@ -2,7 +2,7 @@
 name = "netzwerk-simulator"
 version = "0.2.0"
 description = "Netzwerk-Simulator für den Informatik-Unterricht"
-authors = ["Mikael von Allmen"]
+authors = ["Mikael von Allmen", "vonam-git"]
 license = "MIT"
 repository = "https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator"
 edition = "2021"
