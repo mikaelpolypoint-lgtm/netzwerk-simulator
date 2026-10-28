@@ -5,8 +5,8 @@ Eine **Aufgabendatei** ist eine normale Projektdatei (`.json`) mit einem zusätz
 ## So entsteht eine Aufgabe
 
 1. Startnetz aufbauen, z.B. zwei PCs und einen Router, noch ohne Kabel und Adressen.
-2. Links im Bereich **Aufgabe** auf **Erstellen** klicken. Es öffnet sich eine Vorlage im JSON-Format.
-3. Titel, Beschreibung und Lernziele anpassen (siehe unten), mit **Übernehmen** bestätigen.
+2. Links im Bereich **Aufgabe** auf **Erstellen** klicken. Es öffnet sich ein Formular mit einer Vorlage: Pro Lernziel einen Prüfbaustein aus der Liste wählen und seine Felder ausfüllen (Gerätenamen werden vorgeschlagen). Ohne eigenen Lernziel-Text übernimmt der Simulator einen Vorschlag. Wer lieber direkt schreibt, wechselt oben rechts auf **JSON**.
+3. Titel, Beschreibung und Lernziele anpassen (Bausteine siehe unten), mit **Übernehmen** bestätigen.
 4. Mit **Speichern** (Strg+S) als Datei herunterladen und an die Klasse verteilen, z.B. über den Schul-Share.
 5. Optional eine **Lösungsdatei** erstellen: dieselbe Aufgabe mit fertig gebautem Netz. Damit lässt sich prüfen, dass alle Ziele erreichbar sind.
 
