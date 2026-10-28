@@ -23,5 +23,7 @@
     "vite": "^8.3.5",
     "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^4.1.12"
-  }
+  },
+  "license": "MIT",
+  "author": "Mikael von Allmen"
 }

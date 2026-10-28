@@ -99,3 +99,7 @@ Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse 
 ## Herkunft
 
 Die Idee orientiert sich am öffentlich dokumentierten Konzept der Lernsoftware FILIUS (Universität Siegen). Dies ist eine eigenständige Neuimplementation: Code, Grafiken und Texte des Originals werden nicht verwendet.
+
+## Lizenz
+
+[MIT](LICENSE) © 2026 Mikael von Allmen. Freie Nutzung, Anpassung und Weitergabe, auch an andere Schulen, solange der Lizenzhinweis erhalten bleibt.
