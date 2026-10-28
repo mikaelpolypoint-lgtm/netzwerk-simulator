@@ -26,6 +26,7 @@ npm run dev      # Entwicklungsserver auf http://localhost:5173
 npm test         # Tests des Simulationskerns
 npm run check    # Typprüfung (UI und DOM-freier Kern)
 npm run build    # erzeugt dist/index.html
+npm run verify   # alles zusammen: Typprüfung, Tests, Build (vor jedem Commit)
 ```
 
 `npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. Sie lässt sich direkt per Doppelklick vom Datenträger öffnen (Variante A) oder von einem beliebigen statischen Webserver ausliefern (Variante B).
