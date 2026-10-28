@@ -121,6 +121,60 @@ group('DHCP-Bezug (Abnahme M4)', () => {
   });
 });
 
+group('DHCP-Relay', () => {
+  /** Notebook im Netz 192.168.10.0/24, zentraler Server im Netz 192.168.20.0/24, dazwischen R1. */
+  function relayed(withRelay = true) {
+    const net = new NetBuilder();
+    const nb = net.dhcpClient('NB1');
+    const router = net.router('R1', ['192.168.10.1/24', '192.168.20.1/24']);
+    const server = net.host('Server', '192.168.20.2', '24', '192.168.20.1');
+    net.dhcpServer(server, { start: '192.168.20.100', end: '192.168.20.110', leaseTime: 60 });
+    net.scope(server, { start: '192.168.10.100', end: '192.168.10.110', mask: '/24', gateway: '192.168.10.1', dns: '192.168.20.2' });
+    if (withRelay) net.relay(router, 0, '192.168.20.2');
+    net.link(nb, router);
+    net.link(router, server);
+    return { net, nb, router, server };
+  }
+
+  it('vergibt über den Router eine Adresse aus dem passenden Bereich', () => {
+    const { net, nb, router } = relayed();
+    const sim = new Simulation(net.topology);
+    sim.runUntil(5000);
+    expect(sim.getDeviceState(nb).address).toMatchObject({ ip: '192.168.10.100', gateway: '192.168.10.1', dns: '192.168.20.2' });
+    expect(dhcpLog(net, sim).slice(0, 4)).toEqual([
+      'NB1→R1 DHCP discover 0.0.0.0>255.255.255.255',
+      'R1→Server DHCP discover 192.168.20.1>192.168.20.2',
+      'Server→R1 DHCP offer 192.168.20.2>192.168.10.1',
+      'R1→NB1 DHCP offer 192.168.10.1>255.255.255.255',
+    ]);
+    expect(sim.getDeviceState(router).console.map((l) => l.code)).toContain('relay.forward');
+    // Erneuern und Pingen laufen danach normal über den Router.
+    sim.ping(nb, '192.168.20.2');
+    sim.runUntil(40_000);
+    expect(codes(sim, nb)).toContain('dhcp.renewed');
+    expect(codes(sim, nb).filter((c) => c === 'ping.reply')).toHaveLength(4);
+  });
+
+  it('erreicht ohne Relay keinen Server in einem anderen Netz', () => {
+    const { net, nb } = relayed(false);
+    const sim = new Simulation(net.topology);
+    sim.runUntil(10_000);
+    expect(codes(sim, nb)).toEqual(['dhcp.discover', 'dhcp.noServer']);
+  });
+
+  it('meldet fehlenden Bereich für das Netz des Relays', () => {
+    const { net, nb, server } = relayed();
+    net.topology = {
+      ...net.topology,
+      devices: net.topology.devices.map((d) => (d.id === server ? { ...d, dhcpServer: { ...d.dhcpServer!, scopes: [] } } : d)),
+    };
+    const sim = new Simulation(net.topology);
+    sim.runUntil(10_000);
+    expect(codes(sim, server)).toContain('dhcpServer.noScope');
+    expect(codes(sim, nb)).toEqual(['dhcp.discover', 'dhcp.noServer']);
+  });
+});
+
 group('DHCP-Fehlerfälle', () => {
   it('meldet einen erschöpften Adressbereich', () => {
     const { net, server, clients } = network(2, { ...POOL, end: '192.168.0.100' });

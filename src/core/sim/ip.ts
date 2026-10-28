@@ -3,6 +3,8 @@ import { LIMITED_BROADCAST, broadcastOf, formatIp, parseIp } from '../net/ipv4';
 import { buildRoutes, interfaceAddresses, lookupRoute, type IfaceAddress, type Route } from '../net/routing';
 import {
   BROADCAST_MAC,
+  DHCP_CLIENT_PORT,
+  DHCP_SERVER_PORT,
   ZERO_MAC,
   type ArpPacket,
   type EthernetFrame,
@@ -318,17 +320,41 @@ export class IpNode implements SimNode {
   }
 
   /** Sendet ohne eigene Adresse an alle (DHCP vor der Adressvergabe): Absender 0.0.0.0. */
-  sendUnconfiguredBroadcast(index: number, payload: UdpDatagram) {
+  sendUnconfiguredBroadcast(index: number, payload: UdpDatagram, src = '0.0.0.0') {
     const mac = this.ctx.device()?.interfaces[index]?.mac;
     if (!mac) return;
     this.ctx.transmit(index, {
       src: mac,
       dst: BROADCAST_MAC,
-      payload: { kind: 'ipv4', src: '0.0.0.0', dst: '255.255.255.255', ttl: DEFAULT_TTL, id: ++this.#ipId, payload },
+      payload: { kind: 'ipv4', src, dst: '255.255.255.255', ttl: DEFAULT_TTL, id: ++this.#ipId, payload },
     });
   }
 }
 
+/** Vermittlungsrechner: leitet weiter und kann als DHCP-Relay arbeiten. */
 export class RouterNode extends IpNode {
   protected override readonly forwarding = true;
+
+  /**
+   * DHCP-Relay (RFC 1542): Broadcasts von Clients gehen per Unicast an den
+   * eingetragenen Server, mit der eigenen Interface-Adresse als giaddr;
+   * Antworten des Servers verteilt der Router wieder im Netz des Clients.
+   */
+  protected override onUdp(_packet: Ipv4Packet, datagram: UdpDatagram, index: number) {
+    const msg = datagram.payload;
+    if (msg.kind !== 'dhcp' || datagram.dstPort !== DHCP_SERVER_PORT) return;
+    const fromClient = msg.op === 'discover' || msg.op === 'request' || msg.op === 'release';
+    if (fromClient) {
+      const server = this.ctx.device()?.interfaces[index]?.dhcpRelay;
+      const own = this.interfaces().find((i) => i.index === index);
+      if (!server || !own || msg.giaddr) return;
+      this.ctx.print('relay.forward', { op: msg.op, server });
+      this.sendIp(server, { ...datagram, srcPort: DHCP_SERVER_PORT, payload: { ...msg, giaddr: formatIp(own.ip) } });
+      return;
+    }
+    const out = this.interfaces().find((i) => formatIp(i.ip) === msg.giaddr);
+    if (!out) return;
+    this.ctx.print('relay.back', { op: msg.op, iface: out.index });
+    this.sendUnconfiguredBroadcast(out.index, { ...datagram, dstPort: DHCP_CLIENT_PORT }, formatIp(out.ip));
+  }
 }

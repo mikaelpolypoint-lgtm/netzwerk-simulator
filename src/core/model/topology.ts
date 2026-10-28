@@ -1,4 +1,4 @@
-import { checkDhcpServer, normalizeDhcpServer } from '../net/dhcp';
+import { checkDhcpScope, checkDhcpServer, normalizeDhcpServer, normalizeScope } from '../net/dhcp';
 import { checkDnsRecord, isValidName, normalizeName, normalizeRecord } from '../net/dns';
 import { isValidPath } from '../net/http';
 import { checkMailAccount, checkMailbox } from '../net/mail';
@@ -10,6 +10,7 @@ import type {
   Cable,
   Device,
   DeviceType,
+  DhcpScope,
   DhcpServerConfig,
   DnsRecord,
   Endpoint,
@@ -367,9 +368,52 @@ export function setDhcpServer(t: Topology, id: string, config: DhcpServerConfig 
   }
   return ok(
     updateDevice(t, id, (d) => {
-      const { dhcpServer: _s, ...rest } = d;
-      return config ? { ...rest, dhcpServer: normalizeDhcpServer(config) } : rest;
+      const { dhcpServer: existing, ...rest } = d;
+      // Zusätzliche Bereiche bleiben erhalten, wenn nur der Hauptbereich geändert wird.
+      const scopes = config?.scopes ?? existing?.scopes;
+      return config ? { ...rest, dhcpServer: normalizeDhcpServer({ ...config, ...(scopes ? { scopes } : {}) }) } : rest;
     }),
+  );
+}
+
+export function addDhcpScope(t: Topology, id: string, scope: DhcpScope): Result<Topology> {
+  const config = getDevice(t, id)?.dhcpServer;
+  if (!config) return fail('serviceDisabled');
+  const issue = checkDhcpScope(scope);
+  if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
+  const scopes = [...(config.scopes ?? []), normalizeScope(scope)];
+  return ok(updateDevice(t, id, (d) => ({ ...d, dhcpServer: { ...config, scopes } })));
+}
+
+export function removeDhcpScope(t: Topology, id: string, index: number): Result<Topology> {
+  const config = getDevice(t, id)?.dhcpServer;
+  if (!config?.scopes?.[index]) return fail('unknownRoute');
+  const scopes = config.scopes.filter((_, i) => i !== index);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { scopes: _s, ...rest } = config;
+      return { ...d, dhcpServer: scopes.length ? { ...rest, scopes } : rest };
+    }),
+  );
+}
+
+/** DHCP-Relay eines Router-Interfaces setzen (Server-IP) oder entfernen (""). */
+export function setInterfaceRelay(t: Topology, id: string, index: number, server: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  const value = server.trim();
+  if (value && parseIp(value) === null) return { ok: false, error: { code: 'invalidIp', params: { value }, field: 'relay' } };
+  return ok(
+    updateDevice(t, id, (d) => ({
+      ...d,
+      interfaces: d.interfaces.map((i) => {
+        if (i.index !== index) return i;
+        const { dhcpRelay: _r, ...base } = i;
+        return value ? { ...base, dhcpRelay: value } : base;
+      }),
+    })),
   );
 }
 

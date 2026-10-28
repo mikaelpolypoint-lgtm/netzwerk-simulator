@@ -1,5 +1,7 @@
 // Hilfen für Tests: Netze knapp beschreiben und Paketfolgen lesbar vergleichen.
 import {
+  addDhcpScope,
+  setInterfaceRelay,
   addDevice,
   addDnsRecord,
   addStaticRoute,
@@ -18,7 +20,7 @@ import {
   setInterfaceCount,
   type Result,
 } from '../model/topology';
-import type { DeviceType, DhcpServerConfig, Topology } from '../model/types';
+import type { DeviceType, DhcpScope, DhcpServerConfig, Topology } from '../model/types';
 import type { PacketLogEntry } from './simulation';
 
 export function unwrap<T>(r: Result<T>): T {
@@ -56,6 +58,14 @@ export class NetBuilder {
       this.topology = unwrap(setInterfaceAddress(this.topology, id, index, ip!, prefix!));
     });
     return id;
+  }
+
+  relay(router: string, index: number, server: string) {
+    this.topology = unwrap(setInterfaceRelay(this.topology, router, index, server));
+  }
+
+  scope(server: string, scope: DhcpScope) {
+    this.topology = unwrap(addDhcpScope(this.topology, server, scope));
   }
 
   route(router: string, network: string, mask: string, gateway: string) {

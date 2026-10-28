@@ -1,4 +1,7 @@
 import {
+  addDhcpScope,
+  removeDhcpScope,
+  setInterfaceRelay,
   addDevice,
   addDnsRecord,
   addMailbox,
@@ -30,6 +33,7 @@ import {
   setInterfaceCount,
   suggestName,
   type DeviceType,
+  type DhcpScope,
   type DhcpServerConfig,
   type DnsRecord,
   type HostConfigInput,
@@ -255,6 +259,20 @@ class Editor {
 
   setDhcpServer(id: string, config: DhcpServerConfig | null): TopologyError | null {
     return this.#applyForm(setDhcpServer(this.topology, id, config));
+  }
+
+  addDhcpScope(id: string, scope: DhcpScope): TopologyError | null {
+    return this.#applyForm(addDhcpScope(this.topology, id, scope));
+  }
+
+  removeDhcpScope(id: string, index: number) {
+    if (!this.editable) return;
+    const next = this.#check(removeDhcpScope(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  setInterfaceRelay(id: string, index: number, server: string): TopologyError | null {
+    return this.#applyForm(setInterfaceRelay(this.topology, id, index, server));
   }
 
   setDnsServerEnabled(id: string, enabled: boolean) {

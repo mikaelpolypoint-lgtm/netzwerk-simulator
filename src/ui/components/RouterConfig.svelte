@@ -32,6 +32,22 @@
     return !!draft && (draft.ip.trim() !== (saved?.ip ?? '') || draft.mask.trim() !== (saved?.mask ?? ''));
   };
 
+  // --- DHCP-Relay ------------------------------------------------------------
+
+  let relays = $state<string[]>([]);
+  let relayError = $state<string | null>(null);
+
+  $effect(() => {
+    relays = device.interfaces.map((i) => i.dhcpRelay ?? '');
+    relayError = null;
+  });
+
+  function applyRelay(event: SubmitEvent, index: number) {
+    event.preventDefault();
+    const failure = editor.setInterfaceRelay(device.id, index, relays[index] ?? '');
+    relayError = failure ? t(`error.${failure.code}`, failure.params) : null;
+  }
+
   // --- Statische Routen ------------------------------------------------------
 
   let route = $state({ network: '', mask: '', gateway: '', iface: '' });
@@ -81,6 +97,25 @@
     {/if}
   {/if}
 {/each}
+
+<h3>{t('router.relay')}</h3>
+<p class="muted small-text">{t('router.relayHint')}</p>
+{#each device.interfaces as iface, index (iface.index)}
+  <form class="relay" onsubmit={(e) => applyRelay(e, index)}>
+    <span class="label">{interfaceLabel(device, index)}</span>
+    <input
+      aria-label={t('router.relayFor', { iface: interfaceLabel(device, index) })}
+      placeholder={t('router.relayPlaceholder')}
+      autocomplete="off"
+      spellcheck="false"
+      bind:value={relays[index]}
+    />
+    <button type="submit" disabled={(relays[index] ?? '').trim() === (iface.dhcpRelay ?? '')} aria-label={t('config.apply')} title={t('config.apply')}>✓</button>
+  </form>
+{/each}
+{#if relayError}
+  <p class="error" role="alert">{relayError}</p>
+{/if}
 
 <h3>{t('router.staticRoutes')}</h3>
 {#if (device.routes ?? []).length === 0}
@@ -138,6 +173,20 @@
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;
+  }
+  .relay {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+    gap: 4px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .relay button {
+    padding: 3px 8px;
+  }
+  .small-text {
+    margin: 0 0 4px;
+    font-size: 0.75rem;
   }
   .iface {
     display: grid;

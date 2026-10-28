@@ -1,4 +1,5 @@
-import { formatIp, maskToText, networkOf, parseIp } from '../net/ipv4';
+import { scopeFor, type ResolvedScope } from '../net/dhcp';
+import { formatIp, maskToText, parseIp } from '../net/ipv4';
 import type { IfaceAddress } from '../net/routing';
 import { DHCP_CLIENT_PORT, DHCP_SERVER_PORT, type DhcpMessage, type DhcpOp, type Ipv4Packet, type UdpDatagram } from './frames';
 import type { SendOptions } from './ip';
@@ -233,9 +234,13 @@ export class DhcpServer {
     const config = device?.dhcpServer;
     const own = this.host.interfaces()[0];
     if (!config || device.dhcp || !own) return;
-    const start = parseIp(config.start);
-    const end = parseIp(config.end);
-    if (start === null || end === null || networkOf(start, own.prefix) !== networkOf(own.ip, own.prefix)) return;
+    // Über ein Relay gibt giaddr das Netz des Clients an; bei der Erneuerung seine eigene Adresse.
+    const scope = scopeFor(device, msg.giaddr ?? (packet.src !== '0.0.0.0' ? packet.src : undefined));
+    if (!scope) {
+      if (msg.giaddr) this.#ctx.print('dhcpServer.noScope', { relay: msg.giaddr });
+      return;
+    }
+    const { start, end } = scope;
     const ownIp = formatIp(own.ip);
     const mac = msg.clientMac;
 
@@ -246,8 +251,8 @@ export class DhcpServer {
         return;
       }
       this.#offers.set(mac, { mac, ip: formatIp(ip), expires: this.#ctx.now + OFFER_HOLD });
-      this.#ctx.print('dhcpServer.offer', { ip: formatIp(ip), mac });
-      this.#reply('offer', msg, formatIp(ip), '255.255.255.255');
+      this.#ctx.print(msg.giaddr ? 'dhcpServer.offerRelayed' : 'dhcpServer.offer', { ip: formatIp(ip), mac, relay: msg.giaddr ?? '' });
+      this.#reply('offer', msg, formatIp(ip), '255.255.255.255', scope);
     } else if (msg.op === 'request') {
       // Der Client hat sich für einen anderen Server entschieden.
       if (msg.serverIp && msg.serverIp !== ownIp) {
@@ -261,13 +266,13 @@ export class DhcpServer {
       const replyTo = packet.src === '0.0.0.0' ? '255.255.255.255' : packet.src;
       if (!valid) {
         this.#ctx.print('dhcpServer.nak', { ip: requested, mac });
-        this.#reply('nak', msg, undefined, replyTo);
+        this.#reply('nak', msg, undefined, replyTo, scope);
         return;
       }
       this.#offers.delete(mac);
       this.#leases.set(mac, { mac, ip: requested, expires: this.#ctx.now + config.leaseTime * 1000 });
       this.#ctx.print('dhcpServer.ack', { ip: requested, mac });
-      this.#reply('ack', msg, requested, replyTo);
+      this.#reply('ack', msg, requested, replyTo, scope);
     } else if (msg.op === 'release') {
       const lease = this.#leases.get(mac);
       if (lease && lease.ip === packet.src) {
@@ -296,7 +301,7 @@ export class DhcpServer {
     return null;
   }
 
-  #reply(op: DhcpOp, request: DhcpMessage, yourIp: string | undefined, to: string) {
+  #reply(op: DhcpOp, request: DhcpMessage, yourIp: string | undefined, to: string, scope: ResolvedScope) {
     const config = this.#ctx.device()?.dhcpServer;
     const own = this.host.interfaces()[0];
     if (!config || !own) return;
@@ -306,16 +311,19 @@ export class DhcpServer {
       xid: request.xid,
       clientMac: request.clientMac,
       serverIp: formatIp(own.ip),
+      ...(request.giaddr ? { giaddr: request.giaddr } : {}),
       ...(op === 'nak'
         ? {}
         : {
             yourIp,
-            mask: maskToText(own.prefix),
+            mask: maskToText(scope.prefix),
             leaseTime: config.leaseTime,
-            ...(config.gateway ? { gateway: config.gateway } : {}),
-            ...(config.dns ? { dns: config.dns } : {}),
+            ...(scope.gateway ? { gateway: scope.gateway } : {}),
+            ...(scope.dns ? { dns: scope.dns } : {}),
           }),
     };
-    this.host.sendIp(to, datagram(DHCP_SERVER_PORT, DHCP_CLIENT_PORT, message));
+    // Antworten auf weitergeleitete Anfragen gehen an das Relay (Port 67), das sie im Client-Netz verteilt.
+    if (request.giaddr) this.host.sendIp(request.giaddr, datagram(DHCP_SERVER_PORT, DHCP_SERVER_PORT, message));
+    else this.host.sendIp(to, datagram(DHCP_SERVER_PORT, DHCP_CLIENT_PORT, message));
   }
 }

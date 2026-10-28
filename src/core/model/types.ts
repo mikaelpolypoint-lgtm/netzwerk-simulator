@@ -15,6 +15,8 @@ export interface NetInterface {
   ip?: string;
   /** Subnetzmaske in Punktschreibweise, z.B. "255.255.255.0". */
   mask?: string;
+  /** Nur Router: DHCP-Anfragen aus diesem Netz an diesen Server weiterleiten (DHCP-Relay). */
+  dhcpRelay?: string;
 }
 
 export interface Device {
@@ -102,6 +104,16 @@ export interface DhcpServerConfig {
   dns?: string;
   /** Lease-Dauer in Sekunden. */
   leaseTime: number;
+  /** Weitere Bereiche für entfernte Netze, die über ein DHCP-Relay angefragt werden. */
+  scopes?: DhcpScope[];
+}
+
+export interface DhcpScope {
+  start: string;
+  end: string;
+  mask: string;
+  gateway?: string;
+  dns?: string;
 }
 
 export interface StaticRoute {

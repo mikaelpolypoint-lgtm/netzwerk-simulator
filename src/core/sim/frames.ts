@@ -52,6 +52,8 @@ export interface DhcpMessage {
   dns?: string;
   /** Lease-Dauer in Sekunden. */
   leaseTime?: number;
+  /** Adresse des DHCP-Relays, über das die Anfrage kam ("giaddr"); fehlt bei direkter Anfrage. */
+  giaddr?: string;
 }
 
 export interface DnsMessage {

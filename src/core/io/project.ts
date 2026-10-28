@@ -202,6 +202,7 @@ function readDevice(v: unknown, path: string): Device {
       if (prefix === null) throw new Invalid(`${p}.mask`);
       iface.mask = maskToText(prefix);
     }
+    if (io.dhcpRelay !== undefined) iface.dhcpRelay = ip(io.dhcpRelay, `${p}.dhcpRelay`);
     return iface;
   });
 
@@ -220,6 +221,21 @@ function readDevice(v: unknown, path: string): Device {
     const server: DhcpServerConfig = { start: ip(s.start, `${p}.start`), end: ip(s.end, `${p}.end`), leaseTime };
     if (s.gateway !== undefined) server.gateway = ip(s.gateway, `${p}.gateway`);
     if (s.dns !== undefined) server.dns = ip(s.dns, `${p}.dns`);
+    if (s.scopes !== undefined) {
+      server.scopes = arr(s.scopes, `${p}.scopes`).map((raw, i) => {
+        const sp = `${p}.scopes[${i}]`;
+        const sc = obj(raw, sp);
+        const prefix = parseMask(str(sc.mask, `${sp}.mask`));
+        if (prefix === null) throw new Invalid(`${sp}.mask`);
+        return {
+          start: ip(sc.start, `${sp}.start`),
+          end: ip(sc.end, `${sp}.end`),
+          mask: maskToText(prefix),
+          ...(sc.gateway !== undefined ? { gateway: ip(sc.gateway, `${sp}.gateway`) } : {}),
+          ...(sc.dns !== undefined ? { dns: ip(sc.dns, `${sp}.dns`) } : {}),
+        };
+      });
+    }
     device.dhcpServer = server;
   }
   if (o.dnsServer !== undefined) {

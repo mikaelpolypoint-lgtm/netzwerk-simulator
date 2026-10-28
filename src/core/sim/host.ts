@@ -109,7 +109,8 @@ export class HostNode extends IpNode {
     if (datagram.dstPort === DHCP_CLIENT_PORT) {
       this.dhcpClient.onMessage(msg);
       // Den Server kennen wir aus seinem Ack; Erneuern und Freigeben brauchen so kein ARP.
-      if (msg.op === 'ack' && msg.serverIp && this.dhcpClient.lease) this.learnNeighbor(msg.serverIp, srcMac, index);
+      // Kam die Antwort über ein Relay, steht der Server in einem anderen Netz: dann nichts lernen.
+      if (msg.op === 'ack' && msg.serverIp && !msg.giaddr && this.dhcpClient.lease) this.learnNeighbor(msg.serverIp, srcMac, index);
     } else if (datagram.dstPort === DHCP_SERVER_PORT) {
       this.dhcpServer.onMessage(packet, msg);
     }
