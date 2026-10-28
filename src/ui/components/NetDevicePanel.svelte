@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Device } from '../../core';
+  import { isRouterType, type Device } from '../../core';
   import { t } from '../../i18n';
   import { simStore } from '../state/sim.svelte';
   import RoutingTable from './RoutingTable.svelte';
@@ -15,8 +15,36 @@
 {#if device.type === 'switch'}
   <p class="muted">{t('switch.explain')}</p>
   <StateTables {device} macTable={deviceState?.macTable ?? []} {now} />
-{:else if device.type === 'router'}
+{:else if isRouterType(device.type)}
+  {#if device.type === 'internet'}
+    <p class="muted">{t('internet.explain')}</p>
+  {/if}
   <RoutingTable {device} />
+  {#if device.type === 'router' && device.interfaces.some((i) => i.nat)}
+    <h3>{t('nat.table')}</h3>
+    {#if (deviceState?.nat ?? []).length === 0}
+      <p class="muted">{t('nat.empty')}</p>
+    {:else}
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{t('nat.protocol')}</th>
+            <th scope="col">{t('nat.inside')}</th>
+            <th scope="col">{t('nat.outside')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each deviceState?.nat ?? [] as entry (`${entry.protocol}:${entry.outsidePort}`)}
+            <tr>
+              <td>{entry.protocol.toUpperCase()}{entry.forwarded ? ' ⇄' : ''}</td>
+              <td class="mono">{entry.inside}:{entry.insidePort}</td>
+              <td class="mono">{entry.outside}:{entry.outsidePort}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  {/if}
   <StateTables {device} arp={deviceState?.arp ?? []} {now} />
   {#if deviceState?.console.length}
     <h3>{t('router.log')}</h3>
@@ -38,6 +66,24 @@
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 3px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--muted);
+    font-weight: normal;
+  }
+  .mono {
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   }
   .log {
     list-style: none;

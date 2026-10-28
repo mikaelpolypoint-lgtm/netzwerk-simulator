@@ -1,4 +1,7 @@
 import {
+  addPortForward,
+  removePortForward,
+  setInterfaceNat,
   addDhcpScope,
   removeDhcpScope,
   setInterfaceRelay,
@@ -42,6 +45,7 @@ import {
   type TaskSet,
   type WebFile,
   type Point,
+  type PortForward,
   type Result,
   type StaticRoute,
   type Topology,
@@ -268,6 +272,22 @@ class Editor {
   removeDhcpScope(id: string, index: number) {
     if (!this.editable) return;
     const next = this.#check(removeDhcpScope(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  setInterfaceNat(id: string, index: number, nat: boolean) {
+    if (!this.editable) return;
+    const next = this.#check(setInterfaceNat(this.topology, id, index, nat));
+    if (next) this.#commit(next);
+  }
+
+  addPortForward(id: string, forward: PortForward): TopologyError | null {
+    return this.#applyForm(addPortForward(this.topology, id, forward));
+  }
+
+  removePortForward(id: string, index: number) {
+    if (!this.editable) return;
+    const next = this.#check(removePortForward(this.topology, id, index));
     if (next) this.#commit(next);
   }
 

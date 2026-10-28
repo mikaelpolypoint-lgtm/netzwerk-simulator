@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEVICE_SPECS, MAX_NAME_LENGTH, cableAt, getDevice, otherEnd, type Device } from '../../core';
+  import { DEVICE_SPECS, MAX_NAME_LENGTH, cableAt, getDevice, isRouterType, otherEnd, type Device } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel, roleLabel, typeLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -91,7 +91,7 @@
       {/if}
     {:else if !editor.editable}
       <NetDevicePanel {device} />
-    {:else if device.type === 'router'}
+    {:else if isRouterType(device.type)}
       <RouterConfig {device} />
     {/if}
 

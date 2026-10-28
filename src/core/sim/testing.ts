@@ -1,5 +1,7 @@
 // Hilfen für Tests: Netze knapp beschreiben und Paketfolgen lesbar vergleichen.
 import {
+  addPortForward,
+  setInterfaceNat,
   addDhcpScope,
   setInterfaceRelay,
   addDevice,
@@ -49,15 +51,28 @@ export class NetBuilder {
     return id;
   }
 
+  /** Internet-Gerät mit Adressen in CIDR-Schreibweise. */
+  internet(name: string, addresses: string[]): string {
+    return this.router(name, addresses, 'internet');
+  }
+
   /** Router mit Adressen in CIDR-Schreibweise, z.B. ["192.168.1.1/24", "192.168.2.1/24"]. */
-  router(name: string, addresses: string[]): string {
-    const id = this.add('router', name);
+  router(name: string, addresses: string[], type: 'router' | 'internet' = 'router'): string {
+    const id = this.add(type, name);
     if (addresses.length > 2) this.topology = unwrap(setInterfaceCount(this.topology, id, addresses.length));
     addresses.forEach((cidr, index) => {
       const [ip, prefix] = cidr.split('/');
       this.topology = unwrap(setInterfaceAddress(this.topology, id, index, ip!, prefix!));
     });
     return id;
+  }
+
+  nat(router: string, index: number) {
+    this.topology = unwrap(setInterfaceNat(this.topology, router, index, true));
+  }
+
+  portForward(router: string, port: number, to: string, toPort = port) {
+    this.topology = unwrap(addPortForward(this.topology, router, { protocol: 'tcp', port, to, toPort }));
   }
 
   relay(router: string, index: number, server: string) {

@@ -42,6 +42,15 @@ describe('Beispielprojekte', () => {
     expect(sim.getDeviceState('d4').mail?.inbox).toMatchObject([{ from: 'anna@schule.ch', subject: 'Hallo' }]);
   });
 
+  it('heimnetz-nat.json: PC erreicht das Internet über NAT, Aussen erreicht das NAS über die Weiterleitung', () => {
+    const sim = new Simulation(load('heimnetz-nat.json'));
+    sim.browse('d1', 'http://198.51.100.10/');
+    sim.browse('d8', 'http://203.0.113.2/');
+    sim.runUntil(5000);
+    expect(sim.getDeviceState('d1').browser?.response?.body).toContain('Öffentlicher Webserver');
+    expect(sim.getDeviceState('d8').browser?.response?.body).toContain('NAS im Heimnetz');
+  });
+
   it('dhcp.json: alle drei Clients erhalten eine Adresse', () => {
     const sim = new Simulation(load('dhcp.json'));
     sim.runUntil(10_000);

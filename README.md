@@ -75,6 +75,9 @@ Regeln, die das Projekt technisch absichert:
 - HTTP: Rechner können Webserver mit editierbaren HTML-Seiten sein. Der Webbrowser zeigt jeden Schritt (DNS, TCP, GET, Antwort) und die Seite; Links darin lösen simulierte Abrufe aus. Seiten laufen in einem Sandbox-Frame ohne Skripte.
 - E-Mail: Rechner können Mailserver sein (Domain, Postfächer). SMTP zum Versenden, auch zwischen Domains über MX-Einträge; POP3 (abholen und löschen) und IMAP (Nachrichten bleiben auf dem Server). Das E-Mail-Programm zeigt den ganzen Protokolldialog.
 - Paketliste mit Schichtenansicht (Ethernet → ARP/IPv4 → ICMP/UDP/TCP → DHCP/DNS/HTTP/SMTP/POP3/IMAP); Vereinfachungen sind pro Schicht vermerkt. Zeitlauf-Regler mit Anhalten, Einzelschritt und Zeitlupe, in der die Rahmen als Punkte über die Kabel wandern.
+- Kabel lassen sich auf andere Anschlüsse umstecken und können beschädigt sein (0–100 % Paketverlust, für Fehlersuche-Übungen; ein Zufallsgenerator mit festem Startwert hält Abläufe wiederholbar).
+- Router können als DHCP-Relay einen zentralen DHCP-Server für mehrere Netze nutzen; der Server hat dafür weitere Bereiche.
+- Das Gerät «Internet» leitet wie ein Provider weiter und verwirft private Adressen. Router übersetzen mit NAT (inkl. Port-Übersetzung) und bieten Portweiterleitungen für Server im Heimnetz.
 - Schleifen zwischen Switches lässt der Editor nicht zu (es gibt kein Spanning Tree, sonst entstünde ein Broadcast-Sturm).
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
 
@@ -84,7 +87,7 @@ Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruc
 
 ## Beispiele
 
-[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) und `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver) und `heimnetz-nat.json` (Heimnetz mit NAT, öffentlicher Webserver, Portweiterleitung auf ein NAS). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 

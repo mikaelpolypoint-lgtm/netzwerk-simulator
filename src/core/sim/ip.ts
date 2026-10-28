@@ -1,5 +1,5 @@
 import type { Device } from '../model/types';
-import { LIMITED_BROADCAST, broadcastOf, formatIp, parseIp } from '../net/ipv4';
+import { LIMITED_BROADCAST, broadcastOf, formatIp, isPrivate, parseIp } from '../net/ipv4';
 import { buildRoutes, interfaceAddresses, lookupRoute, type IfaceAddress, type Route } from '../net/routing';
 import {
   BROADCAST_MAC,
@@ -194,8 +194,21 @@ export class IpNode implements SimNode {
     if (dst === null) return;
     const iface = this.interfaces().find((i) => i.index === index);
     const broadcast = dst === LIMITED_BROADCAST || (iface !== undefined && dst === broadcastOf(iface.ip, iface.prefix));
-    if (this.isOwn(dst) || broadcast) this.#deliver(packet, broadcast, index, srcMac);
+    // NAT: Antworten an die Internet-Adresse des Routers gehen an den internen Rechner weiter.
+    const translated = this.forwarding && iface ? this.inbound(iface, packet) : null;
+    if (translated && iface) this.#forward(iface, translated);
+    else if (this.isOwn(dst) || broadcast) this.#deliver(packet, broadcast, index, srcMac);
     else if (this.forwarding && iface) this.#forward(iface, packet);
+  }
+
+  /** Eingehende Übersetzung (NAT) vor der Zustellung; null = nichts zu übersetzen. */
+  protected inbound(_iface: IfaceAddress, _packet: Ipv4Packet): Ipv4Packet | null {
+    return null;
+  }
+
+  /** Letzter Schritt vor dem Weiterleiten (NAT, Filter); null = verwerfen. */
+  protected outbound(_inIface: IfaceAddress, _outIface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    return packet;
   }
 
   /** Weiterleiten wie ein Router: TTL senken, Route wählen, bei Problemen ICMP an den Absender. */
@@ -211,7 +224,8 @@ export class IpNode implements SimNode {
       this.#icmpError(inIface, packet, 'destUnreachable', 'net');
       return;
     }
-    const forwarded: Ipv4Packet = { ...packet, ttl: packet.ttl - 1 };
+    const forwarded = this.outbound(inIface, out, { ...packet, ttl: packet.ttl - 1 });
+    if (!forwarded) return;
     this.#resolve(out.index, route.via ?? dst, {
       onMac: (mac) => this.ctx.transmit(out.index, { src: out.mac, dst: mac, payload: forwarded }),
       onFail: () => this.#icmpError(inIface, packet, 'destUnreachable', 'host'),
@@ -331,9 +345,103 @@ export class IpNode implements SimNode {
   }
 }
 
-/** Vermittlungsrechner: leitet weiter und kann als DHCP-Relay arbeiten. */
+export const NAT_TIMEOUT = 300_000;
+export const NAT_PORT_START = 50_000;
+
+export interface NatEntry {
+  protocol: 'tcp' | 'udp' | 'icmp';
+  inside: string;
+  insidePort: number;
+  outside: string;
+  outsidePort: number;
+  /** Durch eine Portweiterleitung entstanden statt durch ausgehenden Verkehr. */
+  forwarded: boolean;
+  expires: number;
+}
+
+type Flow = { protocol: NatEntry['protocol']; port: number };
+
+/** Port bzw. ICMP-Kennung, die NAT umschreibt; `side` = Quelle oder Ziel. */
+function flowOf(payload: Ipv4Packet['payload'], side: 'src' | 'dst'): Flow | null {
+  if (payload.kind === 'tcp' || payload.kind === 'udp') {
+    return { protocol: payload.kind, port: side === 'src' ? payload.srcPort : payload.dstPort };
+  }
+  if (payload.type === 'echoRequest' || payload.type === 'echoReply') return { protocol: 'icmp', port: payload.id };
+  return null;
+}
+
+function withFlowPort(payload: Ipv4Packet['payload'], side: 'src' | 'dst', port: number): Ipv4Packet['payload'] {
+  if (payload.kind === 'tcp' || payload.kind === 'udp') return side === 'src' ? { ...payload, srcPort: port } : { ...payload, dstPort: port };
+  return { ...payload, id: port };
+}
+
+/** Vermittlungsrechner: leitet weiter, kann als DHCP-Relay arbeiten und Adressen übersetzen (NAT). */
 export class RouterNode extends IpNode {
   protected override readonly forwarding = true;
+  #byInside = new Map<string, NatEntry>();
+  #byOutside = new Map<string, NatEntry>();
+  #nextPort = NAT_PORT_START;
+
+  #isNat(index: number) {
+    return !!this.ctx.device()?.interfaces[index]?.nat;
+  }
+
+  natEntries(): NatEntry[] {
+    const now = this.ctx.now;
+    return [...this.#byOutside.values()].filter((e) => e.expires > now).sort((a, b) => a.outsidePort - b.outsidePort);
+  }
+
+  #remember(entry: NatEntry) {
+    this.#byInside.set(`${entry.protocol}:${entry.inside}:${entry.insidePort}`, entry);
+    this.#byOutside.set(`${entry.protocol}:${entry.outside}:${entry.outsidePort}`, entry);
+  }
+
+  /** Ausgehend ins Internet: Absender wird die Router-Adresse, der Port eine freie Nummer (PAT). */
+  protected override outbound(inIface: IfaceAddress, outIface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    if (!this.#isNat(outIface.index) || this.#isNat(inIface.index)) return packet;
+    const flow = flowOf(packet.payload, 'src');
+    if (!flow) return packet;
+    const now = this.ctx.now;
+    const outside = formatIp(outIface.ip);
+    let entry = this.#byInside.get(`${flow.protocol}:${packet.src}:${flow.port}`);
+    if (!entry || entry.expires <= now || entry.outside !== outside) {
+      entry = {
+        protocol: flow.protocol,
+        inside: packet.src,
+        insidePort: flow.port,
+        outside,
+        outsidePort: this.#nextPort++,
+        forwarded: false,
+        expires: 0,
+      };
+      this.#remember(entry);
+      this.ctx.print('nat.new', { protocol: flow.protocol.toUpperCase(), inside: `${entry.inside}:${entry.insidePort}`, outside: `${outside}:${entry.outsidePort}` });
+    }
+    entry.expires = now + NAT_TIMEOUT;
+    return { ...packet, src: outside, payload: withFlowPort(packet.payload, 'src', entry.outsidePort) };
+  }
+
+  /** Eingehend an die Internet-Adresse: bekannte Verbindung oder Portweiterleitung → interner Rechner. */
+  protected override inbound(iface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    if (!this.#isNat(iface.index) || packet.dst !== formatIp(iface.ip)) return null;
+    const flow = flowOf(packet.payload, 'dst');
+    if (!flow) return null;
+    const now = this.ctx.now;
+    let entry = this.#byOutside.get(`${flow.protocol}:${packet.dst}:${flow.port}`);
+    if (!entry || entry.expires <= now) {
+      const rule = (this.ctx.device()?.portForwards ?? []).find((f) => f.protocol === flow.protocol && f.port === flow.port);
+      if (!rule) return null;
+      entry = { protocol: flow.protocol, inside: rule.to, insidePort: rule.toPort, outside: packet.dst, outsidePort: rule.port, forwarded: true, expires: 0 };
+      this.#remember(entry);
+      this.ctx.print('nat.forward', { protocol: flow.protocol.toUpperCase(), port: rule.port, inside: `${rule.to}:${rule.toPort}` });
+    }
+    entry.expires = now + NAT_TIMEOUT;
+    return { ...packet, dst: entry.inside, payload: withFlowPort(packet.payload, 'dst', entry.insidePort) };
+  }
+
+  override state(): object {
+    return { ...super.state(), nat: this.natEntries() };
+  }
 
   /**
    * DHCP-Relay (RFC 1542): Broadcasts von Clients gehen per Unicast an den
@@ -356,5 +464,24 @@ export class RouterNode extends IpNode {
     if (!out) return;
     this.ctx.print('relay.back', { op: msg.op, iface: out.index });
     this.sendUnconfiguredBroadcast(out.index, { ...datagram, dstPort: DHCP_CLIENT_PORT }, formatIp(out.ip));
+  }
+}
+
+/**
+ * Das Internet als vereinfachter Provider-Router: leitet zwischen seinen
+ * Anschlüssen weiter, verwirft aber private Adressen (RFC 1918), wie es
+ * echte Provider tun. Darum braucht ein Heimnetz NAT.
+ */
+export class InternetNode extends IpNode {
+  protected override readonly forwarding = true;
+
+  protected override outbound(_in: IfaceAddress, _out: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    const src = parseIp(packet.src);
+    const dst = parseIp(packet.dst);
+    if ((src !== null && isPrivate(src)) || (dst !== null && isPrivate(dst))) {
+      this.ctx.print('internet.private', { src: packet.src, dst: packet.dst });
+      return null;
+    }
+    return packet;
   }
 }

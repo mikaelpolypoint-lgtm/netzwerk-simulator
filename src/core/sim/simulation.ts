@@ -8,7 +8,7 @@ import type { DnsCacheEntry } from './dns';
 import { HostNode, type AddressState, type ConnectionInfo } from './host';
 import type { BrowserState } from './http';
 import type { MailClientState } from './mail';
-import { RouterNode, type ArpEntry } from './ip';
+import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
 import { EventQueue } from './queue';
 import { ModemNode, SwitchNode, type MacEntry } from './switch';
 
@@ -61,6 +61,7 @@ export interface DeviceState {
   browser?: BrowserState;
   mail?: MailClientState;
   mailboxes?: { user: string; count: number }[];
+  nat?: NatEntry[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -235,7 +236,9 @@ export class Simulation {
           ? new ModemNode(ctx)
           : device.type === 'router'
             ? new RouterNode(ctx)
-            : new HostNode(ctx);
+            : device.type === 'internet'
+              ? new InternetNode(ctx)
+              : new HostNode(ctx);
     this.#nodes.set(id, node);
     return node;
   }

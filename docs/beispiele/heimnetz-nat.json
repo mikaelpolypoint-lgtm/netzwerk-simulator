@@ -1,0 +1,335 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "pc",
+        "name": "PC",
+        "position": {
+          "x": -460,
+          "y": -90
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "ip": "192.168.0.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.0.1"
+      },
+      {
+        "id": "d2",
+        "type": "pc",
+        "name": "NAS",
+        "position": {
+          "x": -460,
+          "y": 90
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "ip": "192.168.0.20",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "192.168.0.1",
+        "webServer": {
+          "files": [
+            {
+              "path": "/index.html",
+              "content": "<h1>NAS im Heimnetz</h1>\n<p>Von aussen nur über die Portweiterleitung des Heimrouters erreichbar.</p>"
+            }
+          ]
+        }
+      },
+      {
+        "id": "d3",
+        "type": "switch",
+        "name": "Switch Heim",
+        "position": {
+          "x": -280,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:03:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:03:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:03:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:03:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:03:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:03:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:03:07"
+          }
+        ]
+      },
+      {
+        "id": "d4",
+        "type": "router",
+        "name": "Heimrouter",
+        "position": {
+          "x": -100,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00",
+            "ip": "192.168.0.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:04:01",
+            "ip": "203.0.113.2",
+            "mask": "255.255.255.252",
+            "nat": true
+          }
+        ],
+        "routes": [
+          {
+            "network": "0.0.0.0",
+            "mask": "0.0.0.0",
+            "gateway": "203.0.113.1"
+          }
+        ],
+        "portForwards": [
+          {
+            "protocol": "tcp",
+            "port": 80,
+            "to": "192.168.0.20",
+            "toPort": 80
+          }
+        ]
+      },
+      {
+        "id": "d5",
+        "type": "internet",
+        "name": "Internet",
+        "position": {
+          "x": 100,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00",
+            "ip": "203.0.113.1",
+            "mask": "255.255.255.252"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:05:01",
+            "ip": "198.51.100.1",
+            "mask": "255.255.255.0"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:05:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:05:03"
+          }
+        ]
+      },
+      {
+        "id": "d6",
+        "type": "switch",
+        "name": "Switch Rechenzentrum",
+        "position": {
+          "x": 290,
+          "y": 0
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:06:00"
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:06:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:06:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:06:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:06:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:06:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:06:06"
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:06:07"
+          }
+        ]
+      },
+      {
+        "id": "d7",
+        "type": "pc",
+        "name": "Webserver",
+        "position": {
+          "x": 470,
+          "y": -90
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:07:00",
+            "ip": "198.51.100.10",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "198.51.100.1",
+        "webServer": {
+          "files": [
+            {
+              "path": "/index.html",
+              "content": "<h1>Öffentlicher Webserver</h1>\n<p>Deine Anfrage kam von der öffentlichen Adresse des Heimrouters, nicht von 192.168.0.10.</p>"
+            }
+          ]
+        }
+      },
+      {
+        "id": "d8",
+        "type": "notebook",
+        "name": "Aussen",
+        "position": {
+          "x": 470,
+          "y": 90
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:08:00",
+            "ip": "198.51.100.20",
+            "mask": "255.255.255.0"
+          }
+        ],
+        "gateway": "198.51.100.1"
+      }
+    ],
+    "cables": [
+      {
+        "id": "c9",
+        "a": {
+          "device": "d1",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c10",
+        "a": {
+          "device": "d2",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c11",
+        "a": {
+          "device": "d3",
+          "iface": 2
+        },
+        "b": {
+          "device": "d4",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c12",
+        "a": {
+          "device": "d4",
+          "iface": 1
+        },
+        "b": {
+          "device": "d5",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c13",
+        "a": {
+          "device": "d5",
+          "iface": 1
+        },
+        "b": {
+          "device": "d6",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c14",
+        "a": {
+          "device": "d7",
+          "iface": 0
+        },
+        "b": {
+          "device": "d6",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c15",
+        "a": {
+          "device": "d8",
+          "iface": 0
+        },
+        "b": {
+          "device": "d6",
+          "iface": 2
+        }
+      }
+    ],
+    "nextId": 16
+  },
+  "configuration": {}
+}

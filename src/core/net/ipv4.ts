@@ -62,6 +62,13 @@ export function isReserved(ip: number): boolean {
   return first === 0 || first === 127 || first >= 224;
 }
 
+/** Private Adressbereiche nach RFC 1918: im Internet nicht geroutet. */
+export function isPrivate(ip: number): boolean {
+  const a = ip >>> 24;
+  const b = (ip >>> 16) & 0xff;
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 export interface AddressIssue {
   code: string;
   field: 'ip' | 'mask' | 'gateway' | 'dns';

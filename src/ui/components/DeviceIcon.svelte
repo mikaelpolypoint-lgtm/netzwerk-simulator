@@ -23,6 +23,9 @@
       class="line"
       d="M-5 -5 L-12 -12 M-12 -7 V-12 H-7 M5 5 L12 12 M12 7 V12 H7 M5 -5 L12 -12 M7 -12 H12 V-7 M-5 5 L-12 12 M-7 12 H-12 V7"
     />
+  {:else if type === 'internet'}
+    <path d="M-16 12 H16 A10 10 0 0 0 15 -7 A13 13 0 0 0 -9 -11 A11 11 0 0 0 -16 12 Z" />
+    <path class="line" d="M-9 3 H9 M0 -6 V12 M-6 -3 Q0 3 -6 9 M6 -3 Q0 3 6 9" />
   {:else}
     <rect x="-23" y="-6" width="46" height="18" rx="4" />
     <path class="line" d="M-9 -12 Q0 -20 9 -12 M-5 -10 Q0 -14 5 -10" />

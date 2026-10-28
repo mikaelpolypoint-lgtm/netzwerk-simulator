@@ -203,6 +203,10 @@ function readDevice(v: unknown, path: string): Device {
       iface.mask = maskToText(prefix);
     }
     if (io.dhcpRelay !== undefined) iface.dhcpRelay = ip(io.dhcpRelay, `${p}.dhcpRelay`);
+    if (io.nat !== undefined) {
+      if (typeof io.nat !== 'boolean') throw new Invalid(`${p}.nat`);
+      if (io.nat) iface.nat = true;
+    }
     return iface;
   });
 
@@ -268,6 +272,18 @@ function readDevice(v: unknown, path: string): Device {
       return { path: filePath, content: str(f.content, `${fp}.content`) };
     });
     device.webServer = { files };
+  }
+  if (o.portForwards !== undefined) {
+    device.portForwards = arr(o.portForwards, `${path}.portForwards`).map((raw, i) => {
+      const fp = `${path}.portForwards[${i}]`;
+      const f = obj(raw, fp);
+      if (f.protocol !== 'tcp' && f.protocol !== 'udp') throw new Invalid(`${fp}.protocol`);
+      const port = int(f.port, `${fp}.port`);
+      const toPort = int(f.toPort, `${fp}.toPort`);
+      if (port < 1 || port > 65535) throw new Invalid(`${fp}.port`);
+      if (toPort < 1 || toPort > 65535) throw new Invalid(`${fp}.toPort`);
+      return { protocol: f.protocol, port, to: ip(f.to, `${fp}.to`), toPort };
+    });
   }
   if (o.mailServer !== undefined) {
     const p = `${path}.mailServer`;

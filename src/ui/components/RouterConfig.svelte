@@ -32,6 +32,23 @@
     return !!draft && (draft.ip.trim() !== (saved?.ip ?? '') || draft.mask.trim() !== (saved?.mask ?? ''));
   };
 
+  // --- NAT-Portweiterleitungen -------------------------------------------------
+
+  let forwardDraft = $state({ protocol: 'tcp' as 'tcp' | 'udp', port: '80', to: '', toPort: '80' });
+  let forwardError = $state<string | null>(null);
+
+  function addForward(event: SubmitEvent) {
+    event.preventDefault();
+    const failure = editor.addPortForward(device.id, {
+      protocol: forwardDraft.protocol,
+      port: Number(forwardDraft.port),
+      to: forwardDraft.to,
+      toPort: Number(forwardDraft.toPort || forwardDraft.port),
+    });
+    forwardError = failure ? t(`error.${failure.code}`, failure.params) : null;
+    if (!failure) forwardDraft = { ...forwardDraft, to: '' };
+  }
+
   // --- DHCP-Relay ------------------------------------------------------------
 
   let relays = $state<string[]>([]);
@@ -97,6 +114,40 @@
     {/if}
   {/if}
 {/each}
+
+{#if device.type === 'router'}
+  <h3>{t('nat.title')}</h3>
+  <p class="muted small-text">{t('nat.hint')}</p>
+  {#each device.interfaces as iface, index (iface.index)}
+    <label class="nat">
+      <input type="checkbox" checked={!!iface.nat} onchange={(e) => editor.setInterfaceNat(device.id, index, e.currentTarget.checked)} />
+      {t('nat.outsideIface', { iface: interfaceLabel(device, index) })}
+    </label>
+  {/each}
+
+  {#if device.interfaces.some((i) => i.nat)}
+    <h4>{t('nat.forwards')}</h4>
+    {#each device.portForwards ?? [] as forward, i (i)}
+      <div class="forward">
+        <span class="mono">{forward.protocol.toUpperCase()} :{forward.port} → {forward.to}:{forward.toPort}</span>
+        <button class="small" onclick={() => editor.removePortForward(device.id, i)} aria-label={t('nat.removeForward')}>✕</button>
+      </div>
+    {/each}
+    <form class="add-forward" onsubmit={addForward}>
+      <select bind:value={forwardDraft.protocol} aria-label={t('nat.protocol')}>
+        <option value="tcp">TCP</option>
+        <option value="udp">UDP</option>
+      </select>
+      <input bind:value={forwardDraft.port} inputmode="numeric" placeholder="80" aria-label={t('nat.port')} />
+      <input bind:value={forwardDraft.to} placeholder="192.168.0.20" aria-label={t('nat.to')} autocomplete="off" spellcheck="false" />
+      <input bind:value={forwardDraft.toPort} inputmode="numeric" placeholder="80" aria-label={t('nat.toPort')} />
+      <button type="submit" disabled={!forwardDraft.to.trim()} aria-label={t('nat.addForward')} title={t('nat.addForward')}>+</button>
+    </form>
+    {#if forwardError}
+      <p class="error" role="alert">{forwardError}</p>
+    {/if}
+  {/if}
+{/if}
 
 <h3>{t('router.relay')}</h3>
 <p class="muted small-text">{t('router.relayHint')}</p>
@@ -173,6 +224,34 @@
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;
+  }
+  .nat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    margin-top: 2px;
+  }
+  h4 {
+    margin: 10px 0 4px;
+    font-size: 0.8rem;
+  }
+  .forward {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .add-forward {
+    display: grid;
+    grid-template-columns: 4rem 3.5rem minmax(0, 1fr) 3.5rem auto;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .add-forward button {
+    padding: 3px 8px;
   }
   .relay {
     display: grid;

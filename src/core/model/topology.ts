@@ -4,7 +4,7 @@ import { isValidPath } from '../net/http';
 import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, normalizeRoute } from '../net/routing';
-import { DEVICE_SPECS } from './devices';
+import { DEVICE_SPECS, isRouterType } from './devices';
 import { macFor } from './mac';
 import type {
   Cable,
@@ -18,6 +18,7 @@ import type {
   Mailbox,
   NetInterface,
   Point,
+  PortForward,
   StaticRoute,
   Topology,
   WebFile,
@@ -38,6 +39,8 @@ export type ErrorCode =
   | 'interfaceConnected'
   | 'interfaceInUse'
   | 'invalidLoss'
+  | 'invalidPort'
+  | 'duplicateForward'
   | 'notAnEndpoint'
   | 'unknownInterface'
   | 'invalidIp'
@@ -401,7 +404,7 @@ export function removeDhcpScope(t: Topology, id: string, index: number): Result<
 export function setInterfaceRelay(t: Topology, id: string, index: number, server: string): Result<Topology> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (device.type !== 'router') return fail('notARouter');
+  if (!isRouterType(device.type)) return fail('notARouter');
   if (!device.interfaces[index]) return fail('unknownInterface');
   const value = server.trim();
   if (value && parseIp(value) === null) return { ok: false, error: { code: 'invalidIp', params: { value }, field: 'relay' } };
@@ -414,6 +417,54 @@ export function setInterfaceRelay(t: Topology, id: string, index: number, server
         return value ? { ...base, dhcpRelay: value } : base;
       }),
     })),
+  );
+}
+
+// --- NAT ---------------------------------------------------------------------
+
+/** Markiert ein Router-Interface als Internet-Seite: Ausgehendes erhält dessen Adresse (NAT). */
+export function setInterfaceNat(t: Topology, id: string, index: number, nat: boolean): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  return ok(
+    updateDevice(t, id, (d) => ({
+      ...d,
+      interfaces: d.interfaces.map((i) => {
+        if (i.index !== index) return i;
+        const { nat: _n, ...base } = i;
+        return nat ? { ...base, nat: true } : base;
+      }),
+    })),
+  );
+}
+
+export function addPortForward(t: Topology, id: string, forward: PortForward): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  const validPort = (p: number) => Number.isInteger(p) && p >= 1 && p <= 65535;
+  if (!validPort(forward.port)) return { ok: false, error: { code: 'invalidPort', field: 'port' } };
+  if (!validPort(forward.toPort)) return { ok: false, error: { code: 'invalidPort', field: 'toPort' } };
+  if (parseIp(forward.to.trim()) === null) return { ok: false, error: { code: 'invalidIp', params: { value: forward.to }, field: 'to' } };
+  const existing = device.portForwards ?? [];
+  if (existing.some((f) => f.protocol === forward.protocol && f.port === forward.port)) {
+    return { ok: false, error: { code: 'duplicateForward', params: { port: forward.port }, field: 'port' } };
+  }
+  const entry: PortForward = { protocol: forward.protocol, port: forward.port, to: forward.to.trim(), toPort: forward.toPort };
+  return ok(updateDevice(t, id, (d) => ({ ...d, portForwards: [...existing, entry] })));
+}
+
+export function removePortForward(t: Topology, id: string, index: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device?.portForwards?.[index]) return fail('unknownRoute');
+  const forwards = device.portForwards.filter((_, i) => i !== index);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { portForwards: _p, ...rest } = d;
+      return forwards.length ? { ...rest, portForwards: forwards } : rest;
+    }),
   );
 }
 
@@ -558,7 +609,7 @@ export function setMailAccount(t: Topology, id: string, account: MailAccount | n
 export function addStaticRoute(t: Topology, id: string, route: StaticRoute): Result<Topology> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (device.type !== 'router') return fail('notARouter');
+  if (!isRouterType(device.type)) return fail('notARouter');
   const issue = checkStaticRoute(device, route);
   if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
   return ok(updateDevice(t, id, (d) => ({ ...d, routes: [...(d.routes ?? []), normalizeRoute(route)] })));

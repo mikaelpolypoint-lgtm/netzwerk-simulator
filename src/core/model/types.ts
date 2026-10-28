@@ -1,4 +1,4 @@
-export type DeviceType = 'notebook' | 'pc' | 'switch' | 'router' | 'modem';
+export type DeviceType = 'notebook' | 'pc' | 'switch' | 'router' | 'modem' | 'internet';
 
 /** Rolle eines Geräts, bestimmt u.a. die Farbe in der Oberfläche. */
 export type DeviceRole = 'endpoint' | 'distribution' | 'routing';
@@ -17,6 +17,17 @@ export interface NetInterface {
   mask?: string;
   /** Nur Router: DHCP-Anfragen aus diesem Netz an diesen Server weiterleiten (DHCP-Relay). */
   dhcpRelay?: string;
+  /** Nur Router: Interface zeigt ins Internet; ausgehende Pakete erhalten dessen Adresse (NAT). */
+  nat?: boolean;
+}
+
+export interface PortForward {
+  protocol: 'tcp' | 'udp';
+  /** Port auf der Internet-Adresse des Routers. */
+  port: number;
+  /** Interner Rechner und Port, an den weitergeleitet wird. */
+  to: string;
+  toPort: number;
 }
 
 export interface Device {
@@ -43,6 +54,8 @@ export interface Device {
   mailAccount?: MailAccount;
   /** Nur Vermittlungsrechner: statische Routen. */
   routes?: StaticRoute[];
+  /** Nur Router mit NAT: Portweiterleitungen von aussen an interne Rechner. */
+  portForwards?: PortForward[];
 }
 
 export type DnsType = 'A' | 'MX';
