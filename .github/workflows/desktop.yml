@@ -1,0 +1,75 @@
+# Baut die Desktop-Installer (Windows, macOS, Linux) mit Tauri und legt sie
+# als Entwurf eines GitHub-Release ab. Auslösen: Tag "v0.2.0" pushen oder
+# auf GitHub unter Actions → Desktop → "Run workflow".
+#
+# Hinweis: Die Installer sind nicht signiert. Windows (SmartScreen) und macOS
+# (Gatekeeper) warnen deshalb beim ersten Start; siehe docs/desktop.md.
+name: Desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Linux-Bibliotheken
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      # Lizenztexte aller eingebauten Rust-Pakete neu erzeugen (landen im Installer).
+      - name: Rust-Lizenzhinweise
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          cargo install cargo-about --locked --features cli
+          cargo about generate about.hbs -o THIRD_PARTY_RUST.md
+
+      # Prüft Code und Lizenzen und erzeugt THIRD_PARTY_NOTICES.md für das Paket.
+      - run: npm run release
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('desktop-{0}', github.run_number) }}
+          releaseName: 'Netzwerk-Simulator ${{ github.ref_type == ''tag'' && github.ref_name || format(''Test {0}'', github.run_number) }}'
+          releaseBody: 'Installer für Windows (.msi/.exe), macOS (.dmg) und Linux (.deb/.AppImage/.rpm). Nicht signiert, siehe docs/desktop.md.'
+          releaseDraft: true
+          prerelease: ${{ github.ref_type != 'tag' }}
+          args: ${{ matrix.args }}
