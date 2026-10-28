@@ -1,17 +1,22 @@
 <script lang="ts">
-  import { LOCALES, locale, setLocale, t, type Locale } from '../../i18n';
+  import { t } from '../../i18n';
   import { editor, type Mode } from '../state/editor.svelte';
+  import { session } from '../state/session.svelte';
   import { ui } from '../state/ui.svelte';
   import AboutDialog from './AboutDialog.svelte';
+  import AdminDialog from './AdminDialog.svelte';
+  import FeedbackDialog from './FeedbackDialog.svelte';
+  import PrivacyDialog from './PrivacyDialog.svelte';
   import RackDialog from './RackDialog.svelte';
+  import SessionDialog from './SessionDialog.svelte';
+  import SettingsMenu from './SettingsMenu.svelte';
   import SnapshotDialog from './SnapshotDialog.svelte';
 
   let { onopen, onsave }: { onopen: () => void; onsave: () => void } = $props();
 
-  const modes: Mode[] = ['design', 'action', 'doc'];
-  let about = $state(false);
-  let snapshots = $state(false);
-  let rack = $state(false);
+  // Der Admin kann Modi sperren (Webversion); gesperrte erscheinen nicht.
+  const modes = $derived((['design', 'action', 'doc'] as Mode[]).filter((m) => ui.allowed(m)));
+  let dialog = $state<'about' | 'snapshots' | 'rack' | 'privacy' | 'feedback' | 'admin' | 'session' | null>(null);
 </script>
 
 <header class="toolbar">
@@ -52,8 +57,8 @@
     {/if}
   </div>
 
-  <button onclick={() => (rack = true)} title={t('toolbar.rackHint')}>{t('toolbar.rack')}</button>
-  <button onclick={() => (snapshots = true)} title={t('toolbar.snapshotsHint')}>
+  <button onclick={() => (dialog = 'rack')} title={t('toolbar.rackHint')}>{t('toolbar.rack')}</button>
+  <button onclick={() => (dialog = 'snapshots')} title={t('toolbar.snapshotsHint')}>
     {t('toolbar.snapshots')}{editor.snapshots.length ? ` (${editor.snapshots.length})` : ''}
   </button>
 
@@ -73,31 +78,39 @@
     {/each}
   </div>
 
-  <div class="level" role="radiogroup" aria-label={t('level.label')} title={t('level.hint')}>
+  <div class="level" role="radiogroup" aria-label={t('level.label')} title={ui.policy.pro ? t('level.hint') : t('settings.proLocked')}>
     <button role="radio" aria-checked={!ui.pro} onclick={() => ui.setLevel('basic')}>{t('level.basic')}</button>
-    <button role="radio" aria-checked={ui.pro} onclick={() => ui.setLevel('pro')}>{t('level.pro')}</button>
+    <button role="radio" aria-checked={ui.pro} disabled={!ui.policy.pro} onclick={() => ui.setLevel('pro')}>{t('level.pro')}</button>
   </div>
 
-  <label class="language">
-    <span class="visually-hidden">{t('toolbar.language')}</span>
-    <select value={locale()} onchange={(e) => setLocale(e.currentTarget.value as Locale)} title={t('toolbar.language')}>
-      {#each LOCALES as code (code)}
-        <option value={code}>{code.toUpperCase()}</option>
-      {/each}
-    </select>
-  </label>
+  {#if ui.online}
+    <button class="session" onclick={() => (dialog = 'session')} title={t('session.buttonHint')}>
+      {session.code ? t('session.button', { code: session.code }) : t('session.buttonNone')}
+    </button>
+  {/if}
 
-  <button onclick={() => (about = true)}>{t('toolbar.about')}</button>
+  <SettingsMenu
+    onabout={() => (dialog = 'about')}
+    onprivacy={() => (dialog = 'privacy')}
+    onfeedback={() => (dialog = 'feedback')}
+    onadmin={() => (dialog = 'admin')}
+  />
 </header>
 
-{#if about}
-  <AboutDialog onclose={() => (about = false)} />
-{/if}
-{#if snapshots}
-  <SnapshotDialog onclose={() => (snapshots = false)} />
-{/if}
-{#if rack}
-  <RackDialog onclose={() => (rack = false)} />
+{#if dialog === 'about'}
+  <AboutDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'snapshots'}
+  <SnapshotDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'rack'}
+  <RackDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'privacy'}
+  <PrivacyDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'feedback'}
+  <FeedbackDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'admin'}
+  <AdminDialog onclose={() => (dialog = null)} />
+{:else if dialog === 'session'}
+  <SessionDialog onclose={() => (dialog = null)} />
 {/if}
 
 <style>
@@ -110,13 +123,9 @@
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
-  .language select {
-    font: inherit;
-    padding: 2px 4px;
-    color: var(--text);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
+  .session {
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.8rem;
   }
   h1 {
     margin: 0 8px 0 0;

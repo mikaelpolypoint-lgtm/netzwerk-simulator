@@ -32,7 +32,7 @@
     "category": "Education",
     "shortDescription": "Netzwerk-Simulator für den Informatik-Unterricht",
     "longDescription": "Rechnernetze aufbauen, Geräte konfigurieren und den Verkehr auf Paketebene beobachten. Läuft vollständig offline.",
-    "copyright": "© 2026 Mikael von Allmen, MIT-Lizenz",
+    "copyright": "© 2026 Mikael von Allmen & vonam-git, MIT-Lizenz",
     "license": "MIT",
     "licenseFile": "../LICENSE",
     "resources": {

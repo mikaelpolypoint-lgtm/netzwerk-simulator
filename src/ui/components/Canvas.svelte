@@ -1,8 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { getDevice, isDeviceType, type Device, type DocArea, type Point, type TagColor } from '../../core';
+  import { getDevice, isDeviceType, type Device, type DocArea, type Point, type SfpModule, type TagColor } from '../../core';
   import { t } from '../../i18n';
-  import { DEVICE_MIME } from '../dnd';
+  import { AREA_PRESETS, presetArea } from '../areaPresets';
+  import { AREA_MIME, DEVICE_MIME, SFP_MIME } from '../dnd';
   import { protocolOf } from '../packets';
   import { GRID, editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
@@ -176,23 +177,51 @@
       areaDrag = null;
     }
     if (drag) {
-      editor.endDrag();
+      editor.endDeviceDrag(drag.id);
       drag = null;
     }
     panFrom = null;
   }
 
   function onDragOver(event: DragEvent) {
-    if (!editor.editable || !event.dataTransfer?.types.includes(DEVICE_MIME)) return;
+    const types = event.dataTransfer?.types ?? [];
+    const fits =
+      (editor.editable && (types.includes(DEVICE_MIME) || types.includes(SFP_MIME))) ||
+      ((editor.editable || editor.documenting) && types.includes(AREA_MIME));
+    if (!fits || !event.dataTransfer) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }
 
+  /** Gerät unter einem Punkt (für SFP-Module, die auf ein Gerät gezogen werden). */
+  function deviceAt(p: Point): Device | undefined {
+    return editor.topology.devices.find((d) => !offFloor(d) && Math.abs(d.position.x - p.x) <= 40 && Math.abs(d.position.y - p.y) <= 34);
+  }
+
   function onDrop(event: DragEvent) {
-    const type = event.dataTransfer?.getData(DEVICE_MIME);
-    if (!isDeviceType(type)) return;
-    event.preventDefault();
-    editor.addDevice(type, world(event), ui.floor === 'all' ? 0 : ui.floor);
+    const data = event.dataTransfer;
+    if (!data) return;
+    const p = world(event);
+    const floor = ui.floor === 'all' ? undefined : ui.floor;
+    const type = data.getData(DEVICE_MIME);
+    if (isDeviceType(type)) {
+      event.preventDefault();
+      editor.addDevice(type, p, floor ?? 0);
+      return;
+    }
+    const sfp = data.getData(SFP_MIME);
+    if (sfp) {
+      event.preventDefault();
+      const target = deviceAt(p);
+      if (target) editor.insertSfp(sfp as SfpModule, target.id);
+      else editor.notify(t('sfp.dropOnDevice'), 'error');
+      return;
+    }
+    const preset = AREA_PRESETS.find((a) => a.key === data.getData(AREA_MIME));
+    if (preset) {
+      event.preventDefault();
+      editor.addArea(presetArea(preset, p, areas.length + 1, floor));
+    }
   }
 </script>
 
@@ -251,7 +280,7 @@
         <line class="rubber" x1={source.position.x} y1={source.position.y} x2={pointer.x} y2={pointer.y} />
       {/if}
       {#each editor.topology.devices as device (device.id)}
-        <DeviceNode {device} onpointerdown={onDevicePointerDown} faded={offFloor(device)} />
+        <DeviceNode {device} onpointerdown={onDevicePointerDown} faded={offFloor(device)} racked={!!device.rack} />
       {/each}
       {#each dots as dot (dot.id)}
         <circle class="dot-packet proto-{dot.protocol}" cx={dot.x} cy={dot.y} r="7" />

@@ -4,7 +4,7 @@ import { isValidPath } from '../net/http';
 import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, decodeIface, normalizeRoute } from '../net/routing';
-import { DEVICE_SPECS, hasRoutingTable, isSwitchType } from './devices';
+import { DEVICE_SPECS, hasRoutingTable, isRackable, isSwitchType } from './devices';
 import { macFor } from './mac';
 import type {
   Cable,
@@ -12,6 +12,7 @@ import type {
   DeviceType,
   DocArea,
   Medium,
+  SfpModule,
   TagColor,
   CliConfig,
   WifiClient,
@@ -97,7 +98,14 @@ export type ErrorCode =
   | 'unknownFloor'
   | 'lastFloor'
   | 'invalidUser'
-  | 'textTooLong';
+  | 'textTooLong'
+  | 'noSfpModule'
+  | 'notAnSfpSlot'
+  | 'noFreeSfpSlot'
+  | 'fiberNeedsSfp'
+  | 'copperNeedsRj45'
+  | 'notRackable'
+  | 'notARack';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -141,8 +149,14 @@ export function otherEnd(cable: Cable, deviceId: string): Endpoint {
   return cable.a.device === deviceId ? cable.b : cable.a;
 }
 
+/** Erster freier RJ45-Anschluss (SFP-Einschübe sind für Glasfaser reserviert). */
 export function freeInterface(t: Topology, device: Device): NetInterface | undefined {
-  return device.interfaces.find((i) => !cableAt(t, { device: device.id, iface: i.index }));
+  return device.interfaces.find((i) => !i.sfpSlot && !cableAt(t, { device: device.id, iface: i.index }));
+}
+
+/** RJ45-Anschlüsse eines Geräts (ohne SFP-Einschübe). */
+export function copperPorts(device: Device): NetInterface[] {
+  return device.interfaces.filter((i) => !i.sfpSlot);
 }
 
 export function deviceSeq(id: string): number {
@@ -172,6 +186,14 @@ function makeInterfaces(seq: number, from: number, to: number): NetInterface[] {
   return list;
 }
 
+/** Neues Gerät: RJ45-Anschlüsse, danach die SFP-Einschübe. */
+function initialInterfaces(seq: number, type: DeviceType): NetInterface[] {
+  const spec = DEVICE_SPECS[type];
+  const copper = makeInterfaces(seq, 0, spec.defaultInterfaces);
+  const slots = makeInterfaces(seq, spec.defaultInterfaces, spec.defaultInterfaces + (spec.sfpSlots ?? 0)).map((i) => ({ ...i, sfpSlot: true }));
+  return [...copper, ...slots];
+}
+
 function updateDevice(t: Topology, id: string, change: (d: Device) => Device): Topology {
   return { ...t, devices: t.devices.map((d) => (d.id === id ? change(d) : d)) };
 }
@@ -190,7 +212,7 @@ export function addDevice(
     type,
     name: checked.value,
     position: { ...position },
-    interfaces: makeInterfaces(seq, 0, DEVICE_SPECS[type].defaultInterfaces),
+    interfaces: initialInterfaces(seq, type),
   };
   return ok({ topology: { ...t, devices: [...t.devices, device], nextId: seq + 1 }, id: device.id });
 }
@@ -221,9 +243,12 @@ export function removeDevice(t: Topology, id: string): Result<Topology> {
 }
 
 /** Passender freier Anschluss für ein Medium: Funk nur an Funk-Ports des Access Points, Kabel nur an Buchsen. */
-function freeInterfaceFor(t: Topology, device: Device, medium: Medium): NetInterface | undefined {
+export function freeInterfaceFor(t: Topology, device: Device, medium: Medium): NetInterface | undefined {
   return device.interfaces.find((i) => {
     if (cableAt(t, { device: device.id, iface: i.index })) return false;
+    // Glasfaser nur in SFP-Einschüben mit Modul, Kupfer und Funk nie dort.
+    if (medium === 'fiber') return !!i.sfpSlot && !!i.sfp;
+    if (i.sfpSlot) return false;
     if (device.type !== 'accesspoint') return true;
     return medium === 'wireless' ? i.index > 0 : i.index === 0;
   });
@@ -250,9 +275,9 @@ export function connect(t: Topology, aId: string, bId: string, medium: Medium = 
     return fail('switchLoop', { a: a.name, b: b.name });
   }
   const ia = freeInterfaceFor(t, a, medium);
-  if (!ia) return fail('noFreeInterface', { device: a.name });
+  if (!ia) return fail(medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface', { device: a.name });
   const ib = freeInterfaceFor(t, b, medium);
-  if (!ib) return fail('noFreeInterface', { device: b.name });
+  if (!ib) return fail(medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface', { device: b.name });
   const cable: Cable = {
     id: `c${t.nextId}`,
     a: { device: a.id, iface: ia.index },
@@ -271,6 +296,11 @@ export function setCableMedium(t: Topology, id: string, medium: Medium): Result<
   if (!a || !b) return fail('unknownDevice');
   const issue = checkMedium(a, b, medium);
   if (issue) return fail(issue);
+  for (const [d, iface] of [[a, cable.a.iface], [b, cable.b.iface]] as const) {
+    const slot = !!d.interfaces[iface]?.sfpSlot;
+    if (medium === 'fiber' && !slot) return fail('fiberNeedsSfp', { device: d.name });
+    if (medium !== 'fiber' && slot) return fail('copperNeedsRj45', { device: d.name });
+  }
   const radio = (d: Device, iface: number) => d.type === 'accesspoint' && iface > 0;
   const wantsRadio = medium === 'wireless';
   if (radio(a, cable.a.iface) !== wantsRadio && a.type === 'accesspoint') return fail('radioPortNeedsWireless');
@@ -445,6 +475,10 @@ export function replugCable(t: Topology, id: string, end: 'a' | 'b', iface: numb
   if (cable[end].iface === iface) return ok(t);
   // Access Point: Funk nur an Funk-Ports, Kabel nur an der LAN-Buchse.
   if (device.type === 'accesspoint' && (iface > 0) !== (cable.medium === 'wireless')) return fail('radioPortNeedsWireless');
+  // Glasfaser gehört in einen SFP-Einschub, Kupfer in eine RJ45-Buchse.
+  const slot = !!device.interfaces[iface]?.sfpSlot;
+  if (cable.medium === 'fiber' && !slot) return fail('fiberNeedsSfp', { device: device.name });
+  if (cable.medium !== 'fiber' && slot) return fail('copperNeedsRj45', { device: device.name });
   const occupied = cableAt(t, { device: device.id, iface });
   if (occupied) return fail('interfaceInUse', { device: device.name, index: iface });
   return ok({
@@ -458,7 +492,11 @@ export function removeCable(t: Topology, id: string): Result<Topology> {
   return ok({ ...t, cables: t.cables.filter((c) => c.id !== id) });
 }
 
-/** Ändert die Anzahl Ports; entfernt werden immer die höchsten, und nur wenn sie frei sind. */
+/**
+ * Ändert die Anzahl RJ45-Ports; entfernt werden immer die höchsten, und nur
+ * wenn sie frei sind. SFP-Einschübe bleiben erhalten und rücken ans Ende;
+ * Kabel, Subinterfaces und Routen auf ihnen ziehen mit.
+ */
 export function setInterfaceCount(t: Topology, id: string, count: number): Result<Topology> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
@@ -466,15 +504,52 @@ export function setInterfaceCount(t: Topology, id: string, count: number): Resul
   if (!Number.isInteger(count) || count < spec.minInterfaces || count > spec.maxInterfaces) {
     return fail('interfaceCountOutOfRange', { min: spec.minInterfaces, max: spec.maxInterfaces });
   }
-  const current = device.interfaces.length;
-  if (count === current) return ok(t);
-  if (count < current) {
-    const busy = device.interfaces.slice(count).find((i) => cableAt(t, { device: id, iface: i.index }));
+  const copper = copperPorts(device);
+  const slots = device.interfaces.filter((i) => i.sfpSlot);
+  if (count === copper.length) return ok(t);
+  if (count < copper.length) {
+    const busy = copper.slice(count).find((i) => cableAt(t, { device: id, iface: i.index }));
     if (busy) return fail('interfaceConnected', { device: device.name, index: busy.index });
-    return ok(updateDevice(t, id, (d) => ({ ...d, interfaces: d.interfaces.slice(0, count) })));
   }
-  const added = makeInterfaces(deviceSeq(id), current, count);
-  return ok(updateDevice(t, id, (d) => ({ ...d, interfaces: [...d.interfaces, ...added] })));
+  // Neue Ports erhalten MAC-Adressen, die das Gerät noch nicht verwendet.
+  const used = new Set(device.interfaces.map((i) => i.mac));
+  const seq = deviceSeq(id);
+  let next = 0;
+  const fresh = () => {
+    while (used.has(macFor(seq, next))) next++;
+    const mac = macFor(seq, next);
+    used.add(mac);
+    return mac;
+  };
+  const keptCopper = copper.slice(0, count);
+  const addedCopper = Array.from({ length: Math.max(0, count - copper.length) }, () => ({ mac: fresh() }));
+  const ordered: Omit<NetInterface, 'index'>[] = [...keptCopper, ...addedCopper, ...slots];
+  const mapping = new Map<number, number>();
+  const interfaces = ordered.map((iface, index) => {
+    if ('index' in iface && typeof iface.index === 'number') mapping.set(iface.index, index);
+    return { ...iface, index } as NetInterface;
+  });
+  return ok(remapPorts({ ...t }, id, interfaces, mapping));
+}
+
+/** Setzt neue Anschlüsse und passt alle Verweise (Kabel, Subinterfaces, Routen) an. */
+function remapPorts(t: Topology, id: string, interfaces: NetInterface[], mapping: Map<number, number>): Topology {
+  const map = (index: number) => mapping.get(index) ?? index;
+  return {
+    ...t,
+    devices: t.devices.map((d) => {
+      if (d.id !== id) return d;
+      const next: Device = { ...d, interfaces };
+      if (d.subinterfaces) next.subinterfaces = d.subinterfaces.map((si) => ({ ...si, parent: map(si.parent) }));
+      if (d.routes) next.routes = d.routes.map((r) => (r.iface !== undefined && decodeIface(r.iface).kind === 'port' ? { ...r, iface: map(r.iface) } : r));
+      return next;
+    }),
+    cables: t.cables.map((c) => ({
+      ...c,
+      a: c.a.device === id ? { ...c.a, iface: map(c.a.iface) } : c.a,
+      b: c.b.device === id ? { ...c.b, iface: map(c.b.iface) } : c.b,
+    })),
+  };
 }
 
 /** Leere Felder entfernen den Eintrag; Masken werden in Punktschreibweise gespeichert. */
@@ -1076,6 +1151,7 @@ function checkArea(area: DocArea): Result<DocArea> {
   if (area.vlan !== undefined && (!Number.isInteger(area.vlan) || area.vlan < 1 || area.vlan > 4094)) return fail('invalidVlan');
   const clean: DocArea = {
     id: area.id,
+    ...(area.kind === 'rack' ? { kind: 'rack' as const } : {}),
     title: area.title,
     color: area.color,
     x: Math.round(area.x),
@@ -1099,14 +1175,22 @@ export function updateArea(t: Topology, id: string, change: Partial<Omit<DocArea
   }
   const checked = checkArea(merged);
   if (!checked.ok) return checked;
-  return ok({ ...t, areas: t.areas!.map((a) => (a.id === id ? checked.value : a)) });
+  const next = { ...t, areas: t.areas!.map((a) => (a.id === id ? checked.value : a)) };
+  // Ein verschobenes Rack nimmt seine Geräte mit.
+  return ok(area.kind === 'rack' ? arrangeRack(next, id) : next);
 }
 
 export function removeArea(t: Topology, id: string): Result<Topology> {
   if (!t.areas?.some((a) => a.id === id)) return fail('unknownArea');
   const areas = t.areas.filter((a) => a.id !== id);
   const { areas: _a, ...rest } = t;
-  return ok(areas.length ? { ...rest, areas } : rest);
+  // Geräte eines entfernten Racks bleiben an ihrem Platz, sind aber nicht mehr eingebaut.
+  const devices = t.devices.map((d) => {
+    if (d.rack !== id) return d;
+    const { rack: _r, ...base } = d;
+    return base;
+  });
+  return ok(areas.length ? { ...rest, devices, areas } : { ...rest, devices });
 }
 
 // --- Befehlszeile ---------------------------------------------------------------
@@ -1148,5 +1232,92 @@ export function setVlanName(t: Topology, id: string, vlan: number, name: string)
       const { vlanNames: _v, ...rest } = d;
       return list.length ? { ...rest, vlanNames: list } : rest;
     }),
+  );
+}
+
+// --- SFP-Module ------------------------------------------------------------------
+
+/** Modul in einen bestimmten SFP-Einschub stecken oder entfernen (`null`). */
+export function setSfpModule(t: Topology, id: string, index: number, module: SfpModule | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  const iface = device.interfaces[index];
+  if (!iface) return fail('unknownInterface');
+  if (!iface.sfpSlot) return fail('notAnSfpSlot');
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { sfp: _s, ...base } = i;
+      return module ? { ...base, sfp: module } : base;
+    }),
+  );
+}
+
+/** Modul in den ersten leeren SFP-Einschub stecken (aus der Palette). */
+export function insertSfpModule(t: Topology, id: string, module: SfpModule): Result<{ topology: Topology; index: number }> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  const slot = device.interfaces.find((i) => i.sfpSlot && !i.sfp);
+  if (!slot) return fail('noFreeSfpSlot', { device: device.name });
+  const next = setSfpModule(t, id, slot.index, module);
+  return next.ok ? ok({ topology: next.value, index: slot.index }) : next;
+}
+
+// --- Racks -----------------------------------------------------------------------
+
+/** Höhe einer Höheneinheit auf der Zeichenfläche und Kopfzeile des Racks. */
+export const RACK_UNIT = 74;
+export const RACK_HEADER = 44;
+
+/** Geräte eines Racks von oben nach unten anordnen; das Rack wächst bei Bedarf mit. */
+export function arrangeRack(t: Topology, rackId: string): Topology {
+  const rack = t.areas?.find((a) => a.id === rackId && a.kind === 'rack');
+  if (!rack) return t;
+  const members = t.devices.filter((d) => d.rack === rackId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
+  const height = Math.max(rack.height, RACK_HEADER + members.length * RACK_UNIT + 20);
+  const slot = new Map(members.map((d, i) => [d.id, i]));
+  return {
+    ...t,
+    areas: t.areas!.map((a) => (a.id === rackId ? { ...a, height } : a)),
+    devices: t.devices.map((d) => {
+      const i = slot.get(d.id);
+      if (i === undefined) return d;
+      const position = { x: Math.round(rack.x + rack.width / 2), y: Math.round(rack.y + RACK_HEADER + i * RACK_UNIT + RACK_UNIT / 2) };
+      return { ...d, position, ...(rack.floor !== undefined && rack.floor > 0 ? { floor: rack.floor } : {}) };
+    }),
+  };
+}
+
+/**
+ * Gerät in ein Rack einbauen oder ausbauen (`null`). Ohne `keepOrder` kommt es
+ * zuunterst; mit `keepOrder` (beim Ablegen per Maus) zählt seine Höhe.
+ */
+export function setDeviceRack(t: Topology, id: string, rackId: string | null, keepOrder = false): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (rackId === null) {
+    if (!device.rack) return ok(t);
+    const previous = device.rack;
+    const without = updateDevice(t, id, (d) => {
+      const { rack: _r, ...rest } = d;
+      return rest;
+    });
+    return ok(arrangeRack(without, previous));
+  }
+  if (!isRackable(device.type)) return fail('notRackable');
+  const rack = t.areas?.find((a) => a.id === rackId);
+  if (!rack || rack.kind !== 'rack') return fail('notARack');
+  const bottom = { x: device.position.x, y: rack.y + rack.height + 10_000 };
+  let next = updateDevice(t, id, (d) => ({ ...d, rack: rackId, ...(keepOrder || d.rack === rackId ? {} : { position: bottom }) }));
+  if (device.rack && device.rack !== rackId) next = arrangeRack(next, device.rack);
+  return ok(arrangeRack(next, rackId));
+}
+
+/** Rack, dessen Fläche den Punkt enthält (für Ziehen und Ablegen). */
+export function rackAt(t: Topology, x: number, y: number, floor?: number): DocArea | undefined {
+  return t.areas?.find(
+    (a) =>
+      a.kind === 'rack' &&
+      (floor === undefined || a.floor === undefined || a.floor === floor) &&
+      x >= a.x && x <= a.x + a.width && y >= a.y && y <= a.y + a.height,
   );
 }

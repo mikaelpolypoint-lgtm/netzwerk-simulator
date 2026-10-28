@@ -35,7 +35,18 @@ export interface NetInterface {
   color?: TagColor;
   /** Beschreibung, z.B. «Uplink Stock 2» («description» in der CLI). */
   description?: string;
+  /** SFP-Einschub (für Glasfaser) statt RJ45-Buchse. */
+  sfpSlot?: boolean;
+  /** Eingestecktes SFP-Modul; ohne Modul funktioniert der Einschub nicht. */
+  sfp?: SfpModule;
 }
+
+/**
+ * SFP-Module: Beide Enden einer Glasfaserverbindung brauchen denselben Typ
+ * (Multimode SX/SR auf kurze, Singlemode LX/LR auf lange Distanzen).
+ */
+export type SfpModule = '1G-SX' | '1G-LX' | '10G-SR' | '10G-LR';
+export const SFP_MODULES: readonly SfpModule[] = ['1G-SX', '1G-LX', '10G-SR', '10G-LR'];
 
 /**
  * Router: logisches Interface auf einem physischen Anschluss für ein VLAN
@@ -113,6 +124,8 @@ export interface Device {
   cli?: CliConfig;
   /** Nur Switches: Namen der VLANs («vlan 10» / «name Verwaltung»). */
   vlanNames?: VlanName[];
+  /** In diesem Rack (Bereich der Art «rack») eingebaut. */
+  rack?: string;
 }
 
 export interface VlanName {
@@ -255,6 +268,8 @@ export interface Cable {
 export interface DocArea {
   /** Form "a<n>". */
   id: string;
+  /** «rack»: 19-Zoll-Schrank, in den Netzwerkgeräte eingebaut werden; sonst ein farbiger Bereich. */
+  kind?: 'rack';
   title: string;
   color: TagColor;
   x: number;

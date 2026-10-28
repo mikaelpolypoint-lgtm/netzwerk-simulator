@@ -13,7 +13,10 @@ export type LinkDownReason =
   | 'wrongPassword'
   | 'outOfRange'
   | 'meshDisabled'
-  | 'wirelessUnsupported';
+  | 'wirelessUnsupported'
+  | 'noSfp'
+  | 'sfpMismatch'
+  | 'wrongPort';
 
 export interface LinkStatus {
   up: boolean;
@@ -77,8 +80,19 @@ export function linkStatus(t: Topology, cable: Cable): LinkStatus {
   const a = getDevice(t, cable.a.device);
   const b = getDevice(t, cable.b.device);
   if (!a || !b) return { up: false };
-  if (a.interfaces[cable.a.iface]?.shutdown || b.interfaces[cable.b.iface]?.shutdown) return { up: false, reason: 'shutdown' };
-  if (mediumOf(cable) === 'wireless') return wirelessStatus(a, b);
+  const ia = a.interfaces[cable.a.iface];
+  const ib = b.interfaces[cable.b.iface];
+  if (ia?.shutdown || ib?.shutdown) return { up: false, reason: 'shutdown' };
+  const medium = mediumOf(cable);
+  if (medium === 'fiber') {
+    // Glasfaser: beide Enden im SFP-Einschub, mit Modul, und zwar demselben Typ.
+    if (!ia?.sfpSlot || !ib?.sfpSlot) return { up: false, reason: 'wrongPort' };
+    if (!ia.sfp || !ib.sfp) return { up: false, reason: 'noSfp' };
+    if (ia.sfp !== ib.sfp) return { up: false, reason: 'sfpMismatch' };
+    return { up: true };
+  }
+  if (ia?.sfpSlot || ib?.sfpSlot) return { up: false, reason: 'wrongPort' };
+  if (medium === 'wireless') return wirelessStatus(a, b);
   return { up: true };
 }
 

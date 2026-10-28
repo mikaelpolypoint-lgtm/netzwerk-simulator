@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cableAt, getDevice, linkStatus, otherEnd, type Device, type TagColor } from '../../core';
+  import { SFP_MODULES, cableAt, getDevice, linkStatus, otherEnd, type Device, type SfpModule, type TagColor } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -88,6 +88,19 @@
                 onchange={(e) => editor.setInterfaceDescription(device.id, iface.index, e.currentTarget.value)}
               />
             </label>
+            {#if iface.sfpSlot}
+              <label class="field">
+                <span>{t('sfp.module')}</span>
+                <select
+                  value={iface.sfp ?? ''}
+                  disabled={!editor.editable}
+                  onchange={(e) => editor.setSfpModule(device.id, iface.index, (e.currentTarget.value || null) as SfpModule | null)}
+                >
+                  <option value="">{t('sfp.empty')}</option>
+                  {#each SFP_MODULES as m (m)}<option value={m}>{m} – {t(`sfp.${m}`)}</option>{/each}
+                </select>
+              </label>
+            {/if}
             <label class="toggle">
               <input
                 type="checkbox"
@@ -193,6 +206,11 @@
     gap: 2px;
     font-size: 0.75rem;
     margin-bottom: 4px;
+  }
+  .field select {
+    font: inherit;
+    padding: 2px 4px;
+    max-width: none;
   }
   .field input {
     font: inherit;

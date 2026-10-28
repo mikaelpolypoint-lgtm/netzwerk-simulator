@@ -19,6 +19,10 @@ export function interfaceLabel(device: Device, index: number): string {
   if (ref.kind === 'sub') return t('iface.sub', { index: ref.port, vlan: ref.vlan });
   if (ref.kind === 'svi') return t('iface.svi', { vlan: ref.vlan });
   if (device.type === 'accesspoint') return index === 0 ? t('iface.lan') : t('iface.radio', { n: index });
+  if (device.interfaces[index]?.sfpSlot) {
+    const n = device.interfaces.slice(0, index + 1).filter((i) => i.sfpSlot).length;
+    return device.type === 'router' ? t('iface.ethSfp', { index }) : t('iface.sfp', { n });
+  }
   return device.type === 'switch' || device.type === 'l3switch' || device.type === 'modem'
     ? t('iface.port', { n: index + 1 })
     : t('iface.eth', { index });

@@ -106,7 +106,7 @@ npm run dev
 | `npm run verify` | Typprüfung, Tests und Build (vor jedem Commit) |
 | `npm run release` | baut `release/netzwerk-simulator.html` neu und prüft, dass sie ohne Internet funktioniert |
 
-Texte der Oberfläche stehen in `src/i18n/de.json`. Eine Übersetzung (z.B. Französisch) entsteht als `fr.json` mit denselben Schlüsseln.
+Texte der Oberfläche stehen in `src/i18n/de.json`. Englisch steht in `en.json`; eine weitere Übersetzung entsteht als neue Datei mit denselben Schlüsseln (und einem Eintrag in `src/i18n/locale.svelte.ts`).
 
 ---
 

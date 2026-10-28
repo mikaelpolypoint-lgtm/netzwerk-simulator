@@ -18,6 +18,8 @@ export type Check =
   | { type: 'differentNetworks'; devices: string[] }
   | { type: 'gateway'; device: string; gateway?: string }
   | { type: 'ping'; from: string; to: string }
+  /** Gegenprobe: Der Ping darf NICHT ankommen (z.B. VLANs trennen). */
+  | { type: 'noPing'; from: string; to: string }
   | { type: 'http'; from: string; url: string; status?: number }
   | { type: 'dhcpLease'; device: string }
   | { type: 'mail'; from: string; to: string }
@@ -31,6 +33,7 @@ export const CHECK_TYPES = [
   'differentNetworks',
   'gateway',
   'ping',
+  'noPing',
   'http',
   'dhcpLease',
   'mail',
@@ -49,6 +52,8 @@ export interface Goal {
 export interface TaskSet {
   title: string;
   description?: string;
+  /** Schwierigkeit von 1 (einfach) bis 5 (anspruchsvoll) Sternen. */
+  difficulty?: number;
   goals: Goal[];
 }
 
@@ -160,6 +165,19 @@ export function evaluateGoal(topology: Topology, goal: Goal, liveLog: readonly P
       const last = lines.filter((l) => l.code !== 'ping.summary' && !l.code.startsWith('dhcp.')).at(-1);
       return fail(id, 'pingFailed', { from: from.name, to: check.to, detail: last?.code ?? '' });
     }
+    case 'noPing': {
+      const from = need(check.from);
+      if (!from) return missing(check.from);
+      const targetDevice = need(check.to);
+      const sim = bootedSimulation(topology);
+      const address = targetDevice ? (targetDevice.interfaces[0]?.ip ?? sim.getDeviceState(targetDevice.id).address?.ip) : check.to;
+      // Ohne Adresse ist das Ziel ohnehin nicht erreichbar; das zählt aber nicht als gelöst.
+      if (!address) return fail(id, 'noAddress', { name: check.to });
+      sim.ping(from.id, address);
+      sim.runUntil(BOOT_MS + ACTION_MS);
+      const reached = sim.getDeviceState(from.id).console.some((l) => l.code === 'ping.reply');
+      return reached ? fail(id, 'pingReached', { from: from.name, to: check.to }) : { id, passed: true };
+    }
     case 'http': {
       const from = need(check.from);
       if (!from) return missing(check.from);
@@ -230,6 +248,9 @@ export function readTasks(value: unknown, invalid: (path: string) => never): Tas
   return {
     title: str(t.title, 'tasks.title'),
     ...(t.description !== undefined ? { description: str(t.description, 'tasks.description') } : {}),
+    ...(t.difficulty !== undefined
+      ? { difficulty: typeof t.difficulty === 'number' && Number.isInteger(t.difficulty) && t.difficulty >= 1 && t.difficulty <= 5 ? t.difficulty : invalid('tasks.difficulty') }
+      : {}),
     goals: goals.map((raw, i): Goal => {
       const p = `tasks.goals[${i}]`;
       if (!isObject(raw)) invalid(p);
@@ -267,6 +288,7 @@ export function readTasks(value: unknown, invalid: (path: string) => never): Tas
           break;
         }
         case 'ping':
+        case 'noPing':
           check = { type, from: str(c.from, `${cp}.from`), to: str(c.to, `${cp}.to`) };
           break;
         case 'http': {

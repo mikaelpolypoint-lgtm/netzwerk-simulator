@@ -39,7 +39,7 @@
   }
 </script>
 
-<g class="area" class:selected class:interactive class:faded style:--area={color}>
+<g class="area" class:selected class:interactive class:faded class:rack={area.kind === 'rack'} style:--area={color}>
   <rect
     class="body"
     x={area.x}
@@ -53,10 +53,17 @@
     onpointerdown={(e) => interactive && onmove(e, area)}
     {onkeydown}
   />
-  <text class="title" x={area.x + 14} y={area.y + 22}>{area.title}</text>
-  {#each details as line, i (i)}
-    <text class="info" x={area.x + 14} y={area.y + 40 + i * 15}>{line}</text>
-  {/each}
+  {#if area.kind === 'rack'}
+    <!-- 19-Zoll-Schrank: Seitenschienen mit Lochreihe, Titel oben. -->
+    <rect class="rail" x={area.x + 6} y={area.y + 34} width="8" height={area.height - 42} />
+    <rect class="rail" x={area.x + area.width - 14} y={area.y + 34} width="8" height={area.height - 42} />
+    <text class="rack-title" x={area.x + area.width / 2} y={area.y + 22}>{area.title}</text>
+  {:else}
+    <text class="title" x={area.x + 14} y={area.y + 22}>{area.title}</text>
+    {#each details as line, i (i)}
+      <text class="info" x={area.x + 14} y={area.y + 40 + i * 15}>{line}</text>
+    {/each}
+  {/if}
   {#if interactive && selected}
     <rect
       class="handle"
@@ -92,6 +99,29 @@
     stroke-width: 2;
     stroke-dasharray: 10 6;
     outline: none;
+  }
+  .rack .body {
+    fill: #111827;
+    stroke: #475569;
+    stroke-dasharray: none;
+    stroke-width: 3;
+  }
+  .rack.selected .body {
+    stroke: var(--accent);
+  }
+  .rail {
+    fill: none;
+    stroke: #4b5563;
+    stroke-width: 1.5;
+    stroke-dasharray: 2 4;
+    pointer-events: none;
+  }
+  .rack-title {
+    font-size: 13px;
+    font-weight: 700;
+    fill: #e5e7eb;
+    text-anchor: middle;
+    user-select: none;
   }
   .selected .body {
     stroke-width: 3.5;

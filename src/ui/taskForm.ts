@@ -38,6 +38,10 @@ export const CHECK_FIELDS: Record<Check['type'], FieldSpec[]> = {
     { key: 'from', kind: 'device' },
     { key: 'to', kind: 'device', label: 'pingTo' },
   ],
+  noPing: [
+    { key: 'from', kind: 'device' },
+    { key: 'to', kind: 'device', label: 'pingTo' },
+  ],
   http: [
     { key: 'from', kind: 'device' },
     { key: 'url', kind: 'text' },

@@ -1,12 +1,12 @@
 import de from './de.json';
-import fr from './fr.json';
+import en from './en.json';
 
 type Params = Record<string, string | number>;
 
-// Weitere Sprachen (it, en) als JSON-Datei mit denselben Schlüsseln ergänzen
+// Weitere Sprachen (z.B. fr, it) als JSON-Datei mit denselben Schlüsseln ergänzen
 // und hier eintragen; ein Test prüft, dass keine Schlüssel fehlen.
-const dictionaries = { de, fr } as Record<string, Record<string, string>>;
-export const LOCALES = ['de', 'fr'] as const;
+const dictionaries = { de, en } as Record<string, Record<string, string>>;
+export const LOCALES = ['de', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 const STORAGE_KEY = 'netzwerk-simulator.locale';
@@ -20,7 +20,7 @@ function initialLocale(): Locale {
   } catch {
     // Gesperrter Speicher (z.B. privates Fenster): dann gilt die Browsersprache.
   }
-  return (typeof navigator === 'undefined' ? '' : navigator.language).toLowerCase().startsWith('fr') ? 'fr' : 'de';
+  return (typeof navigator === 'undefined' ? '' : navigator.language).toLowerCase().startsWith('en') ? 'en' : 'de';
 }
 
 // Reaktiv: Wechselt die Sprache, zeichnet Svelte alle Texte neu.

@@ -1,0 +1,10 @@
+{
+  "name": "netzwerk-simulator-server",
+  "private": true,
+  "description": "Server der Webversion: Sessions, Klassen, Rückmeldungen, Admin. Ohne Abhängigkeiten.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "start.cjs",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node start.cjs" }
+}

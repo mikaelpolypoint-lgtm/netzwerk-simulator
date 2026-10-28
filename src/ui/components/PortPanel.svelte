@@ -30,7 +30,10 @@
     }),
   );
   // Zwei Reihen wie bei echten Switches: ungerade oben, gerade unten.
-  const columns = $derived(Math.ceil(device.interfaces.length / 2));
+  const columns = $derived(Math.ceil(device.interfaces.filter((i) => !i.sfpSlot).length / 2) + device.interfaces.filter((i) => i.sfpSlot).length);
+
+  const copperColumns = $derived(Math.ceil(device.interfaces.filter((i) => !i.sfpSlot).length / 2));
+  const sfpIndex = (i: number) => device.interfaces.slice(0, i).filter((x) => x.sfpSlot).length;
 
   function click(index: number) {
     if (!editor.editable) return;
@@ -45,6 +48,8 @@
       return;
     }
     const from = ports[moving];
+    // Glasfaser nur in SFP-Einschübe, Kupfer nur in RJ45-Buchsen.
+    if (from && !!from.iface.sfpSlot !== !!port.iface.sfpSlot) return;
     if (from?.cable && !port.cable) {
       const end = from.cable.a.device === device.id && from.cable.a.iface === moving ? 'a' : 'b';
       editor.replugCable(from.cable.id, end, index);
@@ -68,9 +73,9 @@
       class="port"
       class:used={!!p.cable}
       class:moving={moving === i}
-      class:target={moving !== null && !p.cable}
-      style:grid-column={Math.floor(i / 2) + 1}
-      style:grid-row={(i % 2) + 1}
+      class:target={moving !== null && !p.cable && !!ports[moving]?.iface.sfpSlot === !!p.iface.sfpSlot}
+      style:grid-column={p.iface.sfpSlot ? copperColumns + sfpIndex(i) + 1 : Math.floor(i / 2) + 1}
+      style:grid-row={p.iface.sfpSlot ? '1 / span 2' : (i % 2) + 1}
       title={title(p)}
       aria-label={title(p)}
       aria-pressed={moving === i}
@@ -78,8 +83,13 @@
       onclick={() => click(i)}
     >
       <span class="led" class:up={p.status?.up} class:down={p.status && !p.status.up}></span>
-      <span class="jack" style:border-color={p.iface.color ? TAG_HEX[p.iface.color] : undefined}></span>
-      <span class="num">{i + 1}</span>
+      {#if p.iface.sfpSlot}
+        <span class="cage" class:filled={!!p.iface.sfp} style:border-color={p.iface.color ? TAG_HEX[p.iface.color] : undefined}></span>
+        <span class="num">{p.iface.sfp ?? 'SFP'}</span>
+      {:else}
+        <span class="jack" style:border-color={p.iface.color ? TAG_HEX[p.iface.color] : undefined}></span>
+        <span class="num">{i + 1}</span>
+      {/if}
     </button>
   {/each}
 </div>
@@ -140,12 +150,24 @@
     border-radius: 2px 2px 0 0;
     background: #0b0f14;
   }
+  .cage {
+    width: 18px;
+    height: 8px;
+    margin: 1px 0;
+    border: 2px solid #94a3b8;
+    border-radius: 1px;
+    background: #0b0f14;
+  }
+  .cage.filled {
+    background: #cbd5e1;
+  }
   .used .jack {
     background: #94a3b8;
   }
   .num {
     font-size: 9px;
     line-height: 1;
+    white-space: nowrap;
   }
   .moving {
     outline: 2px solid #fbbf24;
