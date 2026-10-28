@@ -51,6 +51,19 @@ describe('Beispielprojekte', () => {
     expect(sim.getDeviceState('d8').browser?.response?.body).toContain('NAS im Heimnetz');
   });
 
+  it('vlan-stp.json: Ring ohne Sturm, VLANs über Trunks', () => {
+    const sim = new Simulation(load('vlan-stp.json'));
+    sim.runUntil(6000);
+    sim.ping('d4', '10.0.10.12');
+    sim.ping('d5', '10.0.20.12');
+    sim.runUntil(14_000);
+    for (const id of ['d4', 'd5']) {
+      expect(sim.getDeviceState(id).console.filter((l) => l.code === 'ping.reply')).toHaveLength(4);
+    }
+    const blocked = ['d1', 'd2', 'd3'].flatMap((id) => sim.getDeviceState(id).stp?.ports.filter((p) => p.state === 'blocking') ?? []);
+    expect(blocked).toHaveLength(1);
+  });
+
   it('dhcp.json: alle drei Clients erhalten eine Adresse', () => {
     const sim = new Simulation(load('dhcp.json'));
     sim.runUntil(10_000);

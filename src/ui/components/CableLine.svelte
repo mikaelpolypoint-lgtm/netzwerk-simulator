@@ -3,6 +3,7 @@
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import { simStore } from '../state/sim.svelte';
 
   let { cable, a, b }: { cable: Cable; a: Device; b: Device } = $props();
 
@@ -10,8 +11,29 @@
   const LABEL_DISTANCE = 76;
 
   const selected = $derived(editor.selection?.kind === 'cable' && editor.selection.id === cable.id);
-  const labelA = $derived(interfaceLabel(a, cable.a.iface));
-  const labelB = $derived(interfaceLabel(b, cable.b.iface));
+
+  /** Port-Beschriftung mit VLAN bzw. Trunk, damit die Aufteilung auf der Zeichenfläche sichtbar ist. */
+  function portLabel(device: Device, index: number): string {
+    const base = interfaceLabel(device, index);
+    const iface = device.interfaces[index];
+    if (device.type !== 'switch' || !iface) return base;
+    if (iface.trunk) return `${base} · ${t('switch.trunkShort')}`;
+    return iface.vlan ? `${base} · V${iface.vlan}` : base;
+  }
+
+  const labelA = $derived(portLabel(a, cable.a.iface));
+  const labelB = $derived(portLabel(b, cable.b.iface));
+
+  // Im Aktionsmodus: Ist ein Ende durch Spanning Tree blockiert?
+  const blocked = $derived.by(() => {
+    if (editor.editable) return false;
+    void simStore.tick;
+    return ([['a', a], ['b', b]] as const).some(([end, device]) => {
+      if (device.type !== 'switch' || !device.stp) return false;
+      const port = simStore.sim?.getDeviceState(device.id).stp?.ports.find((p) => p.port === cable[end].iface);
+      return port?.state === 'blocking';
+    });
+  });
 
   const geometry = $derived.by(() => {
     const dx = b.position.x - a.position.x;
@@ -55,7 +77,10 @@
   {onkeydown}
 >
   <line class="hit" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
-  <line class="wire" class:damaged={!!cable.loss} x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  <line class="wire" class:damaged={!!cable.loss} class:blocked x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  {#if blocked}
+    <text class="blocked-label" x={(a.position.x + b.position.x) / 2} y={(a.position.y + b.position.y) / 2 + 14}>{t('switch.blockedCable')}</text>
+  {/if}
   {#if geometry.labels}
     <text class="port" x={geometry.labels.a.x} y={geometry.labels.a.y}>{labelA}</text>
     <text class="port" x={geometry.labels.b.x} y={geometry.labels.b.y}>{labelB}</text>
@@ -83,6 +108,20 @@
   .wire.damaged {
     stroke: var(--danger);
     stroke-dasharray: 8 5;
+  }
+  /* Von Spanning Tree blockiert: blass und fein gepunktet. */
+  .wire.blocked {
+    opacity: 0.45;
+    stroke-dasharray: 2 6;
+  }
+  .blocked-label {
+    font-size: 11px;
+    text-anchor: middle;
+    fill: var(--muted);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 4px;
+    pointer-events: none;
   }
   .loss {
     font-size: 11px;

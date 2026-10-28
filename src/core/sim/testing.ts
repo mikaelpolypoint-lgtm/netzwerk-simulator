@@ -136,7 +136,9 @@ export function describe(topology: Topology, entry: PacketLogEntry): string {
   const name = (id: string) => getDevice(topology, id)?.name ?? id;
   const route = `${name(entry.from.device)}→${name(entry.to.device)}`;
   const p = entry.frame.payload;
-  if (p.kind === 'arp') return `${route} ARP ${p.op} ${p.targetIp}`;
+  const tag = entry.frame.vlan !== undefined ? ` [VLAN ${entry.frame.vlan}]` : '';
+  if (p.kind === 'arp') return `${route}${tag} ARP ${p.op} ${p.targetIp}`;
+  if (p.kind === 'stp') return `${route} STP root=${p.rootId} cost=${p.cost}`;
   const inner = p.payload;
   if (inner.kind === 'tcp') {
     const data = inner.data ? ` "${inner.data.split('\r\n')[0]}"` : '';

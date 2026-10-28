@@ -19,6 +19,10 @@ export interface NetInterface {
   dhcpRelay?: string;
   /** Nur Router: Interface zeigt ins Internet; ausgehende Pakete erhalten dessen Adresse (NAT). */
   nat?: boolean;
+  /** Nur Switch: VLAN eines Access-Ports (fehlt = VLAN 1). */
+  vlan?: number;
+  /** Nur Switch: Trunk-Port, überträgt alle VLANs mit 802.1Q-Tag (VLAN 1 ohne Tag). */
+  trunk?: boolean;
 }
 
 export interface PortForward {
@@ -56,6 +60,10 @@ export interface Device {
   routes?: StaticRoute[];
   /** Nur Router mit NAT: Portweiterleitungen von aussen an interne Rechner. */
   portForwards?: PortForward[];
+  /** Nur Switch: Spanning Tree aktiv; erst dann sind Schleifen zwischen Switches erlaubt. */
+  stp?: boolean;
+  /** Nur Switch: STP-Priorität (Standard 32768); kleiner = eher Root-Bridge. */
+  stpPriority?: number;
 }
 
 export type DnsType = 'A' | 'MX';

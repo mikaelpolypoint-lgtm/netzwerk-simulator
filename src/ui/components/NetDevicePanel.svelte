@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isRouterType, type Device } from '../../core';
   import { t } from '../../i18n';
+  import { interfaceLabel } from '../labels';
   import { simStore } from '../state/sim.svelte';
   import RoutingTable from './RoutingTable.svelte';
   import StateTables from './StateTables.svelte';
@@ -14,6 +15,36 @@
 
 {#if device.type === 'switch'}
   <p class="muted">{t('switch.explain')}</p>
+  {#if deviceState?.stp}
+    {@const stp = deviceState.stp}
+    <h3>{t('switch.stp')}</h3>
+    <dl class="facts">
+      <dt>{t('switch.bridgeId')}</dt>
+      <dd class="mono">{stp.bridgeId}</dd>
+      <dt>{t('switch.rootId')}</dt>
+      <dd class="mono">{stp.rootId}{stp.rootId === stp.bridgeId ? ` (${t('switch.isRoot')})` : ''}</dd>
+      <dt>{t('switch.rootCost')}</dt>
+      <dd>{stp.rootCost}</dd>
+    </dl>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{t('switch.port')}</th>
+          <th scope="col">{t('switch.role')}</th>
+          <th scope="col">{t('switch.state')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each stp.ports as port (port.port)}
+          <tr class:blocked={port.state === 'blocking'}>
+            <td>{interfaceLabel(device, port.port)}</td>
+            <td>{t(`switch.role.${port.role}`)}</td>
+            <td>{t(`switch.state.${port.state}`)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
   <StateTables {device} macTable={deviceState?.macTable ?? []} {now} />
 {:else if isRouterType(device.type)}
   {#if device.type === 'internet'}
@@ -66,6 +97,24 @@
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+  }
+  .facts dt {
+    color: var(--muted);
+  }
+  .facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  tr.blocked td {
+    color: var(--danger);
+    font-weight: 600;
   }
   table {
     width: 100%;

@@ -1,0 +1,301 @@
+{
+  "meta": {
+    "format": "netzwerk-simulator",
+    "version": 1
+  },
+  "topology": {
+    "devices": [
+      {
+        "id": "d1",
+        "type": "switch",
+        "name": "Switch A",
+        "position": {
+          "x": 0,
+          "y": -140
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:01:00",
+            "vlan": 10
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:01:01",
+            "vlan": 20
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:01:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:01:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:01:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:01:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:01:06",
+            "trunk": true
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:01:07",
+            "trunk": true
+          }
+        ],
+        "stp": true
+      },
+      {
+        "id": "d2",
+        "type": "switch",
+        "name": "Switch B",
+        "position": {
+          "x": -200,
+          "y": 120
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:02:00",
+            "vlan": 10
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:02:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:02:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:02:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:02:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:02:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:02:06",
+            "trunk": true
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:02:07",
+            "trunk": true
+          }
+        ],
+        "stp": true
+      },
+      {
+        "id": "d3",
+        "type": "switch",
+        "name": "Switch C",
+        "position": {
+          "x": 200,
+          "y": 120
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:03:00",
+            "vlan": 20
+          },
+          {
+            "index": 1,
+            "mac": "02:00:00:00:03:01"
+          },
+          {
+            "index": 2,
+            "mac": "02:00:00:00:03:02"
+          },
+          {
+            "index": 3,
+            "mac": "02:00:00:00:03:03"
+          },
+          {
+            "index": 4,
+            "mac": "02:00:00:00:03:04"
+          },
+          {
+            "index": 5,
+            "mac": "02:00:00:00:03:05"
+          },
+          {
+            "index": 6,
+            "mac": "02:00:00:00:03:06",
+            "trunk": true
+          },
+          {
+            "index": 7,
+            "mac": "02:00:00:00:03:07",
+            "trunk": true
+          }
+        ],
+        "stp": true
+      },
+      {
+        "id": "d4",
+        "type": "pc",
+        "name": "Verwaltung 1",
+        "position": {
+          "x": -160,
+          "y": -260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:04:00",
+            "ip": "10.0.10.11",
+            "mask": "255.255.255.0"
+          }
+        ]
+      },
+      {
+        "id": "d5",
+        "type": "pc",
+        "name": "Unterricht 1",
+        "position": {
+          "x": 160,
+          "y": -260
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:05:00",
+            "ip": "10.0.20.11",
+            "mask": "255.255.255.0"
+          }
+        ]
+      },
+      {
+        "id": "d6",
+        "type": "pc",
+        "name": "Verwaltung 2",
+        "position": {
+          "x": -380,
+          "y": 220
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:06:00",
+            "ip": "10.0.10.12",
+            "mask": "255.255.255.0"
+          }
+        ]
+      },
+      {
+        "id": "d7",
+        "type": "pc",
+        "name": "Unterricht 2",
+        "position": {
+          "x": 380,
+          "y": 220
+        },
+        "interfaces": [
+          {
+            "index": 0,
+            "mac": "02:00:00:00:07:00",
+            "ip": "10.0.20.12",
+            "mask": "255.255.255.0"
+          }
+        ]
+      }
+    ],
+    "cables": [
+      {
+        "id": "c8",
+        "a": {
+          "device": "d4",
+          "iface": 0
+        },
+        "b": {
+          "device": "d1",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c9",
+        "a": {
+          "device": "d5",
+          "iface": 0
+        },
+        "b": {
+          "device": "d1",
+          "iface": 1
+        }
+      },
+      {
+        "id": "c10",
+        "a": {
+          "device": "d6",
+          "iface": 0
+        },
+        "b": {
+          "device": "d2",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c11",
+        "a": {
+          "device": "d7",
+          "iface": 0
+        },
+        "b": {
+          "device": "d3",
+          "iface": 0
+        }
+      },
+      {
+        "id": "c12",
+        "a": {
+          "device": "d1",
+          "iface": 6
+        },
+        "b": {
+          "device": "d2",
+          "iface": 6
+        }
+      },
+      {
+        "id": "c13",
+        "a": {
+          "device": "d2",
+          "iface": 7
+        },
+        "b": {
+          "device": "d3",
+          "iface": 7
+        }
+      },
+      {
+        "id": "c14",
+        "a": {
+          "device": "d3",
+          "iface": 6
+        },
+        "b": {
+          "device": "d1",
+          "iface": 7
+        }
+      }
+    ],
+    "nextId": 15
+  },
+  "configuration": {}
+}

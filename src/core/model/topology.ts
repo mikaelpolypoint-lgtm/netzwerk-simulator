@@ -41,6 +41,10 @@ export type ErrorCode =
   | 'invalidLoss'
   | 'invalidPort'
   | 'duplicateForward'
+  | 'notASwitch'
+  | 'invalidVlan'
+  | 'stpNeededForLoop'
+  | 'invalidPriority'
   | 'notAnEndpoint'
   | 'unknownInterface'
   | 'invalidIp'
@@ -204,7 +208,9 @@ export function connect(t: Topology, aId: string, bId: string): Result<{ topolog
   if (a.id === b.id) return fail('sameDevice');
   const direct = cablesOf(t, a.id).some((c) => otherEnd(c, a.id).device === b.id);
   if (direct) return fail('alreadyConnected', { a: a.name, b: b.name });
-  if (isBridge(a) && isBridge(b) && bridged(t, a.id, b.id)) return fail('switchLoop', { a: a.name, b: b.name });
+  if (isBridge(a) && isBridge(b) && bridged(t, a.id, b.id) && !stpProtects(t, a.id)) {
+    return fail('switchLoop', { a: a.name, b: b.name });
+  }
   const ia = freeInterface(t, a);
   if (!ia) return fail('noFreeInterface', { device: a.name });
   const ib = freeInterface(t, b);
@@ -220,10 +226,33 @@ export function connect(t: Topology, aId: string, bId: string): Result<{ topolog
 /**
  * Switches und Modems leiten Broadcasts an alle Ports weiter. Ohne Spanning
  * Tree würde eine Schleife zwischen ihnen einen endlosen Broadcast-Sturm
- * auslösen, darum verhindert der Editor solche Verbindungen.
+ * auslösen, darum erlaubt der Editor Schleifen nur, wenn alle beteiligten
+ * Switches Spanning Tree aktiv haben.
  */
 export function isBridge(device: Device): boolean {
   return device.type === 'switch' || device.type === 'modem';
+}
+
+/** Alle Switches und Modems, die über Switch-/Modem-Verbindungen mit `from` zusammenhängen. */
+function bridgeComponent(t: Topology, from: string): Device[] {
+  const seen = new Set([from]);
+  const queue = [from];
+  for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+    for (const cable of cablesOf(t, id)) {
+      const next = otherEnd(cable, id).device;
+      const device = getDevice(t, next);
+      if (device && isBridge(device) && !seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return [...seen].flatMap((id) => getDevice(t, id) ?? []);
+}
+
+/** Schleifen sind sicher, wenn jeder Switch im Verbund Spanning Tree spricht (Modems können das nicht). */
+function stpProtects(t: Topology, from: string): boolean {
+  return bridgeComponent(t, from).every((d) => d.type === 'switch' && d.stp);
 }
 
 function bridged(t: Topology, from: string, to: string): boolean {
@@ -257,10 +286,77 @@ export function findSwitchLoop(t: Topology): Cable | undefined {
     if (!a || !b || !isBridge(a) || !isBridge(b)) continue;
     const ra = root(a.id);
     const rb = root(b.id);
-    if (ra === rb) return cable;
+    if (ra === rb) {
+      if (stpProtects(t, a.id)) continue;
+      return cable;
+    }
     parent.set(ra, rb);
   }
   return undefined;
+}
+
+// --- VLAN und Spanning Tree --------------------------------------------------
+
+function switchDevice(t: Topology, id: string): Result<Device> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'switch') return fail('notASwitch');
+  return ok(device);
+}
+
+function updatePort(t: Topology, id: string, index: number, change: (i: NetInterface) => NetInterface): Topology {
+  return updateDevice(t, id, (d) => ({ ...d, interfaces: d.interfaces.map((i) => (i.index === index ? change(i) : i)) }));
+}
+
+/** VLAN eines Access-Ports (1–4094); VLAN 1 wird nicht gespeichert. */
+export function setPortVlan(t: Topology, id: string, index: number, vlan: number): Result<Topology> {
+  const device = switchDevice(t, id);
+  if (!device.ok) return device;
+  if (!device.value.interfaces[index]) return fail('unknownInterface');
+  if (!Number.isInteger(vlan) || vlan < 1 || vlan > 4094) return fail('invalidVlan');
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { vlan: _v, ...base } = i;
+      return vlan === 1 ? base : { ...base, vlan };
+    }),
+  );
+}
+
+export function setPortTrunk(t: Topology, id: string, index: number, trunk: boolean): Result<Topology> {
+  const device = switchDevice(t, id);
+  if (!device.ok) return device;
+  if (!device.value.interfaces[index]) return fail('unknownInterface');
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { trunk: _t, ...base } = i;
+      return trunk ? { ...base, trunk: true } : base;
+    }),
+  );
+}
+
+/** Spanning Tree ein- oder ausschalten; ausschalten nur, wenn dadurch keine ungeschützte Schleife entsteht. */
+export function setStp(t: Topology, id: string, enabled: boolean): Result<Topology> {
+  const device = switchDevice(t, id);
+  if (!device.ok) return device;
+  const next = updateDevice(t, id, (d) => {
+    const { stp: _s, ...rest } = d;
+    return enabled ? { ...rest, stp: true } : rest;
+  });
+  if (!enabled && findSwitchLoop(next)) return fail('stpNeededForLoop', { name: device.value.name });
+  return ok(next);
+}
+
+/** STP-Priorität in Schritten von 4096 (0–61440); die kleinste wird Root-Bridge. */
+export function setStpPriority(t: Topology, id: string, priority: number): Result<Topology> {
+  const device = switchDevice(t, id);
+  if (!device.ok) return device;
+  if (!Number.isInteger(priority) || priority < 0 || priority > 61440 || priority % 4096 !== 0) return fail('invalidPriority');
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { stpPriority: _p, ...rest } = d;
+      return priority === 32768 ? rest : { ...rest, stpPriority: priority };
+    }),
+  );
 }
 
 /** Beschädigung eines Kabels in Prozent verlorener Rahmen (0 = intakt). */

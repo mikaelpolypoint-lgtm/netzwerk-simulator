@@ -100,11 +100,28 @@ export interface Ipv4Packet {
   payload: IcmpMessage | UdpDatagram | TcpSegment;
 }
 
+/** Bridge Protocol Data Unit des Spanning Tree (vereinfacht). */
+export interface StpBpdu {
+  kind: 'stp';
+  /** Bridge-ID der Root-Bridge, z.B. "32768.02:00:00:00:03:00". */
+  rootId: string;
+  /** Pfadkosten des Absenders zur Root-Bridge. */
+  cost: number;
+  bridgeId: string;
+  /** Port des Absenders (Index). */
+  portId: number;
+}
+
 export interface EthernetFrame {
   src: string;
   dst: string;
-  payload: ArpPacket | Ipv4Packet;
+  /** 802.1Q-Tag, nur auf Trunk-Verbindungen. */
+  vlan?: number;
+  payload: ArpPacket | Ipv4Packet | StpBpdu;
 }
+
+/** Ziel-MAC für BPDUs (Multicast, nur zwischen Switches). */
+export const STP_MAC = '01:80:C2:00:00:00';
 
 export const DHCP_SERVER_PORT = 67;
 export const DHCP_CLIENT_PORT = 68;

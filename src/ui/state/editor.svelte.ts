@@ -1,4 +1,8 @@
 import {
+  setPortTrunk,
+  setPortVlan,
+  setStp,
+  setStpPriority,
   addPortForward,
   removePortForward,
   setInterfaceNat,
@@ -272,6 +276,30 @@ class Editor {
   removeDhcpScope(id: string, index: number) {
     if (!this.editable) return;
     const next = this.#check(removeDhcpScope(this.topology, id, index));
+    if (next) this.#commit(next);
+  }
+
+  setPortVlan(id: string, index: number, vlan: number) {
+    if (!this.editable) return;
+    const next = this.#check(setPortVlan(this.topology, id, index, vlan));
+    if (next) this.#commit(next);
+  }
+
+  setPortTrunk(id: string, index: number, trunk: boolean) {
+    if (!this.editable) return;
+    const next = this.#check(setPortTrunk(this.topology, id, index, trunk));
+    if (next) this.#commit(next);
+  }
+
+  setStp(id: string, enabled: boolean) {
+    if (!this.editable) return;
+    const next = this.#check(setStp(this.topology, id, enabled));
+    if (next) this.#commit(next);
+  }
+
+  setStpPriority(id: string, priority: number) {
+    if (!this.editable) return;
+    const next = this.#check(setStpPriority(this.topology, id, priority));
     if (next) this.#commit(next);
   }
 

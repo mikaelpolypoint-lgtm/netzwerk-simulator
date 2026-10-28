@@ -27,7 +27,9 @@ function endpointLabel(topology: Topology, device: string, iface: number): strin
 
 function info(frame: EthernetFrame): string {
   const p = frame.payload;
-  if (p.kind === 'arp') return t(`packets.arp.${p.op}`, { ...p });
+  const tag = frame.vlan !== undefined ? `[VLAN ${frame.vlan}] ` : '';
+  if (p.kind === 'arp') return tag + t(`packets.arp.${p.op}`, { ...p });
+  if (p.kind === 'stp') return t('packets.stp', { root: p.rootId, cost: p.cost, bridge: p.bridgeId });
   const inner = p.payload;
   if (inner.kind === 'icmp') {
     return t(`packets.icmp.${inner.type}`, {
@@ -63,8 +65,9 @@ export function toRow(topology: Topology, entry: PacketLogEntry): PacketRow {
   const frame = entry.frame;
   const p = frame.payload;
   const [source, destination] =
-    p.kind === 'arp' ? [frame.src, frame.dst === BROADCAST_MAC ? t('packets.broadcast') : frame.dst] : [p.src, p.dst];
-  const text = info(frame);
+    p.kind === 'ipv4' ? [p.src, p.dst] : [frame.src, frame.dst === BROADCAST_MAC ? t('packets.broadcast') : frame.dst];
+  // VLAN-Tags auf Trunks gehören zu jedem Protokoll; ARP und STP setzen sie oben selbst.
+  const text = p.kind === 'ipv4' && frame.vlan !== undefined ? `[VLAN ${frame.vlan}] ${info(frame)}` : info(frame);
   return {
     id: entry.id,
     time: (entry.sent / 1000).toFixed(3),
@@ -98,11 +101,21 @@ export function layersOf(frame: EthernetFrame): Layer[] {
       fields: [
         ...field('dstMac', frame.dst === BROADCAST_MAC ? `${frame.dst} (${t('packets.broadcast')})` : frame.dst),
         ...field('srcMac', frame.src),
-        ...field('etherType', p.kind === 'arp' ? '0x0806 (ARP)' : '0x0800 (IPv4)'),
+        ...field('vlanTag', frame.vlan === undefined ? undefined : `802.1Q, VLAN ${frame.vlan}`),
+        ...field('etherType', p.kind === 'arp' ? '0x0806 (ARP)' : p.kind === 'stp' ? '802.2 LLC (STP)' : '0x0800 (IPv4)'),
       ],
       note: t('layer.note.ethernet'),
     },
   ];
+
+  if (p.kind === 'stp') {
+    layers.push({
+      title: t('layer.stp'),
+      fields: [...field('rootId', p.rootId), ...field('rootCost', p.cost), ...field('bridgeId', p.bridgeId), ...field('portId', p.portId + 1)],
+      note: t('layer.note.stp'),
+    });
+    return layers;
+  }
 
   if (p.kind === 'arp') {
     layers.push({

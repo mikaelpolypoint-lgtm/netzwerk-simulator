@@ -12,6 +12,8 @@
   }: { device: Device; arp?: ArpEntry[]; macTable?: MacEntry[]; now: number } = $props();
 
   const remaining = (expires: number) => t('actions.seconds', { s: Math.ceil((expires - now) / 1000) });
+  // Die VLAN-Spalte nur zeigen, wenn VLANs überhaupt genutzt werden.
+  const showVlan = $derived(device.interfaces.some((i) => i.vlan || i.trunk));
 </script>
 
 {#if arp}
@@ -51,14 +53,16 @@
       <thead>
         <tr>
           <th scope="col">{t('switch.port')}</th>
+          {#if showVlan}<th scope="col">{t('switch.vlan')}</th>{/if}
           <th scope="col">{t('actions.arpMac')}</th>
           <th scope="col">{t('actions.arpTtl')}</th>
         </tr>
       </thead>
       <tbody>
-        {#each macTable as entry (entry.mac)}
+        {#each macTable as entry (`${entry.vlan}|${entry.mac}`)}
           <tr>
             <td>{interfaceLabel(device, entry.port)}</td>
+            {#if showVlan}<td>{entry.vlan}</td>{/if}
             <td class="mono">{entry.mac}</td>
             <td>{remaining(entry.expires)}</td>
           </tr>

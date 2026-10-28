@@ -207,6 +207,15 @@ function readDevice(v: unknown, path: string): Device {
       if (typeof io.nat !== 'boolean') throw new Invalid(`${p}.nat`);
       if (io.nat) iface.nat = true;
     }
+    if (io.vlan !== undefined) {
+      const vlan = int(io.vlan, `${p}.vlan`);
+      if (vlan < 1 || vlan > 4094) throw new Invalid(`${p}.vlan`);
+      if (vlan !== 1) iface.vlan = vlan;
+    }
+    if (io.trunk !== undefined) {
+      if (typeof io.trunk !== 'boolean') throw new Invalid(`${p}.trunk`);
+      if (io.trunk) iface.trunk = true;
+    }
     return iface;
   });
 
@@ -272,6 +281,15 @@ function readDevice(v: unknown, path: string): Device {
       return { path: filePath, content: str(f.content, `${fp}.content`) };
     });
     device.webServer = { files };
+  }
+  if (o.stp !== undefined) {
+    if (typeof o.stp !== 'boolean') throw new Invalid(`${path}.stp`);
+    if (o.stp) device.stp = true;
+  }
+  if (o.stpPriority !== undefined) {
+    const priority = int(o.stpPriority, `${path}.stpPriority`);
+    if (priority < 0 || priority > 61440) throw new Invalid(`${path}.stpPriority`);
+    device.stpPriority = priority;
   }
   if (o.portForwards !== undefined) {
     device.portForwards = arr(o.portForwards, `${path}.portForwards`).map((raw, i) => {

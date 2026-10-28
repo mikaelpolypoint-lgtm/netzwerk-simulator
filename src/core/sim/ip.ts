@@ -94,9 +94,10 @@ export class IpNode implements SimNode {
 
   receive(index: number, frame: EthernetFrame) {
     const mac = this.ctx.device()?.interfaces[index]?.mac;
-    if (!mac || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
+    // Getaggte Rahmen (VLAN) und BPDUs sind nur für Switches bestimmt.
+    if (!mac || frame.vlan !== undefined || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
     if (frame.payload.kind === 'arp') this.#onArp(index, frame.payload);
-    else this.#onIp(index, frame.payload, frame.src);
+    else if (frame.payload.kind === 'ipv4') this.#onIp(index, frame.payload, frame.src);
   }
 
   /** Nachbarn auch ohne ARP bekannt machen, z.B. den DHCP-Server aus seinem Ack. */

@@ -69,7 +69,7 @@ Regeln, die das Projekt technisch absichert:
 - Wird ein Kabel während einer Übertragung entfernt, geht der Rahmen verloren und ist in der Paketliste so markiert.
 - Switches lernen MAC-Adressen pro Port (5 Minuten gültig). Vermittlungsrechner leiten nach längstem Präfix weiter, senken die TTL und melden Probleme per ICMP («Ziel nicht erreichbar», «TTL abgelaufen»). Das Modem ist eine transparente Strecke.
 - Endgeräte haben einen Desktop (Doppelklick im Aktionsmodus) mit Befehlszeile: `ping`, `tracert`, `ipconfig [/release|/renew]`, `arp [-a|-d]`, `cls`, `help`.
-- DHCP: Rechner können DHCP-Server sein; Clients beziehen beim Start der Simulation per Discover/Offer/Request/Ack eine Adresse und erneuern nach der halben Lease-Dauer. Router leiten DHCP nicht weiter (kein Relay), der Server muss im selben Netz stehen.
+- DHCP: Rechner können DHCP-Server sein; Clients beziehen beim Start der Simulation per Discover/Offer/Request/Ack eine Adresse und erneuern nach der halben Lease-Dauer.
 - DNS: Rechner können DNS-Server mit eigener Zone sein (A- und MX-Einträge, ohne Rekursion). Clients haben einen Cache gemäss TTL; `nslookup`, `ipconfig /displaydns` und `/flushdns` machen ihn sichtbar. `ping` und `tracert` akzeptieren Namen.
 - TCP: Drei-Wege-Handshake, Sequenz- und Bestätigungsnummern (in Zeichen), Aufteilung in Segmente, Wiederholung nach 1 s (höchstens 3-mal), Abbau mit FIN, RST bei geschlossenem Port; `netstat` zeigt Verbindungen.
 - HTTP: Rechner können Webserver mit editierbaren HTML-Seiten sein. Der Webbrowser zeigt jeden Schritt (DNS, TCP, GET, Antwort) und die Seite; Links darin lösen simulierte Abrufe aus. Seiten laufen in einem Sandbox-Frame ohne Skripte.
@@ -78,7 +78,8 @@ Regeln, die das Projekt technisch absichert:
 - Kabel lassen sich auf andere Anschlüsse umstecken und können beschädigt sein (0–100 % Paketverlust, für Fehlersuche-Übungen; ein Zufallsgenerator mit festem Startwert hält Abläufe wiederholbar).
 - Router können als DHCP-Relay einen zentralen DHCP-Server für mehrere Netze nutzen; der Server hat dafür weitere Bereiche.
 - Das Gerät «Internet» leitet wie ein Provider weiter und verwirft private Adressen. Router übersetzen mit NAT (inkl. Port-Übersetzung) und bieten Portweiterleitungen für Server im Heimnetz.
-- Schleifen zwischen Switches lässt der Editor nicht zu (es gibt kein Spanning Tree, sonst entstünde ein Broadcast-Sturm).
+- VLANs: Switch-Ports gehören zu einem VLAN (Access) oder übertragen als Trunk alle VLANs mit 802.1Q-Tag; die MAC-Tabelle gilt je VLAN.
+- Spanning Tree (vereinfacht, verkürzte Zeiten): Switches wählen per BPDU eine Root-Bridge und blockieren redundante Ports; nach einem Ausfall wird neu berechnet. Schleifen zwischen Switches erlaubt der Editor nur, wenn alle beteiligten Switches STP aktiv haben; Ports zu Endgeräten leiten sofort weiter (wie PortFast).
 - Konfigurationen werden nur auf Lesbarkeit geprüft. Fachliche Fehler (Gateway ausserhalb des Netzes, Netzadresse als Geräteadresse) sind erlaubt und werden als Warnung erklärt, damit Lehrpersonen Fehlersuche-Aufgaben bauen können.
 
 ## Aufgaben
@@ -87,7 +88,7 @@ Aufgabendateien enthalten zusätzlich Lernziele, die der Simulator auf Knopfdruc
 
 ## Beispiele
 
-[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver) und `heimnetz-nat.json` (Heimnetz mit NAT, öffentlicher Webserver, Portweiterleitung auf ein NAS). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
+[docs/beispiele](docs/beispiele) enthält fertige Projekte zum Öffnen (`Öffnen …`), z.B. `zwei-subnetze.json` (PC 1 erreicht über Router 1 einen Switch mit zwei Geräten im zweiten Subnetz) `dhcp.json` (ein Server vergibt drei Clients ihre Adressen) `web.json` (ein Notebook bezieht per DHCP Adresse und DNS-Server und ruft über einen Router `http://www.schule.ch/` ab) `mail.json` (Anna und Ben schreiben sich E-Mails über einen gemeinsamen Mailserver) `heimnetz-nat.json` (Heimnetz mit NAT, öffentlicher Webserver, Portweiterleitung auf ein NAS) und `vlan-stp.json` (drei Switches im Ring mit Spanning Tree, zwei VLANs über Trunks). Ein Test stellt sicher, dass alle Beispiele gültig bleiben.
 
 ## Datenschutz
 

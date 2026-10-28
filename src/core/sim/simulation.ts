@@ -10,7 +10,7 @@ import type { BrowserState } from './http';
 import type { MailClientState } from './mail';
 import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
 import { EventQueue } from './queue';
-import { ModemNode, SwitchNode, type MacEntry } from './switch';
+import { ModemNode, SwitchNode, type MacEntry, type StpState } from './switch';
 
 /** Übertragungszeit pro Kabel in Millisekunden (virtuelle Zeit). */
 export const LINK_DELAY = 1;
@@ -62,12 +62,15 @@ export interface DeviceState {
   mail?: MailClientState;
   mailboxes?: { user: string; count: number }[];
   nat?: NatEntry[];
+  stp?: StpState;
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
 export interface NodeContext {
   readonly now: number;
   device(): Device | undefined;
+  /** Gesamte Topologie, z.B. damit ein Switch weiss, was an seinen Ports hängt. */
+  topology(): Topology;
   schedule(delay: number, run: () => void): void;
   transmit(iface: number, frame: EthernetFrame): boolean;
   isConnected(iface: number): boolean;
@@ -120,8 +123,14 @@ export class Simulation {
     this.#bootDhcpClients();
   }
 
-  /** Wie beim Einschalten: DHCP-Clients ohne Adresse fragen nach einer. */
+  /** Wie beim Einschalten: Switches mit STP beginnen BPDUs zu senden, DHCP-Clients fragen nach einer Adresse. */
   #bootDhcpClients() {
+    for (const device of this.#topology.devices) {
+      if (device.type === 'switch' && device.stp) {
+        const node = this.#node(device.id);
+        if (node instanceof SwitchNode) node.start();
+      }
+    }
     for (const device of this.#topology.devices) {
       if (device.dhcp && DEVICE_SPECS[device.type].role === 'endpoint') this.#host(device.id)?.ensureDhcp();
     }
@@ -250,6 +259,7 @@ export class Simulation {
         return sim.#now;
       },
       device: () => getDevice(sim.#topology, id),
+      topology: () => sim.#topology,
       schedule: (delay, run) => sim.#queue.push(sim.#now + delay, run),
       transmit: (iface, frame) => sim.#transmit({ device: id, iface }, frame),
       isConnected: (iface) => cableAt(sim.#topology, { device: id, iface }) !== undefined,

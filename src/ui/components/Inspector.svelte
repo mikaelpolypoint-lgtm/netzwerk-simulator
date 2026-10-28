@@ -7,6 +7,7 @@
   import HostConfigForm from './HostConfigForm.svelte';
   import MailAccountForm from './MailAccountForm.svelte';
   import Services from './Services.svelte';
+  import SwitchConfig from './SwitchConfig.svelte';
   import HostPanel from './HostPanel.svelte';
   import NetDevicePanel from './NetDevicePanel.svelte';
   import RouterConfig from './RouterConfig.svelte';
@@ -93,6 +94,8 @@
       <NetDevicePanel {device} />
     {:else if isRouterType(device.type)}
       <RouterConfig {device} />
+    {:else if device.type === 'switch'}
+      <SwitchConfig {device} />
     {/if}
 
     {#if spec.minInterfaces !== spec.maxInterfaces && editor.editable}

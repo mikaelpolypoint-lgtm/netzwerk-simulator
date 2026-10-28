@@ -1,39 +1,242 @@
-import { BROADCAST_MAC, type EthernetFrame } from './frames';
+import { cableAt, getDevice, otherEnd } from '../model/topology';
+import { BROADCAST_MAC, STP_MAC, type EthernetFrame, type StpBpdu } from './frames';
 import type { NodeContext, SimNode } from './simulation';
 
 /** Lebensdauer eines gelernten Eintrags (5 Minuten virtuelle Zeit). */
 export const MAC_TTL = 300_000;
 
+// Spanning Tree, vereinfacht und mit verkürzten Zeiten (Standard: 2 s, 20 s, 15 s).
+export const STP_HELLO = 2000;
+export const STP_MAX_AGE = 6000;
+export const STP_FORWARD_DELAY = 2000;
+export const STP_DEFAULT_PRIORITY = 32768;
+/** Pfadkosten pro Verbindung (klassischer Wert für 100 Mbit/s). */
+export const STP_PATH_COST = 19;
+export const DEFAULT_VLAN = 1;
+
 export interface MacEntry {
   mac: string;
   port: number;
+  vlan: number;
   expires: number;
 }
 
+/** Rolle eines Ports im Spanning Tree; "edge" = Endgerät angeschlossen (wie PortFast). */
+export type PortRole = 'root' | 'designated' | 'alternate' | 'edge';
+export type PortState = 'forwarding' | 'learning' | 'blocking';
+
+export interface StpPortInfo {
+  port: number;
+  role: PortRole;
+  state: PortState;
+}
+
+export interface StpState {
+  bridgeId: string;
+  rootId: string;
+  rootPort: number | null;
+  rootCost: number;
+  ports: StpPortInfo[];
+}
+
+interface Received {
+  rootId: string;
+  cost: number;
+  bridgeId: string;
+  portId: number;
+  expires: number;
+}
+
+/** Bridge-IDs vergleichen: zuerst die Priorität, dann die MAC-Adresse (kleiner gewinnt). */
+function compareId(a: string, b: string): number {
+  const [pa = '0', ma = ''] = a.split('.');
+  const [pb = '0', mb = ''] = b.split('.');
+  return Number(pa) - Number(pb) || ma.localeCompare(mb);
+}
+
+/** Prioritätsvektor (Root, Kosten, Absender, Port): kleiner ist besser. */
+type Vector = [rootId: string, cost: number, bridgeId: string, portId: number];
+
+function compareVector(a: Vector, b: Vector): number {
+  return compareId(a[0], b[0]) || a[1] - b[1] || compareId(a[2], b[2]) || a[3] - b[3];
+}
+
 /**
- * Lernender Switch: merkt sich, an welchem Port welche Absender-MAC hängt.
- * Bekannte Ziele erhalten den Rahmen gezielt, Broadcasts und unbekannte
- * Ziele gehen an alle anderen Ports ("Flooding").
+ * Lernender Switch mit VLANs und optionalem Spanning Tree.
+ * VLANs: Access-Ports gehören zu einem VLAN, Trunks übertragen alle mit
+ * 802.1Q-Tag (VLAN 1 ohne Tag). Die MAC-Tabelle gilt je VLAN.
  */
 export class SwitchNode implements SimNode {
   #table = new Map<string, MacEntry>();
+  #received = new Map<number, Received>();
+  #roles = new Map<number, PortRole>();
+  #since = new Map<number, number>();
+  #rootId = '';
+  #rootPort: number | null = null;
+  #rootCost = 0;
+  #helloRunning = false;
 
   constructor(private readonly ctx: NodeContext) {}
 
-  receive(inPort: number, frame: EthernetFrame) {
-    const device = this.ctx.device();
+  get #device() {
+    return this.ctx.device();
+  }
+
+  get #stp(): boolean {
+    return !!this.#device?.stp;
+  }
+
+  #bridgeId(): string {
+    const device = this.#device;
+    return `${device?.stpPriority ?? STP_DEFAULT_PRIORITY}.${device?.interfaces[0]?.mac ?? ''}`;
+  }
+
+  #isTrunk(port: number) {
+    return !!this.#device?.interfaces[port]?.trunk;
+  }
+
+  #vlanOf(port: number) {
+    return this.#device?.interfaces[port]?.vlan ?? DEFAULT_VLAN;
+  }
+
+  #member(port: number, vlan: number) {
+    return this.#isTrunk(port) || this.#vlanOf(port) === vlan;
+  }
+
+  /** Am Port hängt ein Endgerät oder Router: keine Schleifengefahr, darum sofort weiterleiten. */
+  #isEdge(port: number): boolean {
+    const device = this.#device;
+    if (!device) return true;
+    const cable = cableAt(this.#topology(), { device: device.id, iface: port });
+    if (!cable) return true;
+    const peer = getDevice(this.#topology(), otherEnd(cable, device.id).device);
+    return !peer || (peer.type !== 'switch' && peer.type !== 'modem');
+  }
+
+  #topology() {
+    return this.ctx.topology();
+  }
+
+  // --- Spanning Tree -----------------------------------------------------------
+
+  /** Startet die regelmässigen BPDUs (beim Start der Simulation). */
+  start() {
+    if (!this.#stp || this.#helloRunning) return;
+    this.#helloRunning = true;
+    const hello = () => {
+      if (!this.#stp) {
+        this.#helloRunning = false;
+        return;
+      }
+      this.#recompute();
+      this.#sendBpdus();
+      this.ctx.schedule(STP_HELLO, hello);
+    };
+    this.ctx.schedule(0, hello);
+  }
+
+  #sendBpdus() {
+    const device = this.#device;
+    if (!device) return;
+    const bridgeId = this.#bridgeId();
+    for (const port of device.interfaces) {
+      if (this.#roles.get(port.index) !== 'designated') continue;
+      const bpdu: StpBpdu = { kind: 'stp', rootId: this.#rootId, cost: this.#rootCost, bridgeId, portId: port.index };
+      this.ctx.transmit(port.index, { src: port.mac, dst: STP_MAC, payload: bpdu });
+    }
+  }
+
+  #recompute() {
+    const device = this.#device;
     if (!device) return;
     const now = this.ctx.now;
-    this.#table.set(frame.src, { mac: frame.src, port: inPort, expires: now + MAC_TTL });
+    for (const [port, info] of this.#received) {
+      if (info.expires <= now || !this.ctx.isConnected(port)) this.#received.delete(port);
+    }
+    const me = this.#bridgeId();
+    let best: Vector = [me, 0, me, -1];
+    let rootPort: number | null = null;
+    for (const [port, r] of this.#received) {
+      const candidate: Vector = [r.rootId, r.cost + STP_PATH_COST, r.bridgeId, r.portId];
+      if (compareId(r.rootId, me) < 0 && (rootPort === null || compareVector(candidate, best) < 0)) {
+        best = candidate;
+        rootPort = port;
+      }
+    }
+    this.#rootId = best[0];
+    this.#rootCost = rootPort === null ? 0 : best[1];
+    this.#rootPort = rootPort;
 
-    const known = frame.dst === BROADCAST_MAC ? undefined : this.#table.get(frame.dst);
-    if (known && known.expires > now && this.ctx.isConnected(known.port)) {
+    let changed = false;
+    for (const port of device.interfaces) {
+      if (!this.ctx.isConnected(port.index)) continue;
+      let role: PortRole;
+      if (this.#isEdge(port.index)) role = 'edge';
+      else if (port.index === rootPort) role = 'root';
+      else {
+        const r = this.#received.get(port.index);
+        const offer: Vector = [this.#rootId, this.#rootCost, me, port.index];
+        role = !r || compareVector(offer, [r.rootId, r.cost, r.bridgeId, r.portId]) < 0 ? 'designated' : 'alternate';
+      }
+      if (this.#roles.get(port.index) !== role) {
+        changed = true;
+        this.#roles.set(port.index, role);
+        this.#since.set(port.index, now);
+      }
+    }
+    if (changed) {
+      // Vereinfachte Topologieänderung: gelernte Adressen könnten auf blockierte Ports zeigen.
+      this.#table.clear();
+      this.ctx.print('stp.changed', { root: this.#rootId, rootPort: this.#rootPort === null ? '–' : this.#rootPort + 1 });
+    }
+  }
+
+  #state(port: number): PortState {
+    if (!this.#stp) return 'forwarding';
+    const role = this.#roles.get(port) ?? (this.#isEdge(port) ? 'edge' : undefined);
+    if (role === 'edge') return 'forwarding';
+    if (role === undefined || role === 'alternate') return 'blocking';
+    // Neue Root- und Designated-Ports warten die Weiterleitungsverzögerung ab, bevor sie weiterleiten.
+    return this.ctx.now - (this.#since.get(port) ?? 0) >= STP_FORWARD_DELAY ? 'forwarding' : 'learning';
+  }
+
+  #onBpdu(port: number, bpdu: StpBpdu) {
+    this.#received.set(port, { ...bpdu, expires: this.ctx.now + STP_MAX_AGE });
+    this.#recompute();
+  }
+
+  // --- Weiterleiten -------------------------------------------------------------
+
+  #send(port: number, frame: EthernetFrame, vlan: number) {
+    // Auf Trunks mit Tag (ausser VLAN 1), auf Access-Ports immer ohne.
+    const { vlan: _v, ...untagged } = frame;
+    this.ctx.transmit(port, this.#isTrunk(port) && vlan !== DEFAULT_VLAN ? { ...untagged, vlan } : untagged);
+  }
+
+  receive(inPort: number, frame: EthernetFrame) {
+    const device = this.#device;
+    if (!device) return;
+    if (frame.payload.kind === 'stp' && this.#stp) return this.#onBpdu(inPort, frame.payload);
+
+    const inState = this.#state(inPort);
+    if (inState === 'blocking') return;
+    // Getaggte Rahmen gehören nur auf Trunks.
+    if (!this.#isTrunk(inPort) && frame.vlan !== undefined) return;
+    const vlan = this.#isTrunk(inPort) ? (frame.vlan ?? DEFAULT_VLAN) : this.#vlanOf(inPort);
+    const now = this.ctx.now;
+    this.#table.set(`${vlan}|${frame.src}`, { mac: frame.src, port: inPort, vlan, expires: now + MAC_TTL });
+    if (inState === 'learning') return;
+
+    const flood = frame.dst === BROADCAST_MAC || frame.dst === STP_MAC;
+    const known = flood ? undefined : this.#table.get(`${vlan}|${frame.dst}`);
+    if (known && known.expires > now && this.ctx.isConnected(known.port) && this.#state(known.port) === 'forwarding') {
       // Ziel hängt am selben Port wie der Absender: Der Rahmen hat sein Ziel schon erreicht.
-      if (known.port !== inPort) this.ctx.transmit(known.port, frame);
+      if (known.port !== inPort) this.#send(known.port, frame, vlan);
       return;
     }
     for (const port of device.interfaces) {
-      if (port.index !== inPort) this.ctx.transmit(port.index, frame);
+      if (port.index === inPort || !this.#member(port.index, vlan) || this.#state(port.index) !== 'forwarding') continue;
+      this.#send(port.index, frame, vlan);
     }
   }
 
@@ -41,8 +244,14 @@ export class SwitchNode implements SimNode {
     const now = this.ctx.now;
     const macTable = [...this.#table.values()]
       .filter((e) => e.expires > now && this.ctx.isConnected(e.port))
-      .sort((a, b) => a.port - b.port || a.mac.localeCompare(b.mac));
-    return { macTable };
+      .sort((a, b) => a.vlan - b.vlan || a.port - b.port || a.mac.localeCompare(b.mac));
+    if (!this.#stp) return { macTable };
+    const device = this.#device;
+    const ports = (device?.interfaces ?? [])
+      .filter((p) => this.ctx.isConnected(p.index))
+      .map((p) => ({ port: p.index, role: this.#roles.get(p.index) ?? 'designated', state: this.#state(p.index) }));
+    const stp: StpState = { bridgeId: this.#bridgeId(), rootId: this.#rootId || this.#bridgeId(), rootPort: this.#rootPort, rootCost: this.#rootCost, ports };
+    return { macTable, stp };
   }
 }
 

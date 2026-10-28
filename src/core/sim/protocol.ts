@@ -7,6 +7,7 @@ export const TCP_APPS: Record<number, string> = { 80: 'HTTP', 25: 'SMTP', 110: '
 export function protocolOf(frame: EthernetFrame): string {
   const p = frame.payload;
   if (p.kind === 'arp') return 'ARP';
+  if (p.kind === 'stp') return 'STP';
   const inner = p.payload;
   if (inner.kind === 'icmp') return 'ICMP';
   if (inner.kind === 'udp') return inner.payload.kind.toUpperCase();
