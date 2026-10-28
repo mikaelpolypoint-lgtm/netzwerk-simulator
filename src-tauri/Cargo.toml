@@ -1,6 +1,6 @@
 [package]
 name = "netzwerk-simulator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Netzwerk-Simulator für den Informatik-Unterricht"
 authors = ["Mikael von Allmen"]
 license = "MIT"
