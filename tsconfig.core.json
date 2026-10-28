@@ -1,0 +1,18 @@
+{
+  // Der Simulationskern darf weder DOM noch UI kennen: ohne "DOM"-lib
+  // schlägt jeder Zugriff auf document/window beim Prüfen fehl.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/core/**/*.ts"],
+  "exclude": ["src/core/**/*.test.ts"]
+}

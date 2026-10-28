@@ -1,0 +1,119 @@
+/* Helles Schema ist Standard (Beamer); das dunkle folgt der Systemeinstellung. */
+:root {
+  color-scheme: light dark;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #d3d9e1;
+  --text: #18212c;
+  --muted: #55606f;
+  --accent: #1d5fd6;
+  --on-accent: #ffffff;
+  --focus: #b4530a;
+  --focus-soft: rgba(180, 83, 10, 0.35);
+  --hover: rgba(29, 95, 214, 0.06);
+  --selected-soft: rgba(29, 95, 214, 0.12);
+  --grid: #cfd6df;
+  --cable: #4a5566;
+  --danger: #b42318;
+  --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+
+  --endpoint: #1d5fd6;
+  --endpoint-soft: #dde8fc;
+  --distribution: #067a52;
+  --distribution-soft: #d3f2e5;
+  --routing: #b4530a;
+  --routing-soft: #fbe6cf;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c;
+    --surface: #1b2129;
+    --surface-2: #252d38;
+    --border: #374252;
+    --text: #e6ebf1;
+    --muted: #9eaaba;
+    --accent: #6aa5ff;
+    --on-accent: #0b1220;
+    --focus: #fbbf24;
+    --focus-soft: rgba(251, 191, 36, 0.35);
+    --hover: rgba(106, 165, 255, 0.08);
+    --selected-soft: rgba(106, 165, 255, 0.16);
+    --grid: #2b3440;
+    --cable: #9aa7b8;
+    --danger: #f2756a;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+
+    --endpoint: #6aa5ff;
+    --endpoint-soft: #1c3252;
+    --distribution: #3ccf96;
+    --distribution-soft: #123a2c;
+    --routing: #f5b041;
+    --routing-soft: #3d2c12;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+}
+
+button {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 5px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button[aria-pressed='true'] {
+  background: var(--selected-soft);
+  border-color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Farbe markiert die Rolle eines Geräts (Konzept, Abschnitt 8). */
+.role-endpoint {
+  --role: var(--endpoint);
+  --role-soft: var(--endpoint-soft);
+}
+.role-distribution {
+  --role: var(--distribution);
+  --role-soft: var(--distribution-soft);
+}
+.role-routing {
+  --role: var(--routing);
+  --role-soft: var(--routing-soft);
+}
