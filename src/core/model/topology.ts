@@ -3,13 +3,19 @@ import { checkDnsRecord, isValidName, normalizeName, normalizeRecord } from '../
 import { isValidPath } from '../net/http';
 import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
-import { checkStaticRoute, normalizeRoute } from '../net/routing';
-import { DEVICE_SPECS, isRouterType } from './devices';
+import { checkStaticRoute, decodeIface, normalizeRoute } from '../net/routing';
+import { DEVICE_SPECS, hasRoutingTable, isSwitchType } from './devices';
 import { macFor } from './mac';
 import type {
   Cable,
   Device,
   DeviceType,
+  DocArea,
+  Medium,
+  TagColor,
+  CliConfig,
+  WifiClient,
+  WlanConfig,
   DhcpScope,
   DhcpServerConfig,
   DnsRecord,
@@ -20,6 +26,8 @@ import type {
   Point,
   PortForward,
   StaticRoute,
+  SubInterface,
+  Svi,
   Topology,
   WebFile,
 } from './types';
@@ -77,7 +85,19 @@ export type ErrorCode =
   | 'duplicateMailbox'
   | 'unknownMailbox'
   | 'invalidMailAddress'
-  | 'invalidHost';
+  | 'invalidHost'
+  | 'duplicateSubinterface'
+  | 'unknownSubinterface'
+  | 'wirelessNeedsAccessPoint'
+  | 'radioPortNeedsWireless'
+  | 'invalidSsid'
+  | 'invalidChannel'
+  | 'invalidPassword'
+  | 'unknownArea'
+  | 'unknownFloor'
+  | 'lastFloor'
+  | 'invalidUser'
+  | 'textTooLong';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -200,27 +220,69 @@ export function removeDevice(t: Topology, id: string): Result<Topology> {
   });
 }
 
-/** Verbindet zwei Geräte über deren jeweils ersten freien Anschluss. */
-export function connect(t: Topology, aId: string, bId: string): Result<{ topology: Topology; id: string }> {
+/** Passender freier Anschluss für ein Medium: Funk nur an Funk-Ports des Access Points, Kabel nur an Buchsen. */
+function freeInterfaceFor(t: Topology, device: Device, medium: Medium): NetInterface | undefined {
+  return device.interfaces.find((i) => {
+    if (cableAt(t, { device: device.id, iface: i.index })) return false;
+    if (device.type !== 'accesspoint') return true;
+    return medium === 'wireless' ? i.index > 0 : i.index === 0;
+  });
+}
+
+function checkMedium(a: Device, b: Device, medium: Medium): ErrorCode | null {
+  if (medium !== 'wireless') return null;
+  const wifiCapable = (d: Device) => d.type === 'accesspoint' || d.type === 'notebook' || d.type === 'pc';
+  if (!(a.type === 'accesspoint' || b.type === 'accesspoint') || !wifiCapable(a) || !wifiCapable(b)) return 'wirelessNeedsAccessPoint';
+  return null;
+}
+
+/** Verbindet zwei Geräte über deren jeweils ersten freien (zum Medium passenden) Anschluss. */
+export function connect(t: Topology, aId: string, bId: string, medium: Medium = 'tp'): Result<{ topology: Topology; id: string }> {
   const a = getDevice(t, aId);
   const b = getDevice(t, bId);
   if (!a || !b) return fail('unknownDevice');
   if (a.id === b.id) return fail('sameDevice');
   const direct = cablesOf(t, a.id).some((c) => otherEnd(c, a.id).device === b.id);
   if (direct) return fail('alreadyConnected', { a: a.name, b: b.name });
+  const mediumIssue = checkMedium(a, b, medium);
+  if (mediumIssue) return fail(mediumIssue);
   if (isBridge(a) && isBridge(b) && bridged(t, a.id, b.id) && !stpProtects(t, a.id)) {
     return fail('switchLoop', { a: a.name, b: b.name });
   }
-  const ia = freeInterface(t, a);
+  const ia = freeInterfaceFor(t, a, medium);
   if (!ia) return fail('noFreeInterface', { device: a.name });
-  const ib = freeInterface(t, b);
+  const ib = freeInterfaceFor(t, b, medium);
   if (!ib) return fail('noFreeInterface', { device: b.name });
   const cable: Cable = {
     id: `c${t.nextId}`,
     a: { device: a.id, iface: ia.index },
     b: { device: b.id, iface: ib.index },
+    ...(medium !== 'tp' ? { medium } : {}),
   };
   return ok({ topology: { ...t, cables: [...t.cables, cable], nextId: t.nextId + 1 }, id: cable.id });
+}
+
+/** Medium einer bestehenden Verbindung ändern (Kabel ↔ Glasfaser; Funk nur, wo es passt). */
+export function setCableMedium(t: Topology, id: string, medium: Medium): Result<Topology> {
+  const cable = getCable(t, id);
+  if (!cable) return fail('unknownCable');
+  const a = getDevice(t, cable.a.device);
+  const b = getDevice(t, cable.b.device);
+  if (!a || !b) return fail('unknownDevice');
+  const issue = checkMedium(a, b, medium);
+  if (issue) return fail(issue);
+  const radio = (d: Device, iface: number) => d.type === 'accesspoint' && iface > 0;
+  const wantsRadio = medium === 'wireless';
+  if (radio(a, cable.a.iface) !== wantsRadio && a.type === 'accesspoint') return fail('radioPortNeedsWireless');
+  if (radio(b, cable.b.iface) !== wantsRadio && b.type === 'accesspoint') return fail('radioPortNeedsWireless');
+  return ok({
+    ...t,
+    cables: t.cables.map((c) => {
+      if (c.id !== id) return c;
+      const { medium: _m, ...rest } = c;
+      return medium === 'tp' ? rest : { ...rest, medium };
+    }),
+  });
 }
 
 /**
@@ -230,7 +292,7 @@ export function connect(t: Topology, aId: string, bId: string): Result<{ topolog
  * Switches Spanning Tree aktiv haben.
  */
 export function isBridge(device: Device): boolean {
-  return device.type === 'switch' || device.type === 'modem';
+  return isSwitchType(device.type) || device.type === 'modem' || device.type === 'accesspoint';
 }
 
 /** Alle Switches und Modems, die über Switch-/Modem-Verbindungen mit `from` zusammenhängen. */
@@ -252,7 +314,7 @@ function bridgeComponent(t: Topology, from: string): Device[] {
 
 /** Schleifen sind sicher, wenn jeder Switch im Verbund Spanning Tree spricht (Modems können das nicht). */
 function stpProtects(t: Topology, from: string): boolean {
-  return bridgeComponent(t, from).every((d) => d.type === 'switch' && d.stp);
+  return bridgeComponent(t, from).every((d) => isSwitchType(d.type) && d.stp);
 }
 
 function bridged(t: Topology, from: string, to: string): boolean {
@@ -300,7 +362,7 @@ export function findSwitchLoop(t: Topology): Cable | undefined {
 function switchDevice(t: Topology, id: string): Result<Device> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (device.type !== 'switch') return fail('notASwitch');
+  if (!isSwitchType(device.type)) return fail('notASwitch');
   return ok(device);
 }
 
@@ -381,6 +443,8 @@ export function replugCable(t: Topology, id: string, end: 'a' | 'b', iface: numb
   if (!device) return fail('unknownDevice');
   if (!device.interfaces[iface]) return fail('unknownInterface');
   if (cable[end].iface === iface) return ok(t);
+  // Access Point: Funk nur an Funk-Ports, Kabel nur an der LAN-Buchse.
+  if (device.type === 'accesspoint' && (iface > 0) !== (cable.medium === 'wireless')) return fail('radioPortNeedsWireless');
   const occupied = cableAt(t, { device: device.id, iface });
   if (occupied) return fail('interfaceInUse', { device: device.name, index: iface });
   return ok({
@@ -496,23 +560,117 @@ export function removeDhcpScope(t: Topology, id: string, index: number): Result<
   );
 }
 
-/** DHCP-Relay eines Router-Interfaces setzen (Server-IP) oder entfernen (""). */
+/** DHCP-Relay eines Router-Interfaces (auch Subinterface oder SVI) setzen (Server-IP) oder entfernen (""). */
 export function setInterfaceRelay(t: Topology, id: string, index: number, server: string): Result<Topology> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (!isRouterType(device.type)) return fail('notARouter');
-  if (!device.interfaces[index]) return fail('unknownInterface');
+  if (!hasRoutingTable(device.type)) return fail('notARouter');
   const value = server.trim();
   if (value && parseIp(value) === null) return { ok: false, error: { code: 'invalidIp', params: { value }, field: 'relay' } };
+  const withRelay = <T extends { dhcpRelay?: string }>(item: T): T => {
+    const { dhcpRelay: _r, ...base } = item;
+    return (value ? { ...base, dhcpRelay: value } : base) as T;
+  };
+  const ref = decodeIface(index);
+  if (ref.kind === 'sub') {
+    if (!device.subinterfaces?.some((s) => s.parent === ref.port && s.vlan === ref.vlan)) return fail('unknownSubinterface');
+    return ok(
+      updateDevice(t, id, (d) => ({
+        ...d,
+        subinterfaces: (d.subinterfaces ?? []).map((s) => (s.parent === ref.port && s.vlan === ref.vlan ? withRelay(s) : s)),
+      })),
+    );
+  }
+  if (ref.kind === 'svi') {
+    if (!device.svis?.some((s) => s.vlan === ref.vlan)) return fail('unknownSubinterface');
+    return ok(updateDevice(t, id, (d) => ({ ...d, svis: (d.svis ?? []).map((s) => (s.vlan === ref.vlan ? withRelay(s) : s)) })));
+  }
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  return ok(updateDevice(t, id, (d) => ({ ...d, interfaces: d.interfaces.map((i) => (i.index === index ? withRelay(i) : i)) })));
+}
+
+// --- Router-on-a-Stick und Layer-3-Switch --------------------------------------
+
+function checkAddress(ip: string, mask: string): TopologyError | null {
+  if (ip.trim() && parseIp(ip) === null) return { code: 'invalidIp', params: { value: ip.trim() }, field: 'ip' };
+  if (mask.trim() && parseMask(mask) === null) return { code: 'invalidMask', params: { value: mask.trim() }, field: 'mask' };
+  if (ip.trim() && !mask.trim()) return { code: 'maskRequired', field: 'mask' };
+  return null;
+}
+
+const validVlan = (vlan: number) => Number.isInteger(vlan) && vlan >= 1 && vlan <= 4094;
+
+/** Subinterface eines Router-Anschlusses anlegen oder seine Adresse ändern (z.B. eth0.10). */
+export function setSubinterface(t: Topology, id: string, parent: number, vlan: number, ip: string, mask: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  if (!device.interfaces[parent]) return fail('unknownInterface');
+  if (!validVlan(vlan)) return { ok: false, error: { code: 'invalidVlan', field: 'vlan' } };
+  const issue = checkAddress(ip, mask);
+  if (issue) return { ok: false, error: issue };
+  const existing = device.subinterfaces ?? [];
+  const old = existing.find((s) => s.parent === parent && s.vlan === vlan);
+  const { ip: _ip, mask: _mask, ...rest } = old ?? { parent, vlan };
+  const next: SubInterface = { ...rest, ...normalized(ip, mask) };
+  const list = old
+    ? existing.map((s) => (s === old ? next : s))
+    : [...existing, next].sort((a, b) => a.parent - b.parent || a.vlan - b.vlan);
+  return ok(updateDevice(t, id, (d) => ({ ...d, subinterfaces: list })));
+}
+
+export function removeSubinterface(t: Topology, id: string, parent: number, vlan: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.subinterfaces?.some((s) => s.parent === parent && s.vlan === vlan)) return fail('unknownSubinterface');
+  const list = device.subinterfaces.filter((s) => !(s.parent === parent && s.vlan === vlan));
   return ok(
-    updateDevice(t, id, (d) => ({
-      ...d,
-      interfaces: d.interfaces.map((i) => {
-        if (i.index !== index) return i;
-        const { dhcpRelay: _r, ...base } = i;
-        return value ? { ...base, dhcpRelay: value } : base;
-      }),
-    })),
+    updateDevice(t, id, (d) => {
+      const { subinterfaces: _s, ...rest } = d;
+      return list.length ? { ...rest, subinterfaces: list } : rest;
+    }),
+  );
+}
+
+/** VLAN-Interface eines Layer-3-Switches anlegen oder seine Adresse ändern («interface vlan 10»). */
+export function setSvi(t: Topology, id: string, vlan: number, ip: string, mask: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'l3switch') return fail('notASwitch');
+  if (!validVlan(vlan)) return { ok: false, error: { code: 'invalidVlan', field: 'vlan' } };
+  const issue = checkAddress(ip, mask);
+  if (issue) return { ok: false, error: issue };
+  const existing = device.svis ?? [];
+  const old = existing.find((s) => s.vlan === vlan);
+  const { ip: _ip, mask: _mask, ...rest } = old ?? { vlan };
+  const next: Svi = { ...rest, ...normalized(ip, mask) };
+  const list = old ? existing.map((s) => (s === old ? next : s)) : [...existing, next].sort((a, b) => a.vlan - b.vlan);
+  return ok(updateDevice(t, id, (d) => ({ ...d, svis: list })));
+}
+
+export function removeSvi(t: Topology, id: string, vlan: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.svis?.some((s) => s.vlan === vlan)) return fail('unknownSubinterface');
+  const list = device.svis.filter((s) => s.vlan !== vlan);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { svis: _s, ...rest } = d;
+      return list.length ? { ...rest, svis: list } : rest;
+    }),
+  );
+}
+
+/** Routing zwischen VLANs am Layer-3-Switch ein- oder ausschalten. */
+export function setIpRouting(t: Topology, id: string, enabled: boolean): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'l3switch') return fail('notASwitch');
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { ipRouting: _r, ...rest } = d;
+      return enabled ? rest : { ...rest, ipRouting: false };
+    }),
   );
 }
 
@@ -705,7 +863,7 @@ export function setMailAccount(t: Topology, id: string, account: MailAccount | n
 export function addStaticRoute(t: Topology, id: string, route: StaticRoute): Result<Topology> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (!isRouterType(device.type)) return fail('notARouter');
+  if (!hasRoutingTable(device.type)) return fail('notARouter');
   const issue = checkStaticRoute(device, route);
   if (issue) return { ok: false, error: { code: issue.code as ErrorCode, params: issue.params, field: issue.field } };
   return ok(updateDevice(t, id, (d) => ({ ...d, routes: [...(d.routes ?? []), normalizeRoute(route)] })));
@@ -743,5 +901,252 @@ export function setInterfaceAddress(t: Topology, id: string, index: number, ip: 
         return { ...base, ...normalized(ip, mask) };
       }),
     })),
+  );
+}
+
+// --- Anschlüsse: Abschalten, Farbe, Beschreibung -------------------------------
+
+export function setInterfaceShutdown(t: Topology, id: string, index: number, shutdown: boolean): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { shutdown: _s, ...base } = i;
+      return shutdown ? { ...base, shutdown: true } : base;
+    }),
+  );
+}
+
+export function setInterfaceColor(t: Topology, id: string, index: number, color: TagColor | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { color: _c, ...base } = i;
+      return color ? { ...base, color } : base;
+    }),
+  );
+}
+
+export function setInterfaceDescription(t: Topology, id: string, index: number, description: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  const value = description.trim();
+  if (value.length > 80) return fail('textTooLong', { max: 80 });
+  return ok(
+    updatePort(t, id, index, (i) => {
+      const { description: _d, ...base } = i;
+      return value ? { ...base, description: value } : base;
+    }),
+  );
+}
+
+// --- WLAN ----------------------------------------------------------------------
+
+export const CHANNELS: Record<'2.4' | '5', number[]> = {
+  '2.4': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+  '5': [36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140],
+};
+
+function checkSsid(ssid: string): ErrorCode | null {
+  const value = ssid.trim();
+  return value.length < 1 || value.length > 32 ? 'invalidSsid' : null;
+}
+
+/** WPA2: leer (offen) oder 8–63 Zeichen. */
+function checkWifiPassword(password: string | undefined): ErrorCode | null {
+  if (!password) return null;
+  return password.length < 8 || password.length > 63 ? 'invalidPassword' : null;
+}
+
+/** Funknetz eines Access Points einrichten oder ausschalten (`null`). */
+export function setWlan(t: Topology, id: string, config: WlanConfig | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'accesspoint') return fail('wirelessNeedsAccessPoint');
+  if (config) {
+    const ssid = checkSsid(config.ssid);
+    if (ssid) return { ok: false, error: { code: ssid, field: 'ssid' } };
+    const pw = checkWifiPassword(config.password);
+    if (pw) return { ok: false, error: { code: pw, field: 'password' } };
+    if (!CHANNELS[config.band]?.includes(config.channel)) return { ok: false, error: { code: 'invalidChannel', field: 'channel' } };
+  }
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { wlan: _w, ...rest } = d;
+      if (!config) return rest;
+      const wlan: WlanConfig = { ssid: config.ssid.trim(), band: config.band, channel: config.channel };
+      if (config.password) wlan.password = config.password;
+      if (config.mesh) wlan.mesh = true;
+      return { ...rest, wlan };
+    }),
+  );
+}
+
+/** WLAN-Profil eines Endgeräts (SSID und Passwort) setzen oder entfernen. */
+export function setWifiClient(t: Topology, id: string, client: WifiClient | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (DEVICE_SPECS[device.type].role !== 'endpoint') return fail('notAnEndpoint');
+  if (client) {
+    const ssid = checkSsid(client.ssid);
+    if (ssid) return { ok: false, error: { code: ssid, field: 'ssid' } };
+  }
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { wifi: _w, ...rest } = d;
+      if (!client) return rest;
+      return { ...rest, wifi: { ssid: client.ssid.trim(), ...(client.password ? { password: client.password } : {}) } };
+    }),
+  );
+}
+
+// --- Stockwerke --------------------------------------------------------------
+
+export function floorsOf(t: Topology): { name: string }[] {
+  return t.floors?.length ? t.floors : [{ name: '' }];
+}
+
+export function addFloor(t: Topology, name: string): Result<Topology> {
+  const value = name.trim();
+  if (!value) return fail('nameEmpty');
+  if (value.length > 40) return fail('nameTooLong', { max: 40 });
+  const existing = t.floors?.length ? t.floors : [{ name: value === 'EG' ? 'UG' : 'EG' }];
+  return ok({ ...t, floors: [...existing, { name: value }] });
+}
+
+export function renameFloor(t: Topology, index: number, name: string): Result<Topology> {
+  const floors = floorsOf(t);
+  if (!floors[index]) return fail('unknownFloor');
+  const value = name.trim();
+  if (!value) return fail('nameEmpty');
+  if (value.length > 40) return fail('nameTooLong', { max: 40 });
+  return ok({ ...t, floors: floors.map((f, i) => (i === index ? { name: value } : f)) });
+}
+
+/** Entfernt ein Stockwerk; Geräte und Bereiche darauf rutschen ins darunterliegende. */
+export function removeFloor(t: Topology, index: number): Result<Topology> {
+  const floors = floorsOf(t);
+  if (!floors[index]) return fail('unknownFloor');
+  if (floors.length <= 1) return fail('lastFloor');
+  const shift = (floor: number | undefined) => {
+    const f = floor ?? 0;
+    return f > index ? f - 1 : f === index ? Math.max(0, index - 1) : f;
+  };
+  const rest = floors.filter((_, i) => i !== index);
+  return ok({
+    ...t,
+    floors: rest,
+    devices: t.devices.map((d) => {
+      const { floor: _f, ...base } = d;
+      const f = shift(d.floor);
+      return f ? { ...base, floor: f } : base;
+    }),
+    areas: t.areas?.map((a) => (a.floor === undefined ? a : { ...a, floor: shift(a.floor) })),
+  });
+}
+
+export function setDeviceFloor(t: Topology, id: string, floor: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!floorsOf(t)[floor]) return fail('unknownFloor');
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { floor: _f, ...rest } = d;
+      return floor ? { ...rest, floor } : rest;
+    }),
+  );
+}
+
+// --- Dokumentationsmodus: Bereiche ---------------------------------------------
+
+export function addArea(t: Topology, area: Omit<DocArea, 'id'>): Result<{ topology: Topology; id: string }> {
+  const id = `a${t.nextId}`;
+  const checked = checkArea({ ...area, id });
+  if (!checked.ok) return checked;
+  return ok({ topology: { ...t, areas: [...(t.areas ?? []), checked.value], nextId: t.nextId + 1 }, id });
+}
+
+function checkArea(area: DocArea): Result<DocArea> {
+  if (area.title.length > 80) return fail('textTooLong', { max: 80 });
+  if ((area.note ?? '').length > 2000) return fail('textTooLong', { max: 2000 });
+  if (area.vlan !== undefined && (!Number.isInteger(area.vlan) || area.vlan < 1 || area.vlan > 4094)) return fail('invalidVlan');
+  const clean: DocArea = {
+    id: area.id,
+    title: area.title,
+    color: area.color,
+    x: Math.round(area.x),
+    y: Math.round(area.y),
+    width: Math.max(40, Math.round(area.width)),
+    height: Math.max(40, Math.round(area.height)),
+  };
+  if (area.network?.trim()) clean.network = area.network.trim();
+  if (area.vlan !== undefined) clean.vlan = area.vlan;
+  if (area.note?.trim()) clean.note = area.note;
+  if (area.floor !== undefined) clean.floor = area.floor;
+  return ok(clean);
+}
+
+export function updateArea(t: Topology, id: string, change: Partial<Omit<DocArea, 'id'>>): Result<Topology> {
+  const area = t.areas?.find((a) => a.id === id);
+  if (!area) return fail('unknownArea');
+  const merged: DocArea = { ...area, ...change, id };
+  for (const key of Object.keys(change) as (keyof DocArea)[]) {
+    if (change[key as keyof typeof change] === undefined) delete merged[key];
+  }
+  const checked = checkArea(merged);
+  if (!checked.ok) return checked;
+  return ok({ ...t, areas: t.areas!.map((a) => (a.id === id ? checked.value : a)) });
+}
+
+export function removeArea(t: Topology, id: string): Result<Topology> {
+  if (!t.areas?.some((a) => a.id === id)) return fail('unknownArea');
+  const areas = t.areas.filter((a) => a.id !== id);
+  const { areas: _a, ...rest } = t;
+  return ok(areas.length ? { ...rest, areas } : rest);
+}
+
+// --- Befehlszeile ---------------------------------------------------------------
+
+export function setCliConfig(t: Topology, id: string, cli: CliConfig): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  for (const user of cli.users ?? []) {
+    if (!/^[A-Za-z0-9._-]{1,32}$/.test(user.name)) return fail('invalidUser', { name: user.name });
+    if (!user.password || user.password.length > 64) return fail('passwordRequired');
+  }
+  if ((cli.banner ?? '').length > 500) return fail('textTooLong', { max: 500 });
+  const clean: CliConfig = {};
+  if (cli.ssh) clean.ssh = true;
+  if (cli.users?.length) clean.users = cli.users.map((u) => ({ name: u.name, password: u.password }));
+  if (cli.enableSecret) clean.enableSecret = cli.enableSecret;
+  if (cli.banner) clean.banner = cli.banner;
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { cli: _c, ...rest } = d;
+      return Object.keys(clean).length ? { ...rest, cli: clean } : rest;
+    }),
+  );
+}
+
+/** Name eines VLANs am Switch setzen oder entfernen (""). */
+export function setVlanName(t: Topology, id: string, vlan: number, name: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!isSwitchType(device.type)) return fail('notASwitch');
+  if (!Number.isInteger(vlan) || vlan < 1 || vlan > 4094) return fail('invalidVlan');
+  const value = name.trim();
+  if (value.length > 32) return fail('textTooLong', { max: 32 });
+  const list = (device.vlanNames ?? []).filter((v) => v.vlan !== vlan);
+  if (value) list.push({ vlan, name: value });
+  list.sort((a, b) => a.vlan - b.vlan);
+  return ok(
+    updateDevice(t, id, (d) => {
+      const { vlanNames: _v, ...rest } = d;
+      return list.length ? { ...rest, vlanNames: list } : rest;
+    }),
   );
 }

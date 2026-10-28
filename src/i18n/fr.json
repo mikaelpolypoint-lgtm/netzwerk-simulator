@@ -821,5 +821,17 @@
   "about.devBuild": "Non disponible dans le serveur de développement ; la liste est générée lors de la compilation.",
   "about.syntaxTitle": "Syntaxe de commandes reproduite",
   "about.syntaxText": "La ligne de commande des routeurs et commutateurs s'inspire de la syntaxe de FRRouting (vtysh). Il s'agit d'une reproduction simplifiée et indépendante pour l'enseignement, qui ne contient ni code ni textes de FRRouting. FRRouting est un projet distinct sous licence GPL-2.0, sans lien avec ce simulateur.",
-  "about.close": "Fermer"
+  "about.close": "Fermer",
+
+  "console.cmd.usage.ssh": "Utilisation : ssh <utilisateur>@<adresse IP>",
+  "console.help.ssh": "ssh              Se connecter à un routeur ou commutateur L3 par SSH",
+  "console.ssh.connecting": "Connexion à {target} en tant que {user} …",
+  "console.ssh.open": "Connecté à {target}. « exit » pour se déconnecter.",
+  "console.ssh.denied": "Accès refusé : nom d'utilisateur ou mot de passe incorrect.",
+  "console.ssh.closed": "Connexion à {target} fermée.",
+  "console.ssh.noRoute": "ssh : {target} injoignable (pas d'adresse ou de route).",
+  "console.ssh.refused": "ssh : connexion à {target} port 22 refusée (SSH inactif).",
+  "console.ssh.timeout": "ssh : délai dépassé pour la connexion à {target}.",
+  "console.ssh.server.login": "SSH : {user} connecté depuis {from}",
+  "console.ssh.server.denied": "SSH : connexion de {user} ({from}) refusée"
 }

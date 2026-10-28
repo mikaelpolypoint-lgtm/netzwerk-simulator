@@ -2,6 +2,7 @@ import { DEVICE_SPECS, isDeviceType } from '../model/devices';
 import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
 import { MAX_NAME_LENGTH, deviceSeq, findSwitchLoop } from '../model/topology';
+import { logicalInterfaces } from '../net/routing';
 import type {
   Cable,
   Device,
@@ -10,8 +11,11 @@ import type {
   Endpoint,
   MailAccount,
   Mailbox,
+  DocArea,
+  Floor,
   NetInterface,
   StaticRoute,
+  TagColor,
   Topology,
   WebFile,
 } from '../model/types';
@@ -137,6 +141,30 @@ function int(v: unknown, path: string): number {
   return n;
 }
 
+export const TAG_COLORS: readonly TagColor[] = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'gray'];
+
+function bool(v: unknown, path: string): boolean {
+  if (typeof v !== 'boolean') throw new Invalid(path);
+  return v;
+}
+
+function color(v: unknown, path: string): TagColor {
+  if (!(TAG_COLORS as readonly unknown[]).includes(v)) throw new Invalid(path);
+  return v as TagColor;
+}
+
+function vlanNumber(v: unknown, path: string): number {
+  const n = int(v, path);
+  if (n < 1 || n > 4094) throw new Invalid(path);
+  return n;
+}
+
+function text(v: unknown, path: string, max: number): string {
+  const value = str(v, path);
+  if (value.length > max) throw new Invalid(path);
+  return value;
+}
+
 function readTopology(v: unknown): Topology {
   const t = obj(v, 'topology');
 
@@ -162,15 +190,50 @@ function readTopology(v: unknown): Topology {
     const a = readEndpoint(o.a, `${path}.a`, byId, usedEndpoints);
     const b = readEndpoint(o.b, `${path}.b`, byId, usedEndpoints);
     if (a.device === b.device) throw new Invalid(`${path}.b`);
-    if (o.loss === undefined) return { id, a, b };
-    const loss = int(o.loss, `${path}.loss`);
-    if (loss < 0 || loss > 100) throw new Invalid(`${path}.loss`);
-    return loss > 0 ? { id, a, b, loss } : { id, a, b };
+    const cable: Cable = { id, a, b };
+    if (o.loss !== undefined) {
+      const loss = int(o.loss, `${path}.loss`);
+      if (loss < 0 || loss > 100) throw new Invalid(`${path}.loss`);
+      if (loss > 0) cable.loss = loss;
+    }
+    if (o.medium !== undefined) {
+      if (o.medium !== 'tp' && o.medium !== 'fiber' && o.medium !== 'wireless') throw new Invalid(`${path}.medium`);
+      if (o.medium !== 'tp') cable.medium = o.medium;
+    }
+    return cable;
   });
 
+  const areaIds = new Set<string>();
+  const areas = t.areas === undefined ? [] : arr(t.areas, 'topology.areas').map((raw, i): DocArea => {
+    const path = `topology.areas[${i}]`;
+    const o = obj(raw, path);
+    const id = str(o.id, `${path}.id`);
+    if (!/^a\d+$/.test(id) || areaIds.has(id)) throw new Invalid(`${path}.id`);
+    areaIds.add(id);
+    const area: DocArea = {
+      id,
+      title: text(o.title, `${path}.title`, 80),
+      color: color(o.color, `${path}.color`),
+      x: num(o.x, `${path}.x`),
+      y: num(o.y, `${path}.y`),
+      width: num(o.width, `${path}.width`),
+      height: num(o.height, `${path}.height`),
+    };
+    if (area.width <= 0 || area.height <= 0) throw new Invalid(`${path}.width`);
+    if (o.network !== undefined) area.network = text(o.network, `${path}.network`, 40).trim();
+    if (o.vlan !== undefined) area.vlan = vlanNumber(o.vlan, `${path}.vlan`);
+    if (o.note !== undefined) area.note = text(o.note, `${path}.note`, 2000);
+    if (o.floor !== undefined) area.floor = int(o.floor, `${path}.floor`);
+    return area;
+  });
+  const floors = t.floors === undefined ? [] : arr(t.floors, 'topology.floors').map((raw, i): Floor => ({
+    name: text(obj(raw, `topology.floors[${i}]`).name, `topology.floors[${i}].name`, 40),
+  }));
+
   const highest = Math.max(0, ...devices.map((d) => deviceSeq(d.id)), ...cables.map((c) => deviceSeq(c.id)));
-  const nextId = typeof t.nextId === 'number' && Number.isInteger(t.nextId) && t.nextId > highest ? t.nextId : highest + 1;
-  return { devices, cables, nextId };
+  const highestAll = Math.max(highest, ...areas.map((a) => deviceSeq(a.id)));
+  const nextId = typeof t.nextId === 'number' && Number.isInteger(t.nextId) && t.nextId > highestAll ? t.nextId : highestAll + 1;
+  return { devices, cables, nextId, ...(areas.length ? { areas } : {}), ...(floors.length ? { floors } : {}) };
 }
 
 function readDevice(v: unknown, path: string): Device {
@@ -216,6 +279,9 @@ function readDevice(v: unknown, path: string): Device {
       if (typeof io.trunk !== 'boolean') throw new Invalid(`${p}.trunk`);
       if (io.trunk) iface.trunk = true;
     }
+    if (io.shutdown !== undefined && bool(io.shutdown, `${p}.shutdown`)) iface.shutdown = true;
+    if (io.color !== undefined) iface.color = color(io.color, `${p}.color`);
+    if (io.description !== undefined) iface.description = text(io.description, `${p}.description`, 80);
     return iface;
   });
 
@@ -343,13 +409,103 @@ function readDevice(v: unknown, path: string): Device {
       if (r.gateway !== undefined) route.gateway = ip(r.gateway, `${p}.gateway`);
       if (r.iface !== undefined) {
         const iface = int(r.iface, `${p}.iface`);
-        if (iface < 0 || iface >= interfaces.length) throw new Invalid(`${p}.iface`);
         route.iface = iface;
       }
       return route;
     });
   }
+  if (o.subinterfaces !== undefined) {
+    const seen = new Set<string>();
+    device.subinterfaces = arr(o.subinterfaces, `${path}.subinterfaces`).map((raw, i) => {
+      const p = `${path}.subinterfaces[${i}]`;
+      const si = obj(raw, p);
+      const parent = int(si.parent, `${p}.parent`);
+      if (parent < 0 || parent >= interfaces.length) throw new Invalid(`${p}.parent`);
+      const vlan = vlanNumber(si.vlan, `${p}.vlan`);
+      if (seen.has(`${parent}.${vlan}`)) throw new Invalid(`${p}.vlan`);
+      seen.add(`${parent}.${vlan}`);
+      return { parent, vlan, ...readAddress(si, p) };
+    });
+  }
+  if (o.svis !== undefined) {
+    const seen = new Set<number>();
+    device.svis = arr(o.svis, `${path}.svis`).map((raw, i) => {
+      const p = `${path}.svis[${i}]`;
+      const si = obj(raw, p);
+      const vlan = vlanNumber(si.vlan, `${p}.vlan`);
+      if (seen.has(vlan)) throw new Invalid(`${p}.vlan`);
+      seen.add(vlan);
+      return { vlan, ...readAddress(si, p) };
+    });
+  }
+  if (o.ipRouting !== undefined && !bool(o.ipRouting, `${path}.ipRouting`)) device.ipRouting = false;
+  if (o.wlan !== undefined) {
+    const p = `${path}.wlan`;
+    const w = obj(o.wlan, p);
+    if (w.band !== '2.4' && w.band !== '5') throw new Invalid(`${p}.band`);
+    const channel = int(w.channel, `${p}.channel`);
+    if (channel < 1 || channel > 165) throw new Invalid(`${p}.channel`);
+    device.wlan = { ssid: text(w.ssid, `${p}.ssid`, 32), band: w.band, channel };
+    if (w.password !== undefined) device.wlan.password = text(w.password, `${p}.password`, 63);
+    if (w.mesh !== undefined && bool(w.mesh, `${p}.mesh`)) device.wlan.mesh = true;
+  }
+  if (o.wifi !== undefined) {
+    const p = `${path}.wifi`;
+    const w = obj(o.wifi, p);
+    device.wifi = { ssid: text(w.ssid, `${p}.ssid`, 32) };
+    if (w.password !== undefined) device.wifi.password = text(w.password, `${p}.password`, 63);
+  }
+  if (o.floor !== undefined) {
+    device.floor = int(o.floor, `${path}.floor`);
+    if (device.floor < 0) throw new Invalid(`${path}.floor`);
+  }
+  if (o.cli !== undefined) {
+    const p = `${path}.cli`;
+    const c = obj(o.cli, p);
+    device.cli = {};
+    if (c.ssh !== undefined && bool(c.ssh, `${p}.ssh`)) device.cli.ssh = true;
+    if (c.enableSecret !== undefined) device.cli.enableSecret = text(c.enableSecret, `${p}.enableSecret`, 64);
+    if (c.banner !== undefined) device.cli.banner = text(c.banner, `${p}.banner`, 500);
+    if (c.users !== undefined) {
+      device.cli.users = arr(c.users, `${p}.users`).map((raw, i) => {
+        const u = obj(raw, `${p}.users[${i}]`);
+        const name = text(u.name, `${p}.users[${i}].name`, 32);
+        if (!/^[A-Za-z0-9._-]+$/.test(name)) throw new Invalid(`${p}.users[${i}].name`);
+        return { name, password: text(u.password, `${p}.users[${i}].password`, 64) };
+      });
+    }
+  }
+  if (o.vlanNames !== undefined) {
+    const seen = new Set<number>();
+    device.vlanNames = arr(o.vlanNames, `${path}.vlanNames`).map((raw, i) => {
+      const p = `${path}.vlanNames[${i}]`;
+      const v = obj(raw, p);
+      const vlan = vlanNumber(v.vlan, `${p}.vlan`);
+      if (seen.has(vlan)) throw new Invalid(`${p}.vlan`);
+      seen.add(vlan);
+      return { vlan, name: text(v.name, `${p}.name`, 32) };
+    });
+  }
+  // Routen dürfen auch auf Subinterfaces und SVIs zeigen.
+  if (device.routes) {
+    const valid = logicalInterfaces(device);
+    device.routes.forEach((r, i) => {
+      if (r.iface !== undefined && !valid.includes(r.iface)) throw new Invalid(`${path}.routes[${i}].iface`);
+    });
+  }
   return device;
+}
+
+function readAddress(o: Record<string, unknown>, path: string): { ip?: string; mask?: string; dhcpRelay?: string } {
+  const result: { ip?: string; mask?: string; dhcpRelay?: string } = {};
+  if (o.ip !== undefined) result.ip = ip(o.ip, `${path}.ip`);
+  if (o.mask !== undefined) {
+    const prefix = parseMask(str(o.mask, `${path}.mask`));
+    if (prefix === null) throw new Invalid(`${path}.mask`);
+    result.mask = maskToText(prefix);
+  }
+  if (o.dhcpRelay !== undefined) result.dhcpRelay = ip(o.dhcpRelay, `${path}.dhcpRelay`);
+  return result;
 }
 
 /** Nur syntaktisch geprüft: Fehlkonfigurationen für Übungen sind erlaubt. */

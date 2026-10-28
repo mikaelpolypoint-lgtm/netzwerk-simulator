@@ -10,6 +10,7 @@ import { HttpClient, HttpServer, type BrowserState } from './http';
 import { IpNode, type ArpEntry } from './ip';
 import { MailClient, MailServer, type MailClientState } from './mail';
 import type { NodeContext } from './simulation';
+import { SshClient } from './ssh';
 import { TcpStack, type TcpState } from './tcp';
 
 /** Wirksame Adresskonfiguration, wie sie "ipconfig" zeigt. */
@@ -54,6 +55,7 @@ export class HostNode extends IpNode {
   readonly browser: HttpClient;
   readonly mailServer: MailServer;
   readonly mail: MailClient;
+  readonly ssh: SshClient;
   #ping: IcmpApp | null = null;
   #trace: IcmpApp | null = null;
   #icmpId = 0;
@@ -70,6 +72,7 @@ export class HostNode extends IpNode {
     new HttpServer(this);
     this.mailServer = new MailServer(this);
     this.mail = new MailClient(this);
+    this.ssh = new SshClient(this.tcp, ctx);
   }
 
   /** Im DHCP-Modus gelten Adresse, Gateway und DNS aus der Lease (oder gar keine). */

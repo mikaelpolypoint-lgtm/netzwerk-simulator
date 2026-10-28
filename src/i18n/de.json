@@ -821,5 +821,17 @@
   "about.devBuild": "Im Entwicklungsserver nicht verfügbar; die Liste wird beim Bauen erzeugt.",
   "about.syntaxTitle": "Nachgebildete Befehlssyntax",
   "about.syntaxText": "Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) angelehnt. Sie ist eine eigene, vereinfachte Nachbildung für den Unterricht und enthält keinen Code und keine Texte aus FRRouting. FRRouting ist ein eigenständiges Projekt unter der GPL-2.0-Lizenz und steht in keiner Verbindung zu diesem Simulator.",
-  "about.close": "Schliessen"
+  "about.close": "Schliessen",
+
+  "console.cmd.usage.ssh": "Aufruf: ssh <benutzer>@<IP-Adresse>",
+  "console.help.ssh": "ssh              Per SSH an einem Router oder Layer-3-Switch anmelden",
+  "console.ssh.connecting": "Verbinde mit {target} als {user} …",
+  "console.ssh.open": "Angemeldet an {target}. Mit «exit» abmelden.",
+  "console.ssh.denied": "Zugriff verweigert: Benutzername oder Passwort falsch.",
+  "console.ssh.closed": "Verbindung zu {target} geschlossen.",
+  "console.ssh.noRoute": "ssh: {target} ist nicht erreichbar (keine Adresse oder Route).",
+  "console.ssh.refused": "ssh: Verbindung zu {target} Port 22 abgelehnt (SSH nicht aktiv).",
+  "console.ssh.timeout": "ssh: Zeitüberschreitung bei der Verbindung zu {target}.",
+  "console.ssh.server.login": "SSH: {user} von {from} angemeldet",
+  "console.ssh.server.denied": "SSH: Anmeldung von {user} ({from}) abgelehnt"
 }
