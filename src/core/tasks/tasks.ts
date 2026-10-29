@@ -4,8 +4,10 @@
 // frischen Simulation des aktuellen Netzes und sind deshalb wiederholbar.
 
 import { DEVICE_TYPES } from '../model/devices';
-import { cablesOf, otherEnd } from '../model/topology';
-import type { Device, DeviceType, Topology } from '../model/types';
+import { cablesOf, otherEnd, vlanColor } from '../model/topology';
+import { linkStatus, mediumOf } from '../model/links';
+import { costOf } from '../model/costs';
+import { MEDIA, type Device, type DeviceType, type Medium, type Topology } from '../model/types';
 import { formatIp, networkOf, parseIp, parseMask } from '../net/ipv4';
 import { protocolOf } from '../sim/protocol';
 import { Simulation, type PacketLogEntry } from '../sim/simulation';
@@ -23,7 +25,23 @@ export type Check =
   | { type: 'http'; from: string; url: string; status?: number }
   | { type: 'dhcpLease'; device: string }
   | { type: 'mail'; from: string; to: string }
-  | { type: 'packetSeen'; protocol: string; from?: string; to?: string };
+  | { type: 'packetSeen'; protocol: string; from?: string; to?: string }
+  /** Router hat ein Netz über ein Routingprotokoll gelernt (oder überhaupt eine Route dorthin). */
+  | { type: 'routeLearned'; device: string; network: string; protocol?: 'ospf' | 'rip' | 'bgp' }
+  /** So viele OSPF-Nachbarn «Full» bzw. BGP-Sitzungen «Established». */
+  | { type: 'neighbors'; device: string; protocol: 'ospf' | 'bgp'; min?: number }
+  /** Kein Broadcast-Sturm (Schleifen nur mit Spanning Tree). */
+  | { type: 'noStorm' }
+  /** Modem hat seine Zugangsleitung aufgebaut. */
+  | { type: 'modemOnline'; device: string }
+  /** Alle (oder mindestens `min`) Rechner der Client-Gruppe haben eine Adresse. */
+  | { type: 'groupLeases'; device: string; min?: number }
+  /** Gesamtkosten höchstens so viele CHF. */
+  | { type: 'budget'; max: number }
+  /** Direkte Verbindung zwischen zwei Geräten ist aktiv (optional mit bestimmtem Medium). */
+  | { type: 'linkUp'; a: string; b: string; medium?: Medium }
+  /** VLAN ist mit Farbe dokumentiert. */
+  | { type: 'vlanDocumented'; vlan: number };
 
 export const CHECK_TYPES = [
   'deviceCount',
@@ -38,6 +56,14 @@ export const CHECK_TYPES = [
   'dhcpLease',
   'mail',
   'packetSeen',
+  'routeLearned',
+  'neighbors',
+  'noStorm',
+  'modemOnline',
+  'groupLeases',
+  'budget',
+  'linkUp',
+  'vlanDocumented',
 ] as const satisfies readonly Check['type'][];
 
 export interface Goal {
@@ -66,6 +92,8 @@ export interface GoalResult {
 
 /** Wie lange eine Prüf-Simulation laufen darf (virtuelle Zeit): DHCP-Bezug, dann die Aktion. */
 const BOOT_MS = 10_000;
+/** Routingprotokolle brauchen etwas länger, bis sie sich gefunden haben. */
+const CONVERGE_MS = 25_000;
 const ACTION_MS = 15_000;
 
 const fail = (id: string, code: string, params?: Record<string, string | number>): GoalResult => ({
@@ -222,6 +250,73 @@ export function evaluateGoal(topology: Topology, goal: Goal, liveLog: readonly P
       );
       return seen ? { id, passed: true } : fail(id, 'packetNotSeen', { protocol: check.protocol.toUpperCase() });
     }
+    case 'routeLearned': {
+      const device = need(check.device);
+      if (!device) return missing(check.device);
+      const [netText = '', prefixText = ''] = check.network.split('/');
+      const network = parseIp(netText);
+      const prefix = parseMask(prefixText);
+      if (network === null || prefix === null) return fail(id, 'noRoute', { name: device.name, network: check.network });
+      const sim = new Simulation(topology);
+      sim.runUntil(CONVERGE_MS);
+      const route = sim.getRoutes(device.id).find((r) => r.network === networkOf(network, prefix) && r.prefix === prefix && (!check.protocol || r.kind === check.protocol));
+      return route ? { id, passed: true } : fail(id, 'noRoute', { name: device.name, network: check.network });
+    }
+    case 'neighbors': {
+      const device = need(check.device);
+      if (!device) return missing(check.device);
+      const sim = new Simulation(topology);
+      sim.runUntil(CONVERGE_MS);
+      const state = sim.getDeviceState(device.id);
+      const count =
+        check.protocol === 'ospf'
+          ? (state.ospf?.neighbors.filter((n) => n.state === 'full').length ?? 0)
+          : (state.bgp?.filter((p) => p.state === 'established').length ?? 0);
+      const min = check.min ?? 1;
+      return count >= min ? { id, passed: true } : fail(id, 'tooFewNeighbors', { name: device.name, count, min, protocol: check.protocol.toUpperCase() });
+    }
+    case 'noStorm': {
+      const sim = bootedSimulation(topology);
+      // Broadcasts auslösen: jedes Endgerät fragt per ARP nach einer unbekannten Adresse.
+      for (const d of topology.devices) if (d.type === 'pc' || d.type === 'notebook' || d.type === 'server') sim.ping(d.id, '255.255.255.254');
+      sim.runUntil(BOOT_MS + 3000);
+      const storming = sim.stormingDevices().map((sid) => topology.devices.find((d) => d.id === sid)?.name ?? sid);
+      return storming.length ? fail(id, 'storm', { names: storming.join(', ') }) : { id, passed: true };
+    }
+    case 'modemOnline': {
+      const device = need(check.device);
+      if (!device) return missing(check.device);
+      const modem = bootedSimulation(topology).getDeviceState(device.id).modem;
+      return modem?.phase === 'online' ? { id, passed: true } : fail(id, 'modemOffline', { name: device.name });
+    }
+    case 'groupLeases': {
+      const device = need(check.device);
+      if (!device) return missing(check.device);
+      const sim = new Simulation(topology);
+      sim.runUntil(BOOT_MS + (device.groupSize ?? 0) * 25);
+      const members = sim.getDeviceState(device.id).group ?? [];
+      const withIp = members.filter((m) => m.ip).length;
+      const min = check.min ?? members.length;
+      return members.length > 0 && withIp >= min ? { id, passed: true } : fail(id, 'groupWithoutLease', { name: device.name, count: withIp, total: members.length });
+    }
+    case 'budget': {
+      const total = costOf(topology).total;
+      return total <= check.max ? { id, passed: true } : fail(id, 'overBudget', { total, max: check.max });
+    }
+    case 'linkUp': {
+      const a = need(check.a);
+      const b = need(check.b);
+      if (!a) return missing(check.a);
+      if (!b) return missing(check.b);
+      const cable = cablesOf(topology, a.id).find((c) => otherEnd(c, a.id).device === b.id);
+      if (!cable) return fail(id, 'notConnected', { a: a.name, b: b.name });
+      if (check.medium && mediumOf(cable) !== check.medium) return fail(id, 'wrongMedium', { a: a.name, b: b.name, medium: check.medium });
+      const status = linkStatus(topology, cable);
+      return status.up ? { id, passed: true } : fail(id, 'linkDown', { a: a.name, b: b.name, reason: status.reason ?? '' });
+    }
+    case 'vlanDocumented': {
+      return vlanColor(topology, check.vlan) ? { id, passed: true } : fail(id, 'vlanUndocumented', { vlan: check.vlan });
+    }
   }
 }
 
@@ -306,6 +401,43 @@ export function readTasks(value: unknown, invalid: (path: string) => never): Tas
           const from = optStr(c.from, `${cp}.from`);
           const to = optStr(c.to, `${cp}.to`);
           check = { type, protocol: str(c.protocol, `${cp}.protocol`), ...(from ? { from } : {}), ...(to ? { to } : {}) };
+          break;
+        }
+        case 'routeLearned': {
+          const protocol = c.protocol;
+          if (protocol !== undefined && protocol !== 'ospf' && protocol !== 'rip' && protocol !== 'bgp') invalid(`${cp}.protocol`);
+          check = { type, device: str(c.device, `${cp}.device`), network: str(c.network, `${cp}.network`), ...(protocol ? { protocol: protocol as 'ospf' | 'rip' | 'bgp' } : {}) };
+          break;
+        }
+        case 'neighbors': {
+          if (c.protocol !== 'ospf' && c.protocol !== 'bgp') invalid(`${cp}.protocol`);
+          const min = optNum(c.min, `${cp}.min`);
+          check = { type, device: str(c.device, `${cp}.device`), protocol: c.protocol as 'ospf' | 'bgp', ...(min !== undefined ? { min } : {}) };
+          break;
+        }
+        case 'noStorm':
+          check = { type };
+          break;
+        case 'modemOnline':
+          check = { type, device: str(c.device, `${cp}.device`) };
+          break;
+        case 'groupLeases': {
+          const min = optNum(c.min, `${cp}.min`);
+          check = { type, device: str(c.device, `${cp}.device`), ...(min !== undefined ? { min } : {}) };
+          break;
+        }
+        case 'budget':
+          check = { type, max: optNum(c.max, `${cp}.max`) ?? invalid(`${cp}.max`) };
+          break;
+        case 'linkUp': {
+          if (c.medium !== undefined && !(MEDIA as readonly unknown[]).includes(c.medium)) invalid(`${cp}.medium`);
+          check = { type, a: str(c.a, `${cp}.a`), b: str(c.b, `${cp}.b`), ...(c.medium ? { medium: c.medium as Medium } : {}) };
+          break;
+        }
+        case 'vlanDocumented': {
+          const vlan = optNum(c.vlan, `${cp}.vlan`);
+          if (vlan === undefined || vlan < 1 || vlan > 4094) invalid(`${cp}.vlan`);
+          check = { type, vlan: vlan! };
           break;
         }
         default:
