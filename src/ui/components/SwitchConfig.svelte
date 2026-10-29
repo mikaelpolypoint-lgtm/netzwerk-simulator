@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { cableAt, getDevice, otherEnd, type Device } from '../../core';
+  import { cableAt, findSwitchLoop, getDevice, otherEnd, vlanColor, vlanLabel, type Device } from '../../core';
+  import { TAG_HEX } from '../tags';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
   import { ui } from '../state/ui.svelte';
 
-  /** Entwurfsmodus, Switch: Spanning Tree und VLAN pro Port. */
+  /** Switch: Spanning Tree (auch während der Simulation umschaltbar) und VLAN pro Port. */
   let { device }: { device: Device } = $props();
 
   const PRIORITIES = Array.from({ length: 16 }, (_, i) => i * 4096);
@@ -16,15 +17,24 @@
     return getDevice(editor.topology, otherEnd(cable, device.id).device)?.name ?? '';
   };
 
+  const colorOf = (iface: { trunk?: boolean; vlan?: number }) => (iface.trunk ? undefined : vlanColor(editor.topology, iface.vlan ?? 1));
+
+  /** Schleife zwischen Switches ohne vollständigen Spanning Tree: Hier droht ein Broadcast-Sturm. */
+  const loop = $derived(findSwitchLoop(editor.topology));
+
   function setVlan(index: number, value: string) {
     const vlan = Number(value);
     if (Number.isInteger(vlan) && vlan >= 1 && vlan <= 4094) editor.setPortVlan(device.id, index, vlan);
   }
 </script>
 
-{#if !ui.pro}
+{#if loop}
+  <p class="warn" role="alert">⚠ {t('stp.loopWarning')}</p>
+{/if}
+{#if !ui.has('net.stp') && !ui.has('net.vlan')}
 <p class="muted">{t('switch.basicHint')}</p>
-{:else}
+{/if}
+{#if ui.has('net.stp')}
 <h3>{t('switch.stp')}</h3>
 <label class="toggle">
   <input type="checkbox" checked={!!device.stp} onchange={(e) => editor.setStp(device.id, e.currentTarget.checked)} />
@@ -33,7 +43,7 @@
 {#if device.stp}
   <label class="row">
     <span>{t('switch.priority')}</span>
-    <select value={device.stpPriority ?? 32768} onchange={(e) => editor.setStpPriority(device.id, Number(e.currentTarget.value))}>
+    <select value={device.stpPriority ?? 32768} disabled={!editor.editable} onchange={(e) => editor.setStpPriority(device.id, Number(e.currentTarget.value))}>
       {#each PRIORITIES as p (p)}
         <option value={p}>{p}</option>
       {/each}
@@ -41,7 +51,9 @@
   </label>
 {/if}
 <p class="muted">{t('switch.stpHint')}</p>
+{/if}
 
+{#if ui.has('net.vlan')}
 <h3>{t('switch.vlans')}</h3>
 <table>
   <thead>
@@ -57,13 +69,14 @@
       <tr>
         <th scope="row">{interfaceLabel(device, iface.index)}</th>
         <td>
+          <span class="swatch" style:background={colorOf(iface) ? TAG_HEX[colorOf(iface)!] : 'transparent'} title={colorOf(iface) ? (vlanLabel(editor.topology, iface.vlan ?? 1) ?? '') : t('switch.vlanNoColor')}></span>
           <input
             class="vlan"
             type="number"
             min="1"
             max="4094"
             value={iface.vlan ?? 1}
-            disabled={!!iface.trunk}
+            disabled={!!iface.trunk || !editor.editable}
             aria-label={t('switch.vlanOf', { port: interfaceLabel(device, iface.index) })}
             onchange={(e) => setVlan(iface.index, e.currentTarget.value)}
           />
@@ -72,6 +85,7 @@
           <input
             type="checkbox"
             checked={!!iface.trunk}
+            disabled={!editor.editable}
             aria-label={t('switch.trunkOf', { port: interfaceLabel(device, iface.index) })}
             onchange={(e) => editor.setPortTrunk(device.id, iface.index, e.currentTarget.checked)}
           />
@@ -112,6 +126,20 @@
   }
   .vlan {
     width: 4.5em;
+  }
+  .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .warn {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin: 4px 0;
   }
   table {
     width: 100%;

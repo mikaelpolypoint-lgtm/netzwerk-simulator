@@ -11,7 +11,7 @@
    */
   let { device }: { device: Device } = $props();
 
-  const canTag = $derived(editor.editable || editor.documenting);
+  const canTag = $derived(editor.editable);
   let open = $state<number | null>(null);
 
   const rows = $derived(

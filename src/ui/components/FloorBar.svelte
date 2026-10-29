@@ -36,7 +36,7 @@
     draft = '';
   }
 
-  const canEdit = $derived(editor.editable || editor.documenting);
+  const canEdit = $derived(editor.editable);
 </script>
 
 <div class="floors" role="toolbar" aria-label={t('floor.label')}>

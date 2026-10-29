@@ -65,6 +65,14 @@ class SimStore {
     this.tick++;
   }
 
+  /** WLAN-Roaming: neue Topologie übernehmen und den Client neu anmelden lassen. */
+  roam(topology: Topology, deviceId: string) {
+    if (!this.#sim) return;
+    this.#sim.updateTopology(topology);
+    this.#sim.reassociate(deviceId);
+    this.tick++;
+  }
+
   runCommand(deviceId: string, line: string) {
     this.#sim?.runCommand(deviceId, line);
     this.tick++;

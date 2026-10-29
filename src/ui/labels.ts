@@ -31,3 +31,8 @@ export function interfaceLabel(device: Device, index: number): string {
 export function errorText(error: { code: string; params?: Record<string, string | number> }): string {
   return t(`error.${error.code}`, error.params);
 }
+
+/** Name einer Funktion (Funktionsumfang), z.B. «OSPF». */
+export function featureName(id: string): string {
+  return t(`feature.${id}`);
+}

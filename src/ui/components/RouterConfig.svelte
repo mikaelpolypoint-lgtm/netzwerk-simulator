@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { buildRoutes, logicalInterfaces, parseMask, type Device, type StaticRoute } from '../../core';
+  import { buildRoutes, cableAt, logicalInterfaces, parseMask, type Device, type SerialEncapsulation, type StaticRoute } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
+  import { dialogs } from '../state/dialogs.svelte';
   import { editor } from '../state/editor.svelte';
   import { subnetSummary } from '../subnet';
   import { ui } from '../state/ui.svelte';
+  import Icon from './Icon.svelte';
+  import RoutingProtocols from './RoutingProtocols.svelte';
   import RoutingTable from './RoutingTable.svelte';
+  import ScopeBadge from './ScopeBadge.svelte';
   import SubinterfaceConfig from './SubinterfaceConfig.svelte';
 
   /** routesOnly: nur statische Routen (Layer-3-Switch, dessen Adressen auf den SVIs liegen). */
@@ -27,6 +31,47 @@
     if (!draft) return;
     const failure = editor.setInterfaceAddress(device.id, index, draft.ip, draft.mask);
     ifaceError = failure ? { index, field: failure.field, text: t(`error.${failure.code}`, failure.params) } : null;
+  }
+
+  /** IP-Rechner öffnen; «Übernehmen» setzt die erste nutzbare Adresse (typisch für Router). */
+  function calc(index: number) {
+    const draft = drafts[index];
+    dialogs.ipCalculator({
+      ip: draft?.ip || undefined,
+      mask: draft?.mask || undefined,
+      apply: (v) => {
+        const failure = editor.setInterfaceAddress(device.id, index, v.gateway, v.mask);
+        ifaceError = failure ? { index, field: failure.field, text: t(`error.${failure.code}`, failure.params) } : null;
+      },
+    });
+  }
+
+  const connected = (index: number) => !!cableAt(editor.topology, { device: device.id, iface: index });
+
+  // --- Statisches NAT -----------------------------------------------------------
+
+  let staticDraft = $state({ inside: '', outside: '' });
+  let staticError = $state<string | null>(null);
+
+  function addStatic(event: SubmitEvent) {
+    event.preventDefault();
+    const failure = editor.addStaticNat(device.id, staticDraft);
+    staticError = failure ? t(`error.${failure.code}`, failure.params) : null;
+    if (!failure) staticDraft = { inside: '', outside: '' };
+  }
+
+  // --- CGNAT (Provider) ---------------------------------------------------------
+
+  let cgnatAddress = $state('');
+  let cgnatError = $state<string | null>(null);
+  $effect(() => {
+    cgnatAddress = device.cgnatAddress ?? '';
+  });
+
+  function applyCgnat(event: SubmitEvent) {
+    event.preventDefault();
+    const failure = editor.setCgnatAddress(device.id, cgnatAddress);
+    cgnatError = failure ? t(`error.${failure.code}`, failure.params) : null;
   }
 
   const ifaceDirty = (index: number) => {
@@ -90,6 +135,32 @@
 {#each device.interfaces as iface, index (iface.index)}
   {@const draft = drafts[index]}
   {#if draft}
+    {#if device.type === 'router' && ui.has('medium.serial') && !iface.sfpSlot}
+      <div class="kind">
+        <select
+          value={iface.serial ? 'serial' : 'ethernet'}
+          disabled={!editor.editable || connected(index)}
+          title={connected(index) ? t('router.kindConnected') : t('router.kindHint')}
+          aria-label={t('router.kindOf', { iface: interfaceLabel(device, index) })}
+          onchange={(e) => editor.setPortSerial(device.id, index, e.currentTarget.value === 'serial')}
+        >
+          <option value="ethernet">Ethernet</option>
+          <option value="serial">{t('router.serial')}</option>
+        </select>
+        {#if iface.serial}
+          <select
+            value={iface.encapsulation ?? 'hdlc'}
+            disabled={!editor.editable}
+            aria-label={t('router.encapsulation')}
+            title={t('router.encapsulationHint')}
+            onchange={(e) => editor.setEncapsulation(device.id, index, e.currentTarget.value as SerialEncapsulation)}
+          >
+            <option value="hdlc">HDLC</option>
+            <option value="ppp">PPP</option>
+          </select>
+        {/if}
+      </div>
+    {/if}
     <form class="iface" onsubmit={(e) => applyInterface(e, index)}>
       <span class="label">{interfaceLabel(device, index)}</span>
       <input
@@ -110,23 +181,46 @@
         aria-invalid={ifaceError?.index === index && ifaceError.field === 'mask'}
       />
       <button type="submit" disabled={!ifaceDirty(index)} aria-label={t('config.apply')} title={t('config.apply')}>✓</button>
+      {#if ui.has('tool.ipCalculator')}
+        <button type="button" class="calc" onclick={() => calc(index)} aria-label={t('menu.tool.ipcalc')} title={t('ipcalc.openHint')}><Icon name="calc" size={15} /></button>
+      {/if}
     </form>
     {#if ifaceError?.index === index}
       <p class="error" role="alert">{ifaceError.text}</p>
     {:else if iface.ip}
-      <p class="muted small">{subnetSummary(iface.ip, iface.mask)}</p>
+      <p class="muted small">{#if ui.has('tool.addressBadges')}<ScopeBadge ip={iface.ip} /> {/if}{subnetSummary(iface.ip, iface.mask)}</p>
     {/if}
   {/if}
 {/each}
 
 {/if}
 
-{#if device.type === 'router' && ui.pro}
+{#if device.type === 'router' && ui.has('net.subinterfaces')}
   <SubinterfaceConfig {device} />
 {/if}
 
-{#if device.type === 'router' && ui.pro}
-  <h3>{t('nat.title')}</h3>
+{#if device.type === 'internet' && ui.has('net.cgnat')}
+  <details class="section" open={!!device.cgnatAddress} data-help="cgnat">
+    <summary>{t('cgnat.title')}</summary>
+    <p class="muted small-text">{t('cgnat.hint')}</p>
+    <form class="relay" onsubmit={applyCgnat}>
+      <span class="label">{t('cgnat.address')}</span>
+      <input bind:value={cgnatAddress} placeholder="192.0.2.1" disabled={!editor.editable} aria-label={t('cgnat.address')} />
+      <button type="submit" disabled={!editor.editable || cgnatAddress.trim() === (device.cgnatAddress ?? '')}>✓</button>
+    </form>
+    {#if cgnatError}<p class="error" role="alert">{cgnatError}</p>{/if}
+    {#each device.interfaces as iface, index (iface.index)}
+      <label class="nat">
+        <input type="checkbox" checked={!!iface.cgnat} disabled={!editor.editable} onchange={(e) => editor.setCgnat(device.id, index, e.currentTarget.checked)} />
+        {t('cgnat.customerPort', { iface: interfaceLabel(device, index) })}
+      </label>
+    {/each}
+  </details>
+{/if}
+
+{#if device.type === 'router' && ui.has('net.nat')}
+  <details class="section" open={device.interfaces.some((i) => i.nat)} data-help="nat">
+  <summary>{t('nat.title')}</summary>
   <p class="muted small-text">{t('nat.hint')}</p>
   {#each device.interfaces as iface, index (iface.index)}
     <label class="nat">
@@ -156,11 +250,31 @@
     {#if forwardError}
       <p class="error" role="alert">{forwardError}</p>
     {/if}
+
+    {#if ui.has('net.staticNat')}
+      <h4 data-help="staticNat">{t('nat.static')}</h4>
+      <p class="muted small-text">{t('nat.staticHint')}</p>
+      {#each device.staticNat ?? [] as rule, i (i)}
+        <div class="forward">
+          <span class="mono">{rule.inside} ⇄ {rule.outside}</span>
+          <button class="small" disabled={!editor.editable} onclick={() => editor.removeStaticNat(device.id, i)} aria-label={t('nat.removeStatic')}>✕</button>
+        </div>
+      {/each}
+      <form class="add-static" onsubmit={addStatic}>
+        <input bind:value={staticDraft.inside} placeholder="192.168.0.80" aria-label={t('nat.inside')} disabled={!editor.editable} />
+        <span>⇄</span>
+        <input bind:value={staticDraft.outside} placeholder="203.0.113.5" aria-label={t('nat.outside')} disabled={!editor.editable} />
+        <button type="submit" disabled={!editor.editable || !staticDraft.inside.trim() || !staticDraft.outside.trim()}>+</button>
+      </form>
+      {#if staticError}<p class="error" role="alert">{staticError}</p>{/if}
+    {/if}
   {/if}
+  </details>
 {/if}
 
-{#if ui.pro && !routesOnly}
-<h3>{t('router.relay')}</h3>
+{#if ui.has('net.dhcpRelay') && !routesOnly && device.type !== 'internet'}
+<details class="section" open={device.interfaces.some((i) => i.dhcpRelay)} data-help="dhcp">
+<summary>{t('router.relay')}</summary>
 <p class="muted small-text">{t('router.relayHint')}</p>
 {#each device.interfaces as iface, index (iface.index)}
   <form class="relay" onsubmit={(e) => applyRelay(e, index)}>
@@ -178,9 +292,12 @@
 {#if relayError}
   <p class="error" role="alert">{relayError}</p>
 {/if}
+</details>
 {/if}
 
-<h3>{t('router.staticRoutes')}</h3>
+{#if ui.has('routing.static')}
+<details class="section" open data-help="routing">
+<summary>{t('router.staticRoutes')}</summary>
 {#if (device.routes ?? []).length === 0}
   <p class="muted small">{t('router.noRoutes')}</p>
 {:else}
@@ -227,8 +344,12 @@
   {#if routeError}
     <p class="error" role="alert">{routeError.text}</p>
   {/if}
-  <button type="submit" disabled={!route.network.trim() || !route.mask.trim()}>{t('router.addRoute')}</button>
+  <button type="submit" disabled={!editor.editable || !route.network.trim() || !route.mask.trim()}>{t('router.addRoute')}</button>
 </form>
+</details>
+{/if}
+
+<RoutingProtocols {device} />
 
 <RoutingTable {device} />
 
@@ -236,6 +357,40 @@
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;
+  }
+  .section {
+    margin-top: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .section summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .kind {
+    display: flex;
+    gap: 4px;
+    margin: 8px 0 -2px 2.9rem;
+  }
+  .kind select {
+    width: auto;
+    font-size: 0.75rem;
+    padding: 1px 4px;
+  }
+  .calc {
+    display: grid;
+    place-items: center;
+    padding: 3px 5px !important;
+  }
+  .add-static {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+    gap: 4px;
+    align-items: center;
+    margin-top: 4px;
   }
   .nat {
     display: flex;
@@ -281,7 +436,7 @@
   }
   .iface {
     display: grid;
-    grid-template-columns: 2.6rem minmax(0, 1fr) 4.2rem auto;
+    grid-template-columns: 2.6rem minmax(0, 1fr) 4.2rem auto auto;
     gap: 4px;
     align-items: center;
     margin-top: 6px;

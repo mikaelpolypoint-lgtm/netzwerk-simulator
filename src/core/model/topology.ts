@@ -307,7 +307,7 @@ export function freeInterfaceFor(t: Topology, device: Device, medium: Medium): N
 }
 
 /** Warum kein Anschluss frei ist: Medium passt nirgends, SFP-Modul fehlt oder alles belegt. */
-function noPortError(t: Topology, device: Device, medium: Medium): ErrorCode {
+export function noPortError(t: Topology, device: Device, medium: Medium): ErrorCode {
   if (medium === 'fiber' && device.interfaces.some((i) => i.sfpSlot && !i.sfp)) return 'noSfpModule';
   const anyPort = device.interfaces.some((i) => {
     if (portAccepts(device, i.index, medium)) return true;
@@ -1607,4 +1607,39 @@ export function applyRoaming(t: Topology, decision: RoamingDecision): Result<Top
   const end: 'a' | 'b' = cable.a.device === decision.from ? 'a' : 'b';
   if (cableAt(t, { device: decision.to, iface: decision.iface })) return fail('interfaceInUse', { device: decision.to, index: decision.iface });
   return ok({ ...t, cables: t.cables.map((c) => (c.id === cable.id ? { ...c, [end]: { device: decision.to, iface: decision.iface } } : c)) });
+}
+
+// --- Gerät duplizieren ---------------------------------------------------------
+
+/**
+ * Kopie eines Geräts neben dem Original: gleiche Ausstattung und Einstellungen,
+ * aber neue MAC-Adressen und ohne IP-Adressen (sonst gäbe es Konflikte) und ohne Kabel.
+ */
+export function duplicateDevice(t: Topology, id: string, name: string, offset = 80): Result<{ topology: Topology; id: string }> {
+  const original = getDevice(t, id);
+  if (!original) return fail('unknownDevice');
+  const checked = checkName(t, name);
+  if (!checked.ok) return checked;
+  const seq = t.nextId;
+  const interfaces = original.interfaces.map((i) => {
+    const { ip: _ip, mask: _mask, ...rest } = i;
+    return { ...rest, mac: macFor(seq, i.index) };
+  });
+  const { rack: _rack, ...rest } = original;
+  const copy: Device = {
+    ...structuredCloneSafe(rest),
+    id: `d${seq}`,
+    name: checked.value,
+    position: { x: original.position.x + offset, y: original.position.y + offset },
+    interfaces,
+  };
+  // Dienste mit fester Adresse (DHCP-Server) brauchen eine eigene Adresse; ohne Adresse wird daraus nichts.
+  if (copy.dhcpServer) delete copy.dhcpServer;
+  if (copy.svis) copy.svis = copy.svis.map(({ ip: _i, mask: _m, ...s }) => s);
+  if (copy.subinterfaces) copy.subinterfaces = copy.subinterfaces.map(({ ip: _i, mask: _m, ...s }) => s);
+  return ok({ topology: { ...t, devices: [...t.devices, copy], nextId: seq + 1 }, id: copy.id });
+}
+
+function structuredCloneSafe<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }

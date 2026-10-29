@@ -33,9 +33,16 @@ const MAX_BODY = 2 * 1024 * 1024;
 const MAX_FEEDBACK_TEXT = 2000;
 const ADMIN_TOKEN_HOURS = 8;
 
+/** Feature-IDs dürfen nur aus Buchstaben, Ziffern und Punkten bestehen (Liste in src/ui/features.ts). */
+const FEATURE_ID = /^[a-z]+\.[A-Za-z0-9]+$/;
+const CHECKS_FILE = path.join(ROOT, 'release', 'checks.json');
+
 const DEFAULT_SETTINGS = {
-  modes: { design: true, action: true, doc: true },
-  pro: true,
+  modes: { design: true, simulation: true },
+  /** Funktionsumfang: höchstes und voreingestelltes Profil (1 = 1. Lehrjahr … 5 = Studium), gesperrte Funktionen. */
+  maxLevel: 5,
+  defaultLevel: 2,
+  disabled: [],
   sessionHours: 24,
   feedbackEnabled: true,
   feedbackDays: 30,
@@ -79,10 +86,21 @@ function remove(file) {
 
 function settings() {
   const stored = readJson(path.join(DATA_DIR, 'settings.json')) || {};
+  // Ältere Einstellungen: Modi design/action/doc und Schalter «pro».
+  const modes = stored.modes || {};
+  const migrated = {
+    design: modes.design !== false,
+    simulation: (modes.simulation !== undefined ? modes.simulation : modes.action) !== false,
+  };
+  const maxLevel = Number.isInteger(stored.maxLevel) ? stored.maxLevel : stored.pro === false ? 3 : DEFAULT_SETTINGS.maxLevel;
+  const { pro: _pro, ...rest } = stored;
   return {
     ...DEFAULT_SETTINGS,
-    ...stored,
-    modes: { ...DEFAULT_SETTINGS.modes, ...(stored.modes || {}) },
+    ...rest,
+    modes: migrated,
+    maxLevel,
+    defaultLevel: Math.min(Number.isInteger(stored.defaultLevel) ? stored.defaultLevel : DEFAULT_SETTINGS.defaultLevel, maxLevel),
+    disabled: Array.isArray(stored.disabled) ? stored.disabled.filter((f) => typeof f === 'string' && FEATURE_ID.test(f)) : [],
   };
 }
 
@@ -282,7 +300,7 @@ function html() {
 function publicConfig() {
   const s = settings();
   return {
-    policy: { modes: s.modes, pro: s.pro, sessionHours: s.sessionHours },
+    policy: { modes: s.modes, maxLevel: s.maxLevel, defaultLevel: s.defaultLevel, disabled: s.disabled, sessionHours: s.sessionHours },
     feedbackEnabled: s.feedbackEnabled,
     feedbackDays: s.feedbackDays,
     admin: !!ADMIN_PASSWORD,
@@ -434,16 +452,25 @@ async function admin(req, res, parts, method) {
     });
   }
 
+  // Ergebnis der Release-Prüfungen (Datenschutz, Sicherheit, Lizenzen), erzeugt von scripts/release-checks.mjs.
+  if (parts[0] === 'checks' && method === 'GET') {
+    const report = readJson(CHECKS_FILE);
+    return report ? json(res, 200, report) : fail(res, 404, 'noChecks');
+  }
+
   if (parts[0] === 'settings' && method === 'PUT') {
     const body = await readBody(req);
     const current = settings();
     const int = (v, min, max, fallback) => (Number.isInteger(v) && v >= min && v <= max ? v : fallback);
     const modes = { ...current.modes };
-    for (const m of ['design', 'action', 'doc']) if (body.modes && typeof body.modes[m] === 'boolean') modes[m] = body.modes[m];
-    if (!modes.design && !modes.action && !modes.doc) modes.design = true;
+    for (const m of ['design', 'simulation']) if (body.modes && typeof body.modes[m] === 'boolean') modes[m] = body.modes[m];
+    if (!modes.design && !modes.simulation) modes.design = true;
+    const maxLevel = int(body.maxLevel, 1, 5, current.maxLevel);
     const next = {
       modes,
-      pro: typeof body.pro === 'boolean' ? body.pro : current.pro,
+      maxLevel,
+      defaultLevel: Math.min(int(body.defaultLevel, 1, 5, current.defaultLevel), maxLevel),
+      disabled: Array.isArray(body.disabled) ? [...new Set(body.disabled.filter((f) => typeof f === 'string' && FEATURE_ID.test(f)))].slice(0, 200) : current.disabled,
       sessionHours: int(body.sessionHours, 1, 24 * 30, current.sessionHours),
       feedbackEnabled: typeof body.feedbackEnabled === 'boolean' ? body.feedbackEnabled : current.feedbackEnabled,
       feedbackDays: int(body.feedbackDays, 1, 365, current.feedbackDays),

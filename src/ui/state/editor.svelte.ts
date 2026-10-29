@@ -88,13 +88,41 @@ import {
   type TagColor,
   type WifiClient,
   type WlanConfig,
+  addStaticNat,
+  applyRoaming,
+  removeStaticNat,
+  removeVlanDef,
+  roamingTarget,
+  setBgp,
+  setCgnat,
+  setCgnatAddress,
+  setEncapsulation,
+  setGroupSize,
+  setModemKind,
+  setOspf,
+  setOspfCost,
+  setPortSerial,
+  setRip,
+  setVlanDef,
+  wouldLoopWithoutStp,
+  noPortError,
+  duplicateDevice,
+  type BgpConfig,
+  type DeviceOptions,
+  type ModemKind,
+  type OspfConfig,
+  type RipConfig,
+  type SerialEncapsulation,
+  type StaticNat,
+  type VlanDef,
 } from '../../core';
+import { simStore } from './sim.svelte';
 import { t } from '../../i18n';
 import { errorText, interfaceLabel } from '../labels';
 
 export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: string } | { kind: 'area'; id: string } | null;
 export type Tool = 'select' | 'cable' | 'area';
-export type Mode = 'design' | 'action' | 'doc';
+export type Mode = 'design' | 'simulation';
 
 export interface View {
   /** Bildschirmposition des Welt-Ursprungs. */
@@ -151,9 +179,9 @@ class Editor {
     return this.mode === 'design';
   }
 
-  /** Simulation läuft (Aktionsmodus). */
+  /** Simulation läuft. */
   get acting() {
-    return this.mode === 'action';
+    return this.mode === 'simulation';
   }
 
   get canUndo() {
@@ -175,11 +203,6 @@ class Editor {
   get selectedArea(): DocArea | undefined {
     const selection = this.selection;
     return selection?.kind === 'area' ? this.topology.areas?.find((a) => a.id === selection.id) : undefined;
-  }
-
-  /** Im Dokumentationsmodus dürfen Bereiche bearbeitet werden, die Topologie bleibt gesperrt. */
-  get documenting() {
-    return this.mode === 'doc';
   }
 
   // --- Meldungen -----------------------------------------------------------
@@ -256,21 +279,27 @@ class Editor {
   }
 
   clear() {
-    if (!this.editable || (this.topology.devices.length === 0 && !this.tasks)) return;
+    if (this.topology.devices.length === 0 && !this.tasks && !(this.topology.areas?.length)) return;
+    if (this.mode !== 'design') this.setMode('design');
     this.replace(emptyTopology(), { undoable: true, snapshots: [] });
     this.notify(t('status.cleared'));
   }
 
   // --- Bearbeiten ----------------------------------------------------------
 
-  /** Neues Gerät; ist ein Stockwerk gewählt, landet es dort. */
-  addDevice(type: DeviceType, position: Point, floor = 0) {
+  /**
+   * Neues Gerät; ist ein Stockwerk gewählt, landet es dort. `prepare` richtet
+   * es nach der Shop-Variante ein (z.B. Dienste eines Servers).
+   */
+  addDevice(type: DeviceType, position: Point, floor = 0, options: DeviceOptions = {}, prepare?: (t: Topology, id: string) => Topology, baseName?: string) {
     if (!this.editable) return;
-    const name = suggestName(this.topology, t(`defaultName.${type}`));
-    const added = this.#check(addDevice(this.topology, type, name, { x: snap(position.x), y: snap(position.y) }));
+    const name = suggestName(this.topology, baseName ?? t(`defaultName.${type}`));
+    const added = this.#check(addDevice(this.topology, type, name, { x: snap(position.x), y: snap(position.y) }, options));
     if (!added) return;
     const placed = floor > 0 ? setDeviceFloor(added.topology, added.id, floor) : null;
-    this.#commit(placed?.ok ? placed.value : added.topology);
+    let next = placed?.ok ? placed.value : added.topology;
+    if (prepare) next = prepare(next, added.id);
+    this.#commit(next);
     this.selection = { kind: 'device', id: added.id };
   }
 
@@ -280,9 +309,9 @@ class Editor {
   }
 
   /** Platziert ein Gerät möglichst in der Bildmitte, aber nicht auf einem anderen. */
-  addDeviceAtCenter(type: DeviceType, floor = 0) {
+  addDeviceAtCenter(type: DeviceType, floor = 0, options: DeviceOptions = {}, prepare?: (t: Topology, id: string) => Topology, baseName?: string) {
     const center = this.screenToWorld(this.#size.width / 2, this.#size.height / 2);
-    this.addDevice(type, this.#freeSpotNear(center), floor);
+    this.addDevice(type, this.#freeSpotNear(center), floor, options, prepare, baseName);
   }
 
   /** Sucht ringförmig um `p` die erste Stelle ohne Gerät in der Nähe. */
@@ -352,8 +381,8 @@ class Editor {
     if (next) this.#commit(next);
   }
 
+  /** Auch in der Simulation: Spanning Tree einschalten beendet einen laufenden Broadcast-Sturm. */
   setStp(id: string, enabled: boolean) {
-    if (!this.editable) return;
     const next = this.#check(setStp(this.topology, id, enabled));
     if (next) this.#commit(next);
   }
@@ -470,7 +499,7 @@ class Editor {
 
   deleteSelection() {
     const selection = this.selection;
-    if (selection?.kind === 'area' && (this.editable || this.documenting)) {
+    if (selection?.kind === 'area' && this.editable) {
       const next = this.#check(removeArea(this.topology, selection.id));
       if (next) this.#commit(next);
       this.selection = null;
@@ -488,9 +517,24 @@ class Editor {
 
   moveBy(id: string, dx: number, dy: number) {
     const device = getDevice(this.topology, id);
-    if (!this.editable || !device) return;
+    if (!device) return;
     const next = this.#check(moveDevice(this.topology, id, { x: device.position.x + dx, y: device.position.y + dy }));
-    if (next) this.#commit(next);
+    if (!next) return;
+    this.#commit(next);
+    if (this.acting) this.#roam(id);
+  }
+
+  /** Simulation: WLAN-Client verschoben – wechselt er zu einem näheren Access Point? */
+  #roam(id: string) {
+    const decision = roamingTarget(this.topology, id);
+    if (!decision) return;
+    const next = this.#check(applyRoaming(this.topology, decision));
+    if (!next) return;
+    this.topology = next;
+    const device = getDevice(next, id);
+    const ap = getDevice(next, decision.to);
+    simStore.roam(next, id);
+    this.notify(t('wlan.roamed', { device: device?.name ?? '', ap: ap?.name ?? '', signal: decision.signal }));
   }
 
   // Ziehen mit der Maus: Zwischenschritte landen nicht im Verlauf, nur das Ergebnis.
@@ -504,6 +548,7 @@ class Editor {
   }
 
   dragTo(id: string, position: Point) {
+    // In der Simulation darf man Geräte verschieben (WLAN-Roaming), sonst nichts verändern.
     if (!this.#dragBase) return;
     const moved = moveDevice(this.topology, id, { x: snap(position.x), y: snap(position.y) });
     if (moved.ok) this.topology = moved.value;
@@ -522,6 +567,11 @@ class Editor {
   endDeviceDrag(id: string) {
     const base = this.#dragBase;
     const device = getDevice(this.topology, id);
+    if (this.acting) {
+      this.endDrag();
+      if (base && base !== this.topology) this.#roam(id);
+      return;
+    }
     if (base && device && base !== this.topology && isRackable(device.type)) {
       const floor = device.floor ?? 0;
       const target = rackAt(this.topology, device.position.x, device.position.y, floor);
@@ -552,7 +602,7 @@ class Editor {
   }
 
   setDeviceRack(id: string, rack: string | null) {
-    if (!this.editable && !this.documenting) return;
+    if (!this.editable) return;
     const next = this.#check(setDeviceRack(this.topology, id, rack));
     if (next) this.#commit(next);
   }
@@ -562,7 +612,7 @@ class Editor {
   #clipboard: Omit<DocArea, 'id'> | null = null;
 
   get canPaste() {
-    return this.#clipboard !== null && (this.editable || this.documenting);
+    return this.#clipboard !== null && this.editable;
   }
 
   copyArea(): boolean {
@@ -577,7 +627,7 @@ class Editor {
   /** Fügt die kopierte Fläche versetzt ein (mehrfach einfügen: jedes Mal weiter versetzt). */
   pasteArea(): boolean {
     const copy = this.#clipboard;
-    if (!copy || (!this.editable && !this.documenting)) return false;
+    if (!copy || !this.editable) return false;
     const offset = 40;
     this.addArea({ ...copy, x: copy.x + offset, y: copy.y + offset, title: t('area.copyTitle', { title: copy.title }) });
     this.#clipboard = { ...copy, x: copy.x + offset, y: copy.y + offset };
@@ -586,6 +636,19 @@ class Editor {
 
   duplicateArea() {
     if (this.copyArea()) this.pasteArea();
+  }
+
+  /** Strg+D: gewähltes Gerät (ohne Adressen und Kabel) oder gewählten Bereich verdoppeln. */
+  duplicateSelection() {
+    if (!this.editable) return;
+    if (this.selection?.kind === 'area') return this.duplicateArea();
+    const device = this.selectedDevice;
+    if (!device) return;
+    const base = device.name.replace(/\s*\d+$/, '') || t(`defaultName.${device.type}`);
+    const copy = this.#check(duplicateDevice(this.topology, device.id, suggestName(this.topology, base)));
+    if (!copy) return;
+    this.#commit(copy.topology);
+    this.selection = { kind: 'device', id: copy.id };
   }
 
   // --- Neue Einstellungen (Ports, WLAN, Pro-Funktionen) ----------------------
@@ -601,21 +664,83 @@ class Editor {
     this.#edit(setCableMedium(this.topology, id, medium));
   }
 
-  setInterfaceShutdown(id: string, index: number, shutdown: boolean) {
-    this.#edit(setInterfaceShutdown(this.topology, id, index, shutdown));
+  /** Auch während der Simulation: Anschlüsse ab- und einschalten, um Routing oder Spanning Tree zu beobachten. */
+  #live(result: Result<Topology>) {
+    const next = this.#check(result);
+    if (next) this.#commit(next);
   }
 
-  /** Farbtags und Beschreibungen sind Dokumentation: auch im Dokumentationsmodus erlaubt. */
+  setInterfaceShutdown(id: string, index: number, shutdown: boolean) {
+    this.#live(setInterfaceShutdown(this.topology, id, index, shutdown));
+  }
+
   setInterfaceColor(id: string, index: number, color: TagColor | null) {
-    if (!this.editable && !this.documenting) return;
-    const next = this.#check(setInterfaceColor(this.topology, id, index, color));
-    if (next) this.#commit(next);
+    this.#edit(setInterfaceColor(this.topology, id, index, color));
   }
 
   setInterfaceDescription(id: string, index: number, description: string) {
-    if (!this.editable && !this.documenting) return;
-    const next = this.#check(setInterfaceDescription(this.topology, id, index, description));
-    if (next) this.#commit(next);
+    this.#edit(setInterfaceDescription(this.topology, id, index, description));
+  }
+
+  setPortSerial(id: string, index: number, serial: boolean) {
+    this.#edit(setPortSerial(this.topology, id, index, serial));
+  }
+
+  setEncapsulation(id: string, index: number, encapsulation: SerialEncapsulation) {
+    this.#edit(setEncapsulation(this.topology, id, index, encapsulation));
+  }
+
+  setOspfCost(id: string, index: number, cost: number | null) {
+    this.#edit(setOspfCost(this.topology, id, index, cost));
+  }
+
+  setGroupSize(id: string, size: number) {
+    this.#edit(setGroupSize(this.topology, id, size));
+  }
+
+  setModemKind(id: string, kind: ModemKind | null) {
+    this.#edit(setModemKind(this.topology, id, kind));
+  }
+
+  addStaticNat(id: string, rule: StaticNat): TopologyError | null {
+    return this.#applyForm(addStaticNat(this.topology, id, rule));
+  }
+
+  removeStaticNat(id: string, index: number) {
+    this.#edit(removeStaticNat(this.topology, id, index));
+  }
+
+  setCgnat(id: string, index: number, enabled: boolean) {
+    this.#edit(setCgnat(this.topology, id, index, enabled));
+  }
+
+  setCgnatAddress(id: string, address: string): TopologyError | null {
+    return this.#applyForm(setCgnatAddress(this.topology, id, address));
+  }
+
+  setOspf(id: string, config: OspfConfig | null): TopologyError | null {
+    return this.#applyForm(setOspf(this.topology, id, config));
+  }
+
+  setBgp(id: string, config: BgpConfig | null): TopologyError | null {
+    return this.#applyForm(setBgp(this.topology, id, config));
+  }
+
+  setRip(id: string, config: RipConfig | null): TopologyError | null {
+    return this.#applyForm(setRip(this.topology, id, config));
+  }
+
+  setVlanDef(vlan: VlanDef): TopologyError | null {
+    return this.#applyForm(setVlanDef(this.topology, vlan));
+  }
+
+  removeVlanDef(id: number) {
+    this.#edit(removeVlanDef(this.topology, id));
+  }
+
+  /** Beliebige geprüfte Änderung, z.B. Vorbelegung einer Shop-Variante. */
+  apply(result: Result<Topology>) {
+    this.#edit(result);
   }
 
   setWlan(id: string, config: WlanConfig | null): TopologyError | null {
@@ -668,13 +793,13 @@ class Editor {
   // --- Stockwerke ------------------------------------------------------------
 
   addFloor(name: string) {
-    if (!this.editable && !this.documenting) return;
+    if (!this.editable) return;
     const next = this.#check(addFloor(this.topology, name));
     if (next) this.#commit(next);
   }
 
   renameFloor(index: number, name: string) {
-    if (!this.editable && !this.documenting) return;
+    if (!this.editable) return;
     const next = this.#check(renameFloor(this.topology, index, name));
     if (next) this.#commit(next);
   }
@@ -692,7 +817,7 @@ class Editor {
   // --- Dokumentationsmodus: Bereiche -------------------------------------------
 
   addArea(area: Omit<DocArea, 'id'>) {
-    if (!this.editable && !this.documenting) return;
+    if (!this.editable) return;
     const added = this.#check(addArea(this.topology, area));
     if (!added) return;
     this.#commit(added.topology);
@@ -700,9 +825,16 @@ class Editor {
   }
 
   updateArea(id: string, change: Partial<Omit<DocArea, 'id'>>) {
-    if (!this.editable && !this.documenting) return;
-    const next = this.#check(updateArea(this.topology, id, change));
-    if (next) this.#commit(next);
+    if (!this.editable) return;
+    let next = this.#check(updateArea(this.topology, id, change));
+    if (!next) return;
+    // VLAN-Bereiche dokumentieren das VLAN mit ihrer Farbe: Switch-Ports erscheinen in dieser Farbe.
+    const area = next.areas?.find((a) => a.id === id);
+    if (area?.vlan && area.kind !== 'rack' && ('vlan' in change || 'color' in change || 'title' in change)) {
+      const documented = setVlanDef(next, { id: area.vlan, color: area.color, name: next.vlans?.find((v) => v.id === area.vlan)?.name ?? area.title });
+      if (documented.ok) next = documented.value;
+    }
+    this.#commit(next);
   }
 
   /** Bereich ziehen oder in der Grösse ändern: nur das Endergebnis landet im Verlauf. */
@@ -737,7 +869,7 @@ class Editor {
 
   restoreSnapshot(id: string) {
     const snapshot = this.snapshots.find((s) => s.id === id);
-    if (!snapshot || this.mode === 'action') return;
+    if (!snapshot || this.acting) return;
     this.#commit(snapshot.topology);
     this.selection = null;
     this.#dropStaleReferences();
@@ -761,8 +893,7 @@ class Editor {
   }
 
   setTool(tool: Tool) {
-    if (tool === 'cable' && !this.editable) return;
-    if (tool === 'area' && !this.documenting) return;
+    if ((tool === 'cable' || tool === 'area') && !this.editable) return;
     this.tool = tool;
     this.cableSource = null;
   }
@@ -770,7 +901,7 @@ class Editor {
   setMode(mode: Mode) {
     this.endDrag();
     // Vor dem Start der Simulation den Stand festhalten, damit man zurückkehren kann.
-    if (mode === 'action' && this.mode !== 'action' && this.topology.devices.length > 0) {
+    if (mode === 'simulation' && this.mode !== 'simulation' && this.topology.devices.length > 0) {
       this.createSnapshot(t('snapshot.autoAction'), true);
     }
     this.mode = mode;
@@ -786,8 +917,7 @@ class Editor {
       const device = getDevice(this.topology, id);
       if (!device) return;
       if (!freeInterfaceFor(this.topology, device, this.medium)) {
-        const code = this.medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface';
-        this.notify(errorText({ code, params: { device: device.name } }), 'error');
+        this.notify(errorText({ code: noPortError(this.topology, device, this.medium), params: { device: device.name, medium: t(`medium.${this.medium}`) } }), 'error');
         return;
       }
       this.cableSource = id;
@@ -798,9 +928,11 @@ class Editor {
       this.cableSource = null;
       return;
     }
+    const loop = wouldLoopWithoutStp(this.topology, source, id);
     const connected = this.#check(connect(this.topology, source, id, this.medium));
     if (!connected) return;
     this.#commit(connected.topology);
+    if (loop) this.notify(t('stp.loopWarning'), 'error');
     this.selection = { kind: 'cable', id: connected.id };
     this.cableSource = null;
   }

@@ -63,14 +63,14 @@
               {when(s.created)} · {stats(s)}{s.auto ? ` · ${t('snapshot.auto')}` : ''}{s.topology === editor.topology ? ` · ${t('snapshot.current')}` : ''}
             </span>
           </div>
-          <button disabled={editor.mode === 'action' || s.topology === editor.topology} onclick={() => restore(s.id)}>
+          <button disabled={editor.acting || s.topology === editor.topology} onclick={() => restore(s.id)}>
             {t('snapshot.restore')}
           </button>
           <button class="delete" aria-label={t('snapshot.delete', { name: s.name })} onclick={() => editor.deleteSnapshot(s.id)}>✕</button>
         </li>
       {/each}
     </ol>
-    {#if editor.mode === 'action'}
+    {#if editor.acting}
       <p class="muted small">{t('snapshot.actionHint')}</p>
     {/if}
   {/if}

@@ -3,7 +3,9 @@
   import { locale, t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
   import { api, ApiError, session } from '../state/session.svelte';
-  import { ui } from '../state/ui.svelte';
+  import { FEATURES, FEATURE_GROUPS, PROFILE_LEVELS } from '../features';
+  import { featureName } from '../labels';
+  import { normalizePolicy, ui } from '../state/ui.svelte';
   import Modal from './Modal.svelte';
 
   /**
@@ -14,8 +16,10 @@
   let { onclose }: { onclose: () => void } = $props();
 
   interface Settings {
-    modes: { design: boolean; action: boolean; doc: boolean };
-    pro: boolean;
+    modes: { design: boolean; simulation: boolean };
+    maxLevel: number;
+    defaultLevel: number;
+    disabled: string[];
     sessionHours: number;
     feedbackEnabled: boolean;
     feedbackDays: number;
@@ -57,7 +61,21 @@
 
   let token = $state<string | null>(adminToken.value);
   let password = $state('');
-  let tab = $state<'settings' | 'classes' | 'feedback'>('classes');
+  interface CheckResult {
+    id: string;
+    category: 'privacy' | 'security' | 'licenses';
+    status: 'pass' | 'warn' | 'fail' | 'skipped';
+    detail: string;
+  }
+  interface ChecksReport {
+    version: string;
+    date: string;
+    checks: CheckResult[];
+  }
+
+  let tab = $state<'settings' | 'classes' | 'feedback' | 'checks'>('classes');
+  let checks = $state<ChecksReport | null>(null);
+  let checksMissing = $state(false);
   let overview = $state<Overview | null>(null);
   let feedback = $state<Feedback[]>([]);
   let draft = $state<Settings | null>(null);
@@ -100,6 +118,13 @@
     overview = await call<Overview>('GET', 'overview');
     draft = $state.snapshot(overview.settings);
     feedback = await call<Feedback[]>('GET', 'feedback');
+    try {
+      checks = await call<ChecksReport>('GET', 'checks');
+      checksMissing = false;
+    } catch {
+      checks = null;
+      checksMissing = true;
+    }
     if (openClass) await showClass(openClass);
   }
 
@@ -118,7 +143,7 @@
     if (!draft) return;
     const saved = await call<Settings>('PUT', 'settings', draft);
     draft = saved;
-    ui.policy = { modes: saved.modes, pro: saved.pro, sessionHours: saved.sessionHours };
+    ui.setPolicy(normalizePolicy(saved));
     await session.loadConfig();
     message = { kind: 'ok', text: t('admin.saved') };
   }
@@ -217,6 +242,13 @@
           {t('admin.tab.feedback')} ({overview.feedbackOpen}/{overview.feedbackTotal})
         </button>
         <button role="tab" aria-selected={tab === 'settings'} onclick={() => (tab = 'settings')}>{t('admin.tab.settings')}</button>
+        <button role="tab" aria-selected={tab === 'checks'} onclick={() => (tab = 'checks')}>
+          {t('admin.tab.checks')}
+          {#if checks}
+            {@const bad = checks.checks.filter((c) => c.status === 'fail').length}
+            <span class="pill" class:bad={bad > 0}>{bad > 0 ? bad : '✓'}</span>
+          {/if}
+        </button>
       </div>
       <button class="ghost" onclick={() => refresh()}>{t('admin.refresh')}</button>
       <button class="ghost" onclick={logout}>{t('admin.logout')}</button>
@@ -226,11 +258,41 @@
       <h3>{t('admin.modesTitle')}</h3>
       <p class="muted">{t('admin.modesHint')}</p>
       <div class="checks">
-        {#each ['design', 'action', 'doc'] as const as m (m)}
+        {#each ['design', 'simulation'] as const as m (m)}
           <label><input type="checkbox" bind:checked={draft.modes[m]} /> {t(`mode.${m}`)}</label>
         {/each}
-        <label><input type="checkbox" bind:checked={draft.pro} /> {t('admin.allowPro')}</label>
       </div>
+      <h3>{t('admin.profileTitle')}</h3>
+      <p class="muted">{t('admin.profileHint')}</p>
+      <div class="grid">
+        <label><span>{t('admin.defaultLevel')}</span>
+          <select bind:value={draft.defaultLevel}>{#each PROFILE_LEVELS as l (l)}<option value={l}>{t(`profile.${l}`)}</option>{/each}</select>
+        </label>
+        <label><span>{t('admin.maxLevel')}</span>
+          <select bind:value={draft.maxLevel}>{#each PROFILE_LEVELS as l (l)}<option value={l}>{t(`profile.${l}`)}</option>{/each}</select>
+        </label>
+      </div>
+      <details class="blocked">
+        <summary>{t('admin.disabledTitle', { n: draft.disabled.length })}</summary>
+        <p class="muted">{t('admin.disabledHint')}</p>
+        <div class="feature-groups">
+          {#each FEATURE_GROUPS as group (group)}
+            <fieldset>
+              <legend>{t(`features.group.${group}`)}</legend>
+              {#each FEATURES.filter((f) => f.group === group) as spec (spec.id)}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={draft.disabled.includes(spec.id)}
+                    onchange={(e) => (draft!.disabled = e.currentTarget.checked ? [...draft!.disabled, spec.id] : draft!.disabled.filter((x) => x !== spec.id))}
+                  />
+                  {featureName(spec.id)}
+                </label>
+              {/each}
+            </fieldset>
+          {/each}
+        </div>
+      </details>
       <h3>{t('admin.retentionTitle')}</h3>
       <div class="grid">
         <label><span>{t('admin.sessionHours')}</span><input type="number" min="1" max="720" bind:value={draft.sessionHours} /></label>
@@ -244,6 +306,24 @@
         <span class="muted">{t('admin.sessionCount', { n: overview.sessions })}</span>
         <button class="danger" onclick={purgeSessions} disabled={overview.sessions === 0}>{t('admin.purge')}</button>
       </div>
+    {:else if tab === 'checks'}
+      <p class="muted">{t('admin.checksHint')}</p>
+      {#if checksMissing || !checks}
+        <p class="muted">{t('admin.checksMissing')}</p>
+      {:else}
+        <p>{t('admin.checksVersion', { version: checks.version, date: when(Date.parse(checks.date)) })}</p>
+        {#each ['privacy', 'security', 'licenses'] as const as category (category)}
+          <h3>{t(`checks.category.${category}`)}</h3>
+          <ul class="checklist">
+            {#each checks.checks.filter((c) => c.category === category) as c (c.id)}
+              <li class="status-{c.status}">
+                <span class="badge">{t(`checks.status.${c.status}`)}</span>
+                <span><strong>{t(`checks.${c.id}`)}</strong><br /><span class="muted">{c.detail}</span></span>
+              </li>
+            {/each}
+          </ul>
+        {/each}
+      {/if}
     {:else if tab === 'classes'}
       <form class="row" onsubmit={createClass}>
         <input bind:value={label} maxlength="40" placeholder={t('admin.classLabelPlaceholder')} aria-label={t('admin.classLabel')} required />
@@ -333,6 +413,72 @@
 </Modal>
 
 <style>
+  .pill {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    background: #16a34a;
+    color: #fff;
+  }
+  .pill.bad {
+    background: var(--danger);
+  }
+  .feature-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+  }
+  .feature-groups fieldset {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.8rem;
+  }
+  .feature-groups label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .blocked summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin: 10px 0 4px;
+  }
+  .checklist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .checklist li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .checklist .badge {
+    flex: none;
+    width: 5.5rem;
+    text-align: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    color: #fff;
+  }
+  .status-pass .badge {
+    background: #16a34a;
+  }
+  .status-warn .badge {
+    background: #d97706;
+  }
+  .status-fail .badge {
+    background: var(--danger);
+  }
+  .status-skipped .badge {
+    background: #6b7280;
+  }
   .login {
     display: flex;
     gap: 8px;

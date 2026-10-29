@@ -4,7 +4,7 @@
 import { readTasks, type Check, type TaskSet } from '../core';
 import { t } from '../i18n';
 
-export type FieldKind = 'device' | 'devices' | 'text' | 'number' | 'deviceType' | 'protocol';
+export type FieldKind = 'device' | 'devices' | 'text' | 'number' | 'deviceType' | 'protocol' | 'choice';
 
 export interface FieldSpec {
   key: string;
@@ -12,6 +12,8 @@ export interface FieldSpec {
   optional?: boolean;
   /** Abweichende Beschriftung (Schlüssel unter taskForm.field.), sonst `key`. */
   label?: string;
+  /** Auswahl für `choice` (Werte, wie sie in der Datei stehen). */
+  options?: readonly string[];
 }
 
 export const CHECK_FIELDS: Record<Check['type'], FieldSpec[]> = {
@@ -57,10 +59,33 @@ export const CHECK_FIELDS: Record<Check['type'], FieldSpec[]> = {
     { key: 'from', kind: 'device', optional: true, label: 'fromOptional' },
     { key: 'to', kind: 'device', optional: true, label: 'toOptional' },
   ],
+  routeLearned: [
+    { key: 'device', kind: 'device' },
+    { key: 'network', kind: 'text' },
+    { key: 'protocol', kind: 'choice', optional: true, label: 'routingProtocol', options: ['ospf', 'rip', 'bgp'] },
+  ],
+  neighbors: [
+    { key: 'device', kind: 'device' },
+    { key: 'protocol', kind: 'choice', label: 'routingProtocol', options: ['ospf', 'bgp'] },
+    { key: 'min', kind: 'number', optional: true },
+  ],
+  noStorm: [],
+  modemOnline: [{ key: 'device', kind: 'device' }],
+  groupLeases: [
+    { key: 'device', kind: 'device' },
+    { key: 'min', kind: 'number', optional: true },
+  ],
+  budget: [{ key: 'max', kind: 'number', label: 'budgetMax' }],
+  linkUp: [
+    { key: 'a', kind: 'device' },
+    { key: 'b', kind: 'device' },
+    { key: 'medium', kind: 'choice', optional: true, options: ['tp', 'fiber', 'wireless', 'serial', 'coax', 'dsl', 'cellular'] },
+  ],
+  vlanDocumented: [{ key: 'vlan', kind: 'number' }],
 };
 
 /** Protokollnamen, wie sie die Paketliste zeigt. */
-export const PROTOCOLS = ['ARP', 'ICMP', 'DHCP', 'DNS', 'TCP', 'HTTP', 'SMTP', 'POP3', 'IMAP', 'STP'];
+export const PROTOCOLS = ['ARP', 'ICMP', 'DHCP', 'DNS', 'TCP', 'HTTP', 'SMTP', 'POP3', 'IMAP', 'SSH', 'STP', 'OSPF', 'RIP', 'BGP', 'PPP', '802.11'];
 
 export interface GoalDraft {
   id: string;

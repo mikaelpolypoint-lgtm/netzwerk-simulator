@@ -50,7 +50,7 @@ describe('Editor', () => {
 
   it('sperrt Änderungen im Aktionsmodus', () => {
     editor.addDevice('pc', { x: 0, y: 0 });
-    editor.setMode('action');
+    editor.setMode('simulation');
     editor.select({ kind: 'device', id: 'd1' });
     editor.deleteSelection();
     editor.addDevice('pc', { x: 100, y: 0 });
