@@ -20,9 +20,11 @@ import {
   setDhcpServer,
   setInterfaceAddress,
   setInterfaceCount,
+  setPortSerial,
+  setEncapsulation,
   type Result,
 } from '../model/topology';
-import type { DeviceType, DhcpScope, DhcpServerConfig, Topology } from '../model/types';
+import type { DeviceType, DhcpScope, DhcpServerConfig, Medium, Topology } from '../model/types';
 import type { PacketLogEntry } from './simulation';
 
 export function unwrap<T>(r: Result<T>): T {
@@ -45,10 +47,21 @@ export class NetBuilder {
     return id;
   }
 
-  link(a: string, b: string): string {
-    const { topology, id } = unwrap(connect(this.topology, a, b));
+  link(a: string, b: string, medium: Medium = 'tp'): string {
+    const { topology, id } = unwrap(connect(this.topology, a, b, medium));
     this.topology = topology;
     return id;
+  }
+
+  /** Beliebige Topologie-Operation anwenden, z.B. `net.apply((t) => setOspf(t, r1, …))`. */
+  apply(change: (t: Topology) => Result<Topology>) {
+    this.topology = unwrap(change(this.topology));
+  }
+
+  /** Router-Anschluss auf seriell umstellen (vor dem Verkabeln). */
+  serial(router: string, index: number, encapsulation: 'hdlc' | 'ppp' = 'hdlc') {
+    this.topology = unwrap(setPortSerial(this.topology, router, index, true));
+    if (encapsulation === 'ppp') this.topology = unwrap(setEncapsulation(this.topology, router, index, 'ppp'));
   }
 
   /** Internet-Gerät mit Adressen in CIDR-Schreibweise. */
@@ -139,7 +152,10 @@ export function describe(topology: Topology, entry: PacketLogEntry): string {
   const tag = entry.frame.vlan !== undefined ? ` [VLAN ${entry.frame.vlan}]` : '';
   if (p.kind === 'arp') return `${route}${tag} ARP ${p.op} ${p.targetIp}`;
   if (p.kind === 'stp') return `${route} STP root=${p.rootId} cost=${p.cost}`;
+  if (p.kind === 'ppp') return `${route} PPP ${p.protocol.toUpperCase()} ${p.code}`;
+  if (p.kind === 'link') return `${route} ${p.tech.toUpperCase()} ${p.message}`;
   const inner = p.payload;
+  if (inner.kind === 'ospf') return `${route} OSPF ${inner.type} ${inner.routerId}`;
   if (inner.kind === 'tcp') {
     const data = inner.data ? ` "${inner.data.split('\r\n')[0]}"` : '';
     return `${route} TCP ${inner.srcPort}>${inner.dstPort} [${inner.flags.join(',')}] seq=${inner.seq} ack=${inner.ack}${data}`;
@@ -150,6 +166,7 @@ export function describe(topology: Topology, entry: PacketLogEntry): string {
       const answer = msg.response ? ` → ${msg.rcode === 'ok' ? msg.answers.map((a) => a.value).join(',') : msg.rcode}` : '';
       return `${route} DNS ${msg.response ? 'response' : 'query'} ${msg.question.name}${answer}`;
     }
+    if (msg.kind === 'rip') return `${route} RIP ${msg.command} ${msg.entries.map((e) => `${e.network}/${e.metric}`).join(',')}`;
     return `${route} DHCP ${msg.op} ${p.src}>${p.dst}`;
   }
   return `${route} ICMP ${inner.type} ${p.src}>${p.dst}`;

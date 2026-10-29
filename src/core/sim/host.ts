@@ -109,6 +109,7 @@ export class HostNode extends IpNode {
       else if (datagram.srcPort === DNS_PORT) this.resolver.onResponse(msg);
       return;
     }
+    if (msg.kind !== 'dhcp') return;
     if (datagram.dstPort === DHCP_CLIENT_PORT) {
       this.dhcpClient.onMessage(msg);
       // Den Server kennen wir aus seinem Ack; Erneuern und Freigeben brauchen so kein ARP.
@@ -121,6 +122,10 @@ export class HostNode extends IpNode {
 
   protected override onTcp(packet: Ipv4Packet, segment: TcpSegment) {
     this.tcp.receive(packet.src, packet.dst, segment);
+  }
+
+  boot() {
+    this.ensureDhcp();
   }
 
   /** Beim Start der Simulation: DHCP-Clients beziehen ihre Adresse. */

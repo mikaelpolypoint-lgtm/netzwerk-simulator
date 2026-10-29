@@ -1,5 +1,5 @@
 import type { Device } from '../model/types';
-import { LIMITED_BROADCAST, broadcastOf, formatIp, isPrivate, parseIp } from '../net/ipv4';
+import { LIMITED_BROADCAST, broadcastOf, formatIp, isCgnatRange, isPrivate, parseIp } from '../net/ipv4';
 import { buildRoutes, decodeIface, interfaceAddresses, lookupRoute, macOfIface, relayOf, subifId, type IfaceAddress, type Route } from '../net/routing';
 import {
   BROADCAST_MAC,
@@ -10,6 +10,7 @@ import {
   type EthernetFrame,
   type IcmpMessage,
   type Ipv4Packet,
+  type PppControl,
   type TcpSegment,
   type UdpDatagram,
 } from './frames';
@@ -18,6 +19,7 @@ import { deviceSeq } from '../model/topology';
 import { PingRun, type IcmpApp } from './apps';
 import { SSH_PORT, startSshServer } from './ssh';
 import { TcpStack } from './tcp';
+import { PppLinks } from './ppp';
 
 export const ARP_TIMEOUT = 1000;
 export const ARP_ATTEMPTS = 2;
@@ -115,15 +117,53 @@ export class IpNode implements SimNode {
   /** Rahmen auf einem logischen Interface; Ziel muss dessen MAC oder Broadcast sein. */
   receiveOn(index: number, frame: EthernetFrame) {
     const device = this.ctx.device();
+    if (frame.l2) {
+      // Serielle Leitung (HDLC/PPP): Punkt-zu-Punkt, keine MAC-Adressen.
+      if (!this.isSerial(index)) return;
+      if (frame.payload.kind === 'ppp') return this.onPpp(index, frame.payload);
+      if (frame.l2 === 'ppp' && !this.serialOpen(index)) return;
+      if (frame.payload.kind === 'ipv4') this.#onIp(index, frame.payload, '');
+      return;
+    }
     const mac = device && macOfIface(device, index);
-    if (!mac || (frame.dst !== mac && frame.dst !== BROADCAST_MAC)) return;
+    if (!mac || (frame.dst !== mac && frame.dst !== BROADCAST_MAC && !this.acceptsMulticast(frame.dst))) return;
     if (frame.payload.kind === 'arp') this.#onArp(index, frame.payload);
     else if (frame.payload.kind === 'ipv4') this.#onIp(index, frame.payload, frame.src);
   }
 
+  /** Proxy-ARP: zusätzliche Adressen, für die das Interface ARP-Anfragen beantwortet. */
+  protected answersArpFor(_index: number, _ip: string): boolean {
+    return false;
+  }
+
+  /** Router hören zusätzlich auf Multicast ihrer Routingprotokolle (OSPF, RIP). */
+  protected acceptsMulticast(_mac: string): boolean {
+    return false;
+  }
+
+  /** Serieller Anschluss? (nur physische Ports von Routern) */
+  isSerial(index: number): boolean {
+    const ref = decodeIface(index);
+    return ref.kind === 'port' && !!this.ctx.device()?.interfaces[ref.port]?.serial;
+  }
+
+  /** PPP: Leitung ausgehandelt? HDLC-Leitungen sind immer bereit. */
+  protected serialOpen(_index: number): boolean {
+    return true;
+  }
+
+  protected onPpp(_index: number, _control: PppControl) {}
+
   /** Sendet einen Rahmen auf einem logischen Interface, bei Subinterfaces mit 802.1Q-Tag. */
   protected sendFrame(index: number, frame: EthernetFrame): boolean {
     const ref = decodeIface(index);
+    if (ref.kind === 'port' && this.isSerial(index)) {
+      const port = this.ctx.device()?.interfaces[ref.port];
+      const l2 = port?.encapsulation === 'ppp' ? 'ppp' : 'hdlc';
+      if (l2 === 'ppp' && frame.payload.kind !== 'ppp' && !this.serialOpen(index)) return false;
+      if (frame.payload.kind === 'arp') return false;
+      return this.ctx.transmit(ref.port, { src: '', dst: '', l2, payload: frame.payload });
+    }
     if (ref.kind === 'port') return this.ctx.transmit(ref.port, frame);
     if (ref.kind === 'sub') return this.ctx.transmit(ref.port, { ...frame, vlan: ref.vlan });
     return false;
@@ -145,7 +185,7 @@ export class IpNode implements SimNode {
   #onArp(index: number, arp: ArpPacket) {
     const iface = this.interfaces().find((i) => i.index === index);
     if (!iface) return;
-    const forMe = parseIp(arp.targetIp) === iface.ip;
+    const forMe = parseIp(arp.targetIp) === iface.ip || this.answersArpFor(index, arp.targetIp);
     // Wie RFC 826: Absender lernen, wenn die Anfrage uns gilt oder er schon bekannt ist.
     if (forMe || this.#arp.has(arp.senderIp)) this.#learn(arp.senderIp, arp.senderMac, index);
     if (arp.op === 'request' && forMe) {
@@ -155,8 +195,8 @@ export class IpNode implements SimNode {
         payload: {
           kind: 'arp',
           op: 'reply',
-          senderMac: iface.mac,
-          senderIp: formatIp(iface.ip),
+            senderMac: iface.mac,
+          senderIp: arp.targetIp,
           targetMac: arp.senderMac,
           targetIp: arp.senderIp,
         },
@@ -174,6 +214,8 @@ export class IpNode implements SimNode {
 
   /** Liefert die MAC zu einer IP, nötigenfalls per ARP-Anfrage. */
   #resolve(index: number, ip: number, waiter: Waiter) {
+    // Punkt-zu-Punkt-Leitungen brauchen keine Adressauflösung.
+    if (this.isSerial(index)) return waiter.onMac('');
     const key = formatIp(ip);
     const cached = this.#arp.get(key);
     if (cached && cached.expires > this.ctx.now) {
@@ -393,6 +435,8 @@ export interface NatEntry {
   /** Durch eine Portweiterleitung entstanden statt durch ausgehenden Verkehr. */
   forwarded: boolean;
   expires: number;
+  /** Art der Übersetzung: PAT (viele intern → eine Adresse), statisch 1:1, Portweiterleitung, CGNAT beim Provider. */
+  kind?: 'pat' | 'static' | 'dnat' | 'cgnat';
 }
 
 type Flow = { protocol: NatEntry['protocol']; port: number };
@@ -402,13 +446,74 @@ function flowOf(payload: Ipv4Packet['payload'], side: 'src' | 'dst'): Flow | nul
   if (payload.kind === 'tcp' || payload.kind === 'udp') {
     return { protocol: payload.kind, port: side === 'src' ? payload.srcPort : payload.dstPort };
   }
-  if (payload.type === 'echoRequest' || payload.type === 'echoReply') return { protocol: 'icmp', port: payload.id };
+  if (payload.kind === 'icmp' && (payload.type === 'echoRequest' || payload.type === 'echoReply')) return { protocol: 'icmp', port: payload.id };
   return null;
 }
 
 function withFlowPort(payload: Ipv4Packet['payload'], side: 'src' | 'dst', port: number): Ipv4Packet['payload'] {
   if (payload.kind === 'tcp' || payload.kind === 'udp') return side === 'src' ? { ...payload, srcPort: port } : { ...payload, dstPort: port };
-  return { ...payload, id: port };
+  if (payload.kind === 'icmp') return { ...payload, id: port };
+  return payload;
+}
+
+/**
+ * Übersetzungstabelle für PAT (NAPT): viele interne Adressen teilen sich eine
+ * äussere; unterschieden wird über den Port. Router (NAT) und Provider (CGNAT)
+ * verwenden dieselbe Tabelle.
+ */
+export class PatTable {
+  #byInside = new Map<string, NatEntry>();
+  #byOutside = new Map<string, NatEntry>();
+  #nextPort = NAT_PORT_START;
+
+  constructor(
+    private readonly ctx: NodeContext,
+    private readonly kind: 'pat' | 'cgnat',
+  ) {}
+
+  entries(): NatEntry[] {
+    const now = this.ctx.now;
+    return [...this.#byOutside.values()].filter((e) => e.expires > now).sort((a, b) => a.outsidePort - b.outsidePort);
+  }
+
+  remember(entry: NatEntry) {
+    this.#byInside.set(`${entry.protocol}:${entry.inside}:${entry.insidePort}`, entry);
+    this.#byOutside.set(`${entry.protocol}:${entry.outside}:${entry.outsidePort}`, entry);
+  }
+
+  /** Ausgehend: Absender wird `outside`, der Port eine freie Nummer. */
+  outbound(packet: Ipv4Packet, outside: string): Ipv4Packet {
+    const flow = flowOf(packet.payload, 'src');
+    if (!flow) return { ...packet, src: outside };
+    const now = this.ctx.now;
+    let entry = this.#byInside.get(`${flow.protocol}:${packet.src}:${flow.port}`);
+    if (!entry || entry.expires <= now || entry.outside !== outside) {
+      entry = { protocol: flow.protocol, inside: packet.src, insidePort: flow.port, outside, outsidePort: this.#nextPort++, forwarded: false, expires: 0, kind: this.kind };
+      this.remember(entry);
+      this.ctx.print(this.kind === 'cgnat' ? 'cgnat.new' : 'nat.new', {
+        protocol: flow.protocol.toUpperCase(),
+        inside: `${entry.inside}:${entry.insidePort}`,
+        outside: `${outside}:${entry.outsidePort}`,
+      });
+    }
+    entry.expires = now + NAT_TIMEOUT;
+    return { ...packet, src: outside, payload: withFlowPort(packet.payload, 'src', entry.outsidePort) };
+  }
+
+  /** Eingehend an `outside`: bekannte Verbindung → interne Adresse, sonst null. */
+  inbound(packet: Ipv4Packet): Ipv4Packet | null {
+    const flow = flowOf(packet.payload, 'dst');
+    if (!flow) return null;
+    const entry = this.#byOutside.get(`${flow.protocol}:${packet.dst}:${flow.port}`);
+    if (!entry || entry.expires <= this.ctx.now) return null;
+    entry.expires = this.ctx.now + NAT_TIMEOUT;
+    return { ...packet, dst: entry.inside, payload: withFlowPort(packet.payload, 'dst', entry.insidePort) };
+  }
+
+  lookupOutside(protocol: NatEntry['protocol'], outside: string, port: number): NatEntry | undefined {
+    const entry = this.#byOutside.get(`${protocol}:${outside}:${port}`);
+    return entry && entry.expires > this.ctx.now ? entry : undefined;
+  }
 }
 
 /** Vermittlungsrechner: leitet weiter, kann als DHCP-Relay arbeiten und Adressen übersetzen (NAT). */
@@ -416,17 +521,46 @@ export class RouterNode extends IpNode {
   protected override readonly forwarding = true;
   /** TCP nur für die Verwaltung per SSH. */
   readonly tcp: TcpStack;
-  #byInside = new Map<string, NatEntry>();
-  #byOutside = new Map<string, NatEntry>();
-  #nextPort = NAT_PORT_START;
+  readonly nat: PatTable;
 
   #ping: IcmpApp | null = null;
   #pingId = 0x4000;
+  readonly ppp: PppLinks;
 
   constructor(ctx: NodeContext) {
     super(ctx);
-    this.tcp = new TcpStack(this, deviceSeq(ctx.device()?.id ?? 'd0'));
+    const seq = deviceSeq(ctx.device()?.id ?? 'd0');
+    this.tcp = new TcpStack(this, seq);
+    this.nat = new PatTable(ctx, 'pat');
     startSshServer(this, ctx);
+    this.ppp = new PppLinks(
+      ctx,
+      (port, control) => this.sendFrame(port, { src: '', dst: '', payload: control }),
+      (port) => ctx.device()?.interfaces[port]?.ip,
+      seq,
+    );
+  }
+
+  boot() {
+    this.start();
+  }
+
+  /** Beim Start und nach Änderungen: PPP-Leitungen aushandeln bzw. zurücksetzen. */
+  start() {
+    for (const port of this.ctx.device()?.interfaces ?? []) {
+      if (!port.serial || port.encapsulation !== 'ppp') continue;
+      if (this.ctx.isConnected(port.index)) this.ppp.start(port.index);
+      else this.ppp.reset(port.index);
+    }
+  }
+
+  protected override serialOpen(index: number): boolean {
+    const port = this.ctx.device()?.interfaces[index];
+    return port?.encapsulation !== 'ppp' || this.ppp.isOpen(index);
+  }
+
+  protected override onPpp(index: number, control: PppControl) {
+    if (this.ctx.device()?.interfaces[index]?.encapsulation === 'ppp') this.ppp.receive(index, control);
   }
 
   /** «ping» aus der Befehlszeile des Routers. */
@@ -452,56 +586,55 @@ export class RouterNode extends IpNode {
   }
 
   natEntries(): NatEntry[] {
-    const now = this.ctx.now;
-    return [...this.#byOutside.values()].filter((e) => e.expires > now).sort((a, b) => a.outsidePort - b.outsidePort);
+    const statics: NatEntry[] = (this.ctx.device()?.staticNat ?? []).map((r) => ({
+      protocol: 'icmp',
+      inside: r.inside,
+      insidePort: 0,
+      outside: r.outside,
+      outsidePort: 0,
+      forwarded: false,
+      expires: Number.POSITIVE_INFINITY,
+      kind: 'static',
+    }));
+    return [...statics, ...this.nat.entries()];
   }
 
-  #remember(entry: NatEntry) {
-    this.#byInside.set(`${entry.protocol}:${entry.inside}:${entry.insidePort}`, entry);
-    this.#byOutside.set(`${entry.protocol}:${entry.outside}:${entry.outsidePort}`, entry);
+  #staticFor(field: 'inside' | 'outside', ip: string) {
+    return this.ctx.device()?.staticNat?.find((r) => r[field] === ip);
   }
 
-  /** Ausgehend ins Internet: Absender wird die Router-Adresse, der Port eine freie Nummer (PAT). */
+  /** Proxy-ARP: Der Router antwortet für die öffentlichen Adressen des statischen NAT. */
+  protected override answersArpFor(index: number, ip: string): boolean {
+    return this.#isNat(index) && !!this.#staticFor('outside', ip);
+  }
+
+  /**
+   * Ausgehend ins Internet: Statisches NAT ersetzt nur die Adresse (1:1),
+   * sonst teilen sich alle die Router-Adresse und werden über Ports unterschieden (PAT).
+   */
   protected override outbound(inIface: IfaceAddress, outIface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
     if (!this.#isNat(outIface.index) || this.#isNat(inIface.index)) return packet;
-    const flow = flowOf(packet.payload, 'src');
-    if (!flow) return packet;
-    const now = this.ctx.now;
-    const outside = formatIp(outIface.ip);
-    let entry = this.#byInside.get(`${flow.protocol}:${packet.src}:${flow.port}`);
-    if (!entry || entry.expires <= now || entry.outside !== outside) {
-      entry = {
-        protocol: flow.protocol,
-        inside: packet.src,
-        insidePort: flow.port,
-        outside,
-        outsidePort: this.#nextPort++,
-        forwarded: false,
-        expires: 0,
-      };
-      this.#remember(entry);
-      this.ctx.print('nat.new', { protocol: flow.protocol.toUpperCase(), inside: `${entry.inside}:${entry.insidePort}`, outside: `${outside}:${entry.outsidePort}` });
-    }
-    entry.expires = now + NAT_TIMEOUT;
-    return { ...packet, src: outside, payload: withFlowPort(packet.payload, 'src', entry.outsidePort) };
+    const fixed = this.#staticFor('inside', packet.src);
+    if (fixed) return { ...packet, src: fixed.outside };
+    return this.nat.outbound(packet, formatIp(outIface.ip));
   }
 
-  /** Eingehend an die Internet-Adresse: bekannte Verbindung oder Portweiterleitung → interner Rechner. */
+  /** Eingehend: statisches NAT, bekannte Verbindung oder Portweiterleitung (DNAT) → interner Rechner. */
   protected override inbound(iface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
-    if (!this.#isNat(iface.index) || packet.dst !== formatIp(iface.ip)) return null;
+    if (!this.#isNat(iface.index)) return null;
+    const fixed = this.#staticFor('outside', packet.dst);
+    if (fixed) return { ...packet, dst: fixed.inside };
+    if (packet.dst !== formatIp(iface.ip)) return null;
+    const known = this.nat.inbound(packet);
+    if (known) return known;
     const flow = flowOf(packet.payload, 'dst');
     if (!flow) return null;
-    const now = this.ctx.now;
-    let entry = this.#byOutside.get(`${flow.protocol}:${packet.dst}:${flow.port}`);
-    if (!entry || entry.expires <= now) {
-      const rule = (this.ctx.device()?.portForwards ?? []).find((f) => f.protocol === flow.protocol && f.port === flow.port);
-      if (!rule) return null;
-      entry = { protocol: flow.protocol, inside: rule.to, insidePort: rule.toPort, outside: packet.dst, outsidePort: rule.port, forwarded: true, expires: 0 };
-      this.#remember(entry);
-      this.ctx.print('nat.forward', { protocol: flow.protocol.toUpperCase(), port: rule.port, inside: `${rule.to}:${rule.toPort}` });
-    }
-    entry.expires = now + NAT_TIMEOUT;
-    return { ...packet, dst: entry.inside, payload: withFlowPort(packet.payload, 'dst', entry.insidePort) };
+    const rule = (this.ctx.device()?.portForwards ?? []).find((f) => f.protocol === flow.protocol && f.port === flow.port);
+    if (!rule) return null;
+    const entry: NatEntry = { protocol: flow.protocol, inside: rule.to, insidePort: rule.toPort, outside: packet.dst, outsidePort: rule.port, forwarded: true, expires: this.ctx.now + NAT_TIMEOUT, kind: 'dnat' };
+    this.nat.remember(entry);
+    this.ctx.print('nat.forward', { protocol: flow.protocol.toUpperCase(), port: rule.port, inside: `${rule.to}:${rule.toPort}` });
+    return { ...packet, dst: rule.to, payload: withFlowPort(packet.payload, 'dst', rule.toPort) };
   }
 
   override state(): object {
@@ -535,19 +668,57 @@ export class RouterNode extends IpNode {
 
 /**
  * Das Internet als vereinfachter Provider-Router: leitet zwischen seinen
- * Anschlüssen weiter, verwirft aber private Adressen (RFC 1918), wie es
- * echte Provider tun. Darum braucht ein Heimnetz NAT.
+ * Anschlüssen weiter, verwirft aber private Adressen (RFC 1918) und den
+ * CGNAT-Bereich (RFC 6598), wie es echte Provider tun. Darum braucht ein
+ * Heimnetz NAT.
+ *
+ * CGNAT: Kunden an Anschlüssen mit `cgnat` erhalten eine Adresse aus
+ * 100.64.0.0/10; der Provider übersetzt sie zusätzlich auf seine öffentliche
+ * Adresse (`cgnatAddress`). Viele Kunden teilen sich so eine Adresse –
+ * Portweiterleitungen von aussen sind dann nicht möglich.
  */
 export class InternetNode extends IpNode {
   protected override readonly forwarding = true;
+  readonly cgnat: PatTable;
 
-  protected override outbound(_in: IfaceAddress, _out: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+  constructor(ctx: NodeContext) {
+    super(ctx);
+    this.cgnat = new PatTable(ctx, 'cgnat');
+  }
+
+  #cgnatPort(index: number) {
+    return !!this.ctx.device()?.interfaces[index]?.cgnat;
+  }
+
+  override isOwn(ip: number): boolean {
+    const extra = this.ctx.device()?.cgnatAddress;
+    return super.isOwn(ip) || (!!extra && parseIp(extra) === ip);
+  }
+
+  protected override inbound(_iface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    const address = this.ctx.device()?.cgnatAddress;
+    if (!address || packet.dst !== address) return null;
+    return this.cgnat.inbound(packet);
+  }
+
+  protected override outbound(inIface: IfaceAddress, outIface: IfaceAddress, packet: Ipv4Packet): Ipv4Packet | null {
+    let current = packet;
+    const address = this.ctx.device()?.cgnatAddress;
     const src = parseIp(packet.src);
-    const dst = parseIp(packet.dst);
-    if ((src !== null && isPrivate(src)) || (dst !== null && isPrivate(dst))) {
-      this.ctx.print('internet.private', { src: packet.src, dst: packet.dst });
+    if (address && src !== null && isCgnatRange(src) && this.#cgnatPort(inIface.index) && !this.#cgnatPort(outIface.index)) {
+      current = this.cgnat.outbound(packet, address);
+    }
+    const from = parseIp(current.src);
+    const to = parseIp(current.dst);
+    const blocked = (ip: number | null) => ip !== null && (isPrivate(ip) || (isCgnatRange(ip) && !this.#cgnatPort(outIface.index) && !this.#cgnatPort(inIface.index)));
+    if (blocked(from) || blocked(to)) {
+      this.ctx.print('internet.private', { src: current.src, dst: current.dst });
       return null;
     }
-    return packet;
+    return current;
+  }
+
+  override state(): object {
+    return { ...super.state(), nat: this.cgnat.entries() };
   }
 }

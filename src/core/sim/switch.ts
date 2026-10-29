@@ -14,6 +14,16 @@ export const STP_DEFAULT_PRIORITY = 32768;
 export const STP_PATH_COST = 19;
 export const DEFAULT_VLAN = 1;
 
+/**
+ * Broadcast-Sturm: Kreist ein Rahmen in einer Schleife, leitet der Switch im
+ * Sturm nur noch so viele Rahmen pro Zeitfenster weiter, damit die Simulation
+ * bedienbar bleibt – echte Switches würden ihre Leitungen ganz füllen.
+ */
+export const STORM_WINDOW = 100;
+export const STORM_THRESHOLD = 60;
+/** So lange ohne kreisende Rahmen, dann gilt der Sturm als vorbei. */
+export const STORM_QUIET = 1000;
+
 export interface MacEntry {
   mac: string;
   port: number;
@@ -29,6 +39,13 @@ export interface StpPortInfo {
   port: number;
   role: PortRole;
   state: PortState;
+}
+
+export interface StormState {
+  /** Seit wann der Switch im Sturm ist (virtuelle Zeit). */
+  since: number;
+  /** Weitergeleitete Rahmen im letzten Zeitfenster. */
+  rate: number;
 }
 
 export interface StpState {
@@ -83,8 +100,46 @@ export class SwitchNode implements SimNode {
   #rootPort: number | null = null;
   #rootCost = 0;
   #helloRunning = false;
+  #windowStart = 0;
+  #windowCount = 0;
+  #lastRate = 0;
+  #stormSince: number | null = null;
+  #lastLoop = 0;
+  #seen = new WeakMap<object, number>();
 
   constructor(private readonly ctx: NodeContext) {}
+
+  /**
+   * Schleifenerkennung: Kommt derselbe Rahmen (gleiche Nutzlast) ein zweites
+   * Mal an, kreist er in einer Schleife. Der Switch leitet weiter wie ein echter
+   * (der Sturm ist sichtbar), aber gedrosselt, damit die Simulation bedienbar bleibt.
+   */
+  #admit(frame: EthernetFrame): boolean {
+    const now = this.ctx.now;
+    const seen = (this.#seen.get(frame.payload) ?? 0) + 1;
+    this.#seen.set(frame.payload, seen);
+    if (seen >= 2) {
+      this.#lastLoop = now;
+      if (this.#stormSince === null) {
+        this.#stormSince = now;
+        this.ctx.print('storm.detected');
+      }
+    } else if (this.#stormSince !== null && now - this.#lastLoop > STORM_QUIET) {
+      this.#stormSince = null;
+      this.ctx.print('storm.ended');
+    }
+    if (now - this.#windowStart >= STORM_WINDOW) {
+      this.#lastRate = this.#windowCount;
+      this.#windowStart = now;
+      this.#windowCount = 0;
+    }
+    this.#windowCount++;
+    return this.#stormSince === null || this.#windowCount <= STORM_THRESHOLD;
+  }
+
+  get storm(): StormState | null {
+    return this.#stormSince === null ? null : { since: this.#stormSince, rate: Math.max(this.#lastRate, this.#windowCount) };
+  }
 
   get #device() {
     return this.ctx.device();
@@ -126,6 +181,10 @@ export class SwitchNode implements SimNode {
   }
 
   // --- Spanning Tree -----------------------------------------------------------
+
+  boot() {
+    this.start();
+  }
 
   /** Startet die regelmässigen BPDUs (beim Start der Simulation). */
   start() {
@@ -225,6 +284,7 @@ export class SwitchNode implements SimNode {
     const device = this.#device;
     if (!device) return;
     if (frame.payload.kind === 'stp' && this.#stp) return this.#onBpdu(inPort, frame.payload);
+    if (!this.#admit(frame)) return;
 
     const inState = this.#state(inPort);
     if (inState === 'blocking') return;
@@ -275,13 +335,14 @@ export class SwitchNode implements SimNode {
     const macTable = [...this.#table.values()]
       .filter((e) => e.expires > now && this.ctx.isConnected(e.port))
       .sort((a, b) => a.vlan - b.vlan || a.port - b.port || a.mac.localeCompare(b.mac));
-    if (!this.#stp) return { macTable };
+    const storm = this.storm;
+    if (!this.#stp) return { macTable, ...(storm ? { storm } : {}) };
     const device = this.#device;
     const ports = (device?.interfaces ?? [])
       .filter((p) => this.ctx.isConnected(p.index))
       .map((p) => ({ port: p.index, role: this.#roles.get(p.index) ?? 'designated', state: this.#state(p.index) }));
     const stp: StpState = { bridgeId: this.#bridgeId(), rootId: this.#rootId || this.#bridgeId(), rootPort: this.#rootPort, rootCost: this.#rootCost, ports };
-    return { macTable, stp };
+    return { macTable, stp, ...(storm ? { storm } : {}) };
   }
 }
 

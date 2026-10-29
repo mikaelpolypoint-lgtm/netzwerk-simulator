@@ -69,6 +69,29 @@ export function isPrivate(ip: number): boolean {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
+/** Gemeinsam genutzter Adressraum für Carrier-Grade NAT (RFC 6598): 100.64.0.0/10. */
+export function isCgnatRange(ip: number): boolean {
+  return ip >>> 22 === (100 << 2) + 1;
+}
+
+/** Link-Local (169.254.0.0/16, APIPA): Adresse ohne DHCP-Antwort. */
+export function isLinkLocal(ip: number): boolean {
+  return ip >>> 16 === (169 << 8) + 254;
+}
+
+/**
+ * Art einer Adresse für die Anzeige: privat (RFC 1918), CGNAT (RFC 6598),
+ * öffentlich (im Internet geroutet) oder speziell (Loopback, Link-Local, Multicast …).
+ */
+export type AddressScope = 'private' | 'cgnat' | 'public' | 'special';
+
+export function addressScope(ip: number): AddressScope {
+  if (isPrivate(ip)) return 'private';
+  if (isCgnatRange(ip)) return 'cgnat';
+  if (isReserved(ip) || isLinkLocal(ip)) return 'special';
+  return 'public';
+}
+
 export interface AddressIssue {
   code: string;
   field: 'ip' | 'mask' | 'gateway' | 'dns';

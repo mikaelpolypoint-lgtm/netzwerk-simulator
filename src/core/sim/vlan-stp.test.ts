@@ -74,6 +74,24 @@ group('Spanning Tree', () => {
     return { net, pc1, pc2, s1, s2, s3, closing };
   }
 
+  it('ohne STP entsteht bei einer Schleife ein Broadcast-Sturm, der erkannt und gedrosselt wird', () => {
+    const net = new NetBuilder();
+    const pc1 = net.host('PC1', '10.0.0.1');
+    net.host('PC2', '10.0.0.2');
+    const [s1, s2, s3] = ['S1', 'S2', 'S3'].map((name) => net.add('switch', name)) as [string, string, string];
+    net.link(pc1, s1);
+    net.link(s1, s2);
+    net.link(s2, s3);
+    net.link(s3, s1);
+    const sim = new Simulation(net.topology);
+    sim.ping(pc1, '10.0.0.99');
+    sim.runUntil(300);
+    expect(sim.stormingDevices().length).toBeGreaterThan(0);
+    expect(sim.getDeviceState(s1).storm).toBeDefined();
+    // Gedrosselt: Die Simulation läuft weiter, statt in Ereignissen zu ertrinken.
+    expect(sim.runUntil(400)).toBeLessThan(20_000);
+  });
+
   it('warnt vor Schleifen nur, solange nicht alle beteiligten Switches STP haben', () => {
     const net = new NetBuilder();
     const [s1, s2, s3] = ['S1', 'S2', 'S3'].map((name) => net.add('switch', name)) as [string, string, string];

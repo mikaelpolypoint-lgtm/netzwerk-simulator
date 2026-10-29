@@ -66,7 +66,14 @@ export interface DnsMessage {
   rcode: 'ok' | 'nxdomain';
 }
 
-export type AppMessage = DhcpMessage | DnsMessage;
+/** RIP Version 2 (RFC 2453), UDP-Port 520. */
+export interface RipMessage {
+  kind: 'rip';
+  command: 'request' | 'response';
+  entries: { network: string; mask: string; nextHop: string; metric: number }[];
+}
+
+export type AppMessage = DhcpMessage | DnsMessage | RipMessage;
 
 export interface UdpDatagram {
   kind: 'udp';
@@ -91,13 +98,36 @@ export interface TcpSegment {
   data: string;
 }
 
+/** Link-State-Advertisement eines Routers (OSPF Typ 1, Router-LSA), vereinfacht. */
+export interface OspfLsa {
+  type: 'router' | 'external';
+  /** Router-ID des Erzeugers. */
+  advertisingRouter: string;
+  seq: number;
+  /** Router-LSA: Verbindungen zu Nachbarn und Netzen; external: per Redistribution importierte Netze. */
+  links: { kind: 'transit' | 'stub' | 'p2p'; id: string; data: string; cost: number }[];
+}
+
+/** OSPFv2 (RFC 2328), IP-Protokoll 89, an 224.0.0.5 (alle OSPF-Router). */
+export interface OspfPacket {
+  kind: 'ospf';
+  type: 'hello' | 'dbd' | 'lsr' | 'lsu' | 'lsack';
+  routerId: string;
+  area: number;
+  /** Hello: Netzmaske, Intervalle und gesehene Nachbarn. */
+  hello?: { mask: string; helloInterval: number; deadInterval: number; neighbors: string[]; dr?: string };
+  /** DBD/LSR/LSAck: Kopf der LSAs; LSU: vollständige LSAs. */
+  headers?: { advertisingRouter: string; seq: number; type: OspfLsa['type'] }[];
+  lsas?: OspfLsa[];
+}
+
 export interface Ipv4Packet {
   kind: 'ipv4';
   src: string;
   dst: string;
   ttl: number;
   id: number;
-  payload: IcmpMessage | UdpDatagram | TcpSegment;
+  payload: IcmpMessage | UdpDatagram | TcpSegment | OspfPacket;
 }
 
 /** Bridge Protocol Data Unit des Spanning Tree (vereinfacht). */
@@ -112,12 +142,47 @@ export interface StpBpdu {
   portId: number;
 }
 
+/**
+ * PPP-Steuerpaket (RFC 1661/1332): LCP handelt die Verbindung aus, IPCP die
+ * IP-Adressen. Erst danach fliessen IP-Pakete.
+ */
+export interface PppControl {
+  kind: 'ppp';
+  protocol: 'lcp' | 'ipcp';
+  code: 'configureRequest' | 'configureAck' | 'configureNak' | 'terminateRequest' | 'terminateAck' | 'echoRequest' | 'echoReply';
+  id: number;
+  /** LCP: Magic-Number; IPCP: IP-Adresse. */
+  magic?: number;
+  ip?: string;
+}
+
+/**
+ * Steuermeldungen von Zugangstechniken und WLAN, die nur zwischen zwei direkt
+ * verbundenen Geräten laufen (Schicht 1/2): DOCSIS, GPON, DSL/PPPoE, LTE, 802.11.
+ */
+export interface LinkControl {
+  kind: 'link';
+  tech: 'docsis' | 'gpon' | 'dsl' | 'pppoe' | 'lte' | 'wlan';
+  /** Name der Meldung, wie sie in der Norm heisst, z.B. "RNG-REQ" oder "Association Request". */
+  message: string;
+  /** Felder für die Detailansicht. */
+  fields?: Record<string, string | number>;
+}
+
+/**
+ * Rahmen auf einer Leitung. Ohne `l2` ist es Ethernet II (mit MAC-Adressen);
+ * serielle Leitungen tragen Cisco-HDLC oder PPP (ohne MAC-Adressen).
+ * `access` vermerkt, über welche Zugangstechnik der Rahmen auf dieser Leitung
+ * transportiert wird (z.B. DOCSIS zwischen Kabelmodem und Provider).
+ */
 export interface EthernetFrame {
   src: string;
   dst: string;
   /** 802.1Q-Tag, nur auf Trunk-Verbindungen. */
   vlan?: number;
-  payload: ArpPacket | Ipv4Packet | StpBpdu;
+  l2?: 'hdlc' | 'ppp';
+  access?: 'docsis' | 'gpon' | 'adsl' | 'vdsl' | 'lte';
+  payload: ArpPacket | Ipv4Packet | StpBpdu | PppControl | LinkControl;
 }
 
 /** Ziel-MAC für BPDUs (Multicast, nur zwischen Switches). */
@@ -130,3 +195,10 @@ export const HTTP_PORT = 80;
 export const SMTP_PORT = 25;
 export const POP3_PORT = 110;
 export const IMAP_PORT = 143;
+export const RIP_PORT = 520;
+export const BGP_PORT = 179;
+export const OSPF_ALL_ROUTERS = '224.0.0.5';
+export const RIP_MULTICAST = '224.0.0.9';
+/** Ethernet-Multicast-Adressen zu 224.0.0.5 und 224.0.0.9 (01:00:5E + untere 23 Bit). */
+export const OSPF_MAC = '01:00:5E:00:00:05';
+export const RIP_MAC = '01:00:5E:00:00:09';

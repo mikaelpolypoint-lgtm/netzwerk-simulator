@@ -49,6 +49,11 @@ export class L3SwitchNode extends SwitchNode {
     };
   }
 
+  override boot() {
+    super.boot();
+    this.router.boot();
+  }
+
   override state(): object {
     return { ...super.state(), ...this.router.state() };
   }
