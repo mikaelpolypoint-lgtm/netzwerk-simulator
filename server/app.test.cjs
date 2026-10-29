@@ -52,6 +52,24 @@ test('liefert die App mit Server-Kennung und CSP für die eigene API', async () 
   assert.match(res.headers.get('content-security-policy'), /frame-ancestors 'none'/);
 });
 
+test('liefert Skripte und Stile als eigene Dateien, ohne Inline-Skripte', async () => {
+  const res = await call('GET', '/');
+  const html = res.data;
+  // Keine ausführbaren Inline-Skripte: so läuft die Seite auch unter einer strengeren Hosting-CSP.
+  assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)(?![^>]*application\/json)[^>]*>/);
+  assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
+  const sources = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(sources.some((s) => s.endsWith('.js')));
+  assert.ok(sources.some((s) => s.endsWith('.css')));
+  for (const src of sources) {
+    const asset = await fetch(base + src);
+    assert.equal(asset.status, 200, src);
+    assert.match(asset.headers.get('content-type'), src.endsWith('.js') ? /javascript/ : /text\/css/);
+    assert.ok((await asset.text()).length > 0);
+  }
+  assert.equal((await call('GET', '/assets/gibtsnicht.js')).status, 404);
+});
+
 test('Codes: normalisiert und ohne verwechselbare Zeichen', () => {
   assert.equal(normalizeCode('k7f2 9qxm'), 'K7F2-9QXM');
   assert.equal(normalizeCode('K7F2-9QX0'), null);

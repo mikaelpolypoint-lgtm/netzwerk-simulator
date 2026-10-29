@@ -63,6 +63,12 @@ In Plesk unter *Git → Repository-Einstellungen* steht eine **Webhook-URL**. Di
 
 Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Bereitstellungsaktion eingetragen ist, auf **App neu starten**).
 
+## Fehlersuche
+
+- **Weisse Seite oder «Wird geladen …» bleibt stehen:** Das Programm startet im Browser nicht. Browser-Konsole öffnen (F12). Steht dort «Refused to execute … Content-Security-Policy», setzt das Hosting eine eigene, strengere Richtlinie. Der Node-Server liefert Skripte und Stile deshalb als eigene Dateien unter `/assets/…` aus (keine Inline-Skripte), damit die Seite auch dann läuft. Eine zusätzliche Richtlinie unter *Apache & nginx-Einstellungen* sollte trotzdem entfernt werden.
+- **`/healthz` antwortet nicht mit `ok`:** Die Node.js-App läuft nicht. Unter *Node.js* Startdatei `server/start.cjs`, Anwendungsstamm `/httpdocs` und Dokumentstamm `/httpdocs/server/public` prüfen, dann *App neu starten*; Fehler stehen unter *Protokolle anzeigen*.
+- **Alter Stand:** *Git → Pull Updates*, danach *App neu starten*.
+
 ## Ablauf im Alltag
 
 ```bash

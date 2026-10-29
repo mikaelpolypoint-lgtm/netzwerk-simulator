@@ -218,10 +218,13 @@ function cleanup() {
 
 // --- HTTP-Hilfen ---------------------------------------------------------------------
 
+// Skripte und das Stylesheet liefert der Server als eigene Dateien aus ('self'),
+// damit die Seite auch läuft, wenn das Hosting zusätzlich eine strengere
+// Richtlinie ohne 'unsafe-inline' setzt. Inline-Stile bleiben für style-Attribute nötig.
 const CSP = [
   "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
   'img-src data: blob:',
   "connect-src 'self'",
   "form-action 'none'",
@@ -275,24 +278,59 @@ function readBody(req) {
   });
 }
 
-/** Die App mit freigegebener API: CSP erlaubt Anfragen an den eigenen Server. */
-function appHtml() {
-  const html = fs.readFileSync(RELEASE_FILE, 'utf8');
-  return html
+/**
+ * Die App mit freigegebener API: CSP erlaubt Anfragen an den eigenen Server.
+ * Eingebettete Skripte und das Stylesheet werden herausgelöst und unter
+ * /assets/… ausgeliefert, damit keine Inline-Skripte nötig sind.
+ */
+function appBundle() {
+  let html = fs.readFileSync(RELEASE_FILE, 'utf8');
+  const assets = new Map();
+  let n = 0;
+  const extract = (open, close, make) => {
+    for (;;) {
+      const start = html.indexOf(open);
+      if (start < 0) return;
+      const bodyStart = start + open.length;
+      const end = html.indexOf(close, bodyStart);
+      if (end < 0) return;
+      const tag = make(html.slice(bodyStart, end), n++);
+      html = html.slice(0, start) + tag + html.slice(end + close.length);
+    }
+  };
+  // Modul-Skript (der Simulator) und klassische Skripte (Startanzeige); JSON-Daten bleiben eingebettet.
+  extract('<script type="module" crossorigin>', '</script>', (code, i) => {
+    assets.set(`/assets/app-${i}.js`, { type: 'text/javascript; charset=utf-8', body: code });
+    return `<script type="module" src="/assets/app-${i}.js"></script>`;
+  });
+  extract('<script>', '</script>', (code, i) => {
+    assets.set(`/assets/boot-${i}.js`, { type: 'text/javascript; charset=utf-8', body: code });
+    return `<script src="/assets/boot-${i}.js"></script>`;
+  });
+  extract('<style rel="stylesheet" crossorigin>', '</style>', (css, i) => {
+    assets.set(`/assets/style-${i}.css`, { type: 'text/css; charset=utf-8', body: css });
+    return `<link rel="stylesheet" href="/assets/style-${i}.css" />`;
+  });
+  html = html
     // frame-ancestors wirkt nur als HTTP-Header; im Meta-Tag würde der Browser warnen.
     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, `<meta http-equiv="Content-Security-Policy" content="${CSP.replace("; frame-ancestors 'none'", '')}" />`)
     .replace('<head>', '<head>\n    <meta name="ns-server" content="1" />');
+  return { html, assets };
 }
 
-let cachedHtml = null;
+let cached = null;
 let cachedMtime = 0;
-function html() {
+function bundle() {
   const mtime = fs.statSync(RELEASE_FILE).mtimeMs;
-  if (!cachedHtml || mtime !== cachedMtime) {
-    cachedHtml = appHtml();
+  if (!cached || mtime !== cachedMtime) {
+    cached = appBundle();
     cachedMtime = mtime;
   }
-  return cachedHtml;
+  return cached;
+}
+
+function html() {
+  return bundle().html;
 }
 
 // --- API ---------------------------------------------------------------------------
@@ -576,6 +614,8 @@ function createServer() {
       if (url.pathname === '/' || url.pathname === '/index.html') {
         return send(res, 200, req.method === 'HEAD' ? '' : html(), { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP });
       }
+      const asset = url.pathname.startsWith('/assets/') ? bundle().assets.get(url.pathname) : undefined;
+      if (asset) return send(res, 200, req.method === 'HEAD' ? '' : asset.body, { 'Content-Type': asset.type });
       if (url.pathname === '/THIRD_PARTY_NOTICES.md') {
         return send(res, 200, fs.readFileSync(NOTICES_FILE), { 'Content-Type': 'text/markdown; charset=utf-8' });
       }
