@@ -9,6 +9,8 @@ import {
   setEncapsulation,
   setOspf,
   setPortSerial,
+  setRip,
+  setInterfaceShutdown,
   setStp,
   setVlanDef,
   type PacketLogEntry,
@@ -100,6 +102,33 @@ const SOLUTIONS: Record<string, (t: Topology) => Topology> = {
   },
   'ospf-triangle': (t) => {
     for (const n of ['R1', 'R2', 'R3']) t = unwrap(setOspf(t, byName(t, n), { networks: [{ network: '0.0.0.0', mask: '0.0.0.0', area: 0 }] }));
+    return t;
+  },
+  'port-shutdown': (t) => {
+    const gast = byName(t, 'Gast');
+    const cable = t.cables.find((c) => c.a.device === gast || c.b.device === gast)!;
+    const end = cable.a.device === gast ? cable.b : cable.a;
+    return unwrap(setInterfaceShutdown(t, end.device, end.iface, true));
+  },
+  'subnetting-vlsm': (t) => {
+    const r = byName(t, 'Router');
+    const plan = [
+      ['Verwaltung', '192.168.10.1', '192.168.10.10', '25'],
+      ['Labor', '192.168.10.129', '192.168.10.130', '26'],
+      ['Gäste', '192.168.10.193', '192.168.10.194', '27'],
+    ] as const;
+    for (const [name, gw, ip, prefix] of plan) {
+      const pc = byName(t, name);
+      const cable = t.cables.find((c) => c.a.device === pc || c.b.device === pc)!;
+      const port = cable.a.device === r ? cable.a.iface : cable.b.iface;
+      t = unwrap(setInterfaceAddress(t, r, port, gw, prefix));
+      t = unwrap(configureHost(t, pc, { ip, mask: prefix, gateway: gw }));
+    }
+    return t;
+  },
+  'fiber-ont': (t) => unwrap(connect(t, byName(t, 'ONT'), byName(t, 'Provider'), 'fiber')).topology,
+  'rip-chain': (t) => {
+    for (const n of ['R1', 'R2', 'R3']) t = unwrap(setRip(t, byName(t, n), { networks: [{ network: '0.0.0.0', mask: '0.0.0.0' }] }));
     return t;
   },
   'static-nat-dmz': (t) => unwrap(addStaticNat(t, byName(t, 'Firmenrouter'), { inside: '192.168.0.80', outside: '203.0.113.5' })),

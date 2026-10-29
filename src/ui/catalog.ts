@@ -603,6 +603,113 @@ export const CATALOG: CatalogEntry[] = [
     },
   },
   {
+    id: 'port-shutdown',
+    stars: 1,
+    features: ['net.portShutdown'],
+    level: 2,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -300, -120)
+        .add('pc', 'PC 2', -300, 120)
+        .add('notebook', 'Gast', 300, 0)
+        .add('switch', 'Switch', 0, 0)
+        .link('PC 1', 'Switch')
+        .link('PC 2', 'Switch')
+        .link('Gast', 'Switch')
+        .host('PC 1', '10.0.0.1', '24')
+        .host('PC 2', '10.0.0.2', '24')
+        .host('Gast', '10.0.0.99', '24');
+      return {
+        topology: s.topology,
+        tasks: task('portShutdown', 1, [
+          goal('portShutdown', 1, { type: 'noPing', from: 'PC 1', to: 'Gast' }),
+          goal('portShutdown', 2, { type: 'ping', from: 'PC 1', to: 'PC 2' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'subnetting-vlsm',
+    stars: 3,
+    features: ['tool.ipCalculator'],
+    level: 2,
+    build() {
+      const s = new Start()
+        .add('pc', 'Verwaltung', -320, -160)
+        .add('pc', 'Labor', -320, 160)
+        .add('pc', 'Gäste', 320, 0)
+        .add('router', 'Router', 0, 0, { ports: 3 })
+        .link('Verwaltung', 'Router')
+        .link('Labor', 'Router')
+        .link('Gäste', 'Router');
+      return {
+        topology: s.topology,
+        tasks: task('vlsm', 3, [
+          goal('vlsm', 1, { type: 'inNetwork', device: 'Verwaltung', network: '192.168.10.0/25' }),
+          goal('vlsm', 2, { type: 'inNetwork', device: 'Labor', network: '192.168.10.128/26' }),
+          goal('vlsm', 3, { type: 'inNetwork', device: 'Gäste', network: '192.168.10.192/27' }),
+          goal('vlsm', 4, { type: 'ping', from: 'Verwaltung', to: 'Gäste' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'fiber-ont',
+    stars: 2,
+    features: ['device.modem', 'medium.access', 'medium.fiber', 'device.internet', 'net.nat'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC', -480, 0)
+        .router('Heimrouter', -240, 0, ['192.168.1.1/24', '203.0.113.2/30'])
+        .add('modem', 'ONT', 0, 0, { modem: 'fiber' })
+        .router('Provider', 240, 0, ['198.51.100.1/24', '203.0.113.1/30'], 'internet')
+        .add('server', 'Server', 480, 0)
+        .link('PC', 'Heimrouter')
+        .link('Heimrouter', 'ONT')
+        .link('Provider', 'Server')
+        .host('PC', '192.168.1.10', '24', '192.168.1.1')
+        .host('Server', '198.51.100.10', '24', '198.51.100.1')
+        .nat('Heimrouter', 1)
+        .route('Heimrouter', '0.0.0.0', '0.0.0.0', '203.0.113.1');
+      return {
+        topology: s.topology,
+        tasks: task('fiberOnt', 2, [
+          goal('fiberOnt', 1, { type: 'linkUp', a: 'ONT', b: 'Provider', medium: 'fiber' }),
+          goal('fiberOnt', 2, { type: 'modemOnline', device: 'ONT' }),
+          goal('fiberOnt', 3, { type: 'ping', from: 'PC', to: '198.51.100.10' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'rip-chain',
+    stars: 3,
+    features: ['routing.rip'],
+    level: 4,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -520, 0)
+        .router('R1', -260, 0, ['192.168.1.1/24', '10.0.12.1/30'])
+        .router('R2', 0, 0, ['10.0.12.2/30', '10.0.23.1/30'])
+        .router('R3', 260, 0, ['10.0.23.2/30', '192.168.3.1/24'])
+        .add('pc', 'PC 3', 520, 0)
+        .link('PC 1', 'R1')
+        .link('R1', 'R2')
+        .link('R2', 'R3')
+        .link('R3', 'PC 3')
+        .host('PC 1', '192.168.1.10', '24', '192.168.1.1')
+        .host('PC 3', '192.168.3.10', '24', '192.168.3.1');
+      return {
+        topology: s.topology,
+        tasks: task('ripChain', 3, [
+          goal('ripChain', 1, { type: 'routeLearned', device: 'R1', network: '192.168.3.0/24', protocol: 'rip' }),
+          goal('ripChain', 2, { type: 'ping', from: 'PC 1', to: 'PC 3' }),
+        ]),
+      };
+    },
+  },
+  {
     id: 'bgp-two-as',
     stars: 5,
     features: ['routing.bgp'],
