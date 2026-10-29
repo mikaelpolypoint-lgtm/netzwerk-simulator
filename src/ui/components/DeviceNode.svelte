@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEVICE_SPECS, floorsOf, hasCli, parseMask, type Device } from '../../core';
+  import { DEVICE_SPECS, addressScope, floorsOf, hasCli, parseIp, parseMask, type AddressScope, type Device } from '../../core';
   import { t } from '../../i18n';
   import { typeLabel } from '../labels';
   import { openCli } from '../state/cli.svelte';
@@ -33,7 +33,7 @@
   const isSource = $derived(editor.cableSource === device.id);
   const isEndpoint = $derived(DEVICE_SPECS[device.type].role === 'endpoint');
 
-  /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche; per DHCP bezogene erst im Aktionsmodus. */
+  /** Endgeräte zeigen ihre Adresse direkt auf der Zeichenfläche; per DHCP bezogene erst in der Simulation. */
   const ip = $derived.by(() => {
     if (!isEndpoint) return '';
     const live = device.dhcp && editor.acting ? (simStore.tick, simStore.sim?.getDeviceState(device.id).address) : undefined;
@@ -42,6 +42,25 @@
     if (!address) return device.dhcp ? t('canvas.dhcp') : '';
     const prefix = mask ? parseMask(mask) : null;
     return prefix === null ? address : `${address}/${prefix}`;
+  });
+
+  /** Mit «IP-Adressen anzeigen» (A): Adressen farbig nach Art, bei Routern alle Schnittstellen. */
+  const badges = $derived(ui.has('tool.addressBadges') && ui.showAddresses);
+  const scopeOf = (text: string): AddressScope | null => {
+    const n = parseIp(text.split('/')[0] ?? '');
+    return n === null ? null : addressScope(n);
+  };
+  const lines = $derived.by((): { text: string; scope: AddressScope | null }[] => {
+    if (isEndpoint) return ip ? [{ text: ip, scope: badges ? scopeOf(ip) : null }] : [];
+    if (!badges) return [];
+    return device.interfaces
+      .filter((i) => i.ip)
+      .slice(0, 4)
+      .map((i) => {
+        const prefix = i.mask ? parseMask(i.mask) : null;
+        const text = prefix === null ? i.ip! : `${i.ip}/${prefix}`;
+        return { text, scope: scopeOf(text) };
+      });
   });
 
   function onkeydown(event: KeyboardEvent) {
@@ -88,9 +107,12 @@
   {:else}
     <text class="label" y="44">{device.name}</text>
   {/if}
-  {#if ip}
-    <text class="ip" y="59">{ip}</text>
-  {/if}
+  {#each lines as line, i (i)}
+    <text class="ip scope-{line.scope ?? 'none'}" y={59 + i * 13}>
+      {line.text}
+      {#if line.scope}<title>{t(`scope.${line.scope}.hint`)}</title>{/if}
+    </text>
+  {/each}
   {#if floorLabel}
     <g class="floor" transform="translate(30 -26)">
       <rect x="-2" y="-9" width={floorLabel.length * 6.5 + 8} height="15" rx="4" />
@@ -161,6 +183,16 @@
     stroke-width: 4px;
     stroke-linejoin: round;
     user-select: none;
+  }
+  .ip.scope-private {
+    fill: #2563eb;
+  }
+  .ip.scope-public {
+    fill: #16a34a;
+    font-weight: 700;
+  }
+  .ip.scope-cgnat {
+    fill: #d97706;
   }
   .label {
     font-size: 13px;

@@ -53,7 +53,7 @@ export interface Snapshot {
   name: string;
   /** ISO-Zeitpunkt der Aufnahme. */
   created: string;
-  /** Automatisch angelegt (z.B. beim Wechsel in den Aktionsmodus). */
+  /** Automatisch angelegt (z.B. beim Wechsel in den Simulation). */
   auto?: boolean;
   topology: Topology;
 }

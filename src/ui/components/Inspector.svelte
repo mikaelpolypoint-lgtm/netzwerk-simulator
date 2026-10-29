@@ -295,18 +295,6 @@
   .muted {
     color: var(--muted);
   }
-  .mail-account {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin: 0 0 6px;
-    padding: 0 8px;
-  }
-  .mail-account summary {
-    cursor: pointer;
-    padding: 5px 0;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
   select {
     font: inherit;
     padding: 4px 6px;
@@ -329,25 +317,5 @@
   .danger {
     color: var(--danger);
     border-color: var(--danger);
-  }
-  .shortcuts {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 6px 10px;
-    margin: 0;
-    font-size: 0.8rem;
-    align-items: baseline;
-  }
-  .shortcuts dd {
-    margin: 0;
-  }
-  kbd {
-    font-family: inherit;
-    font-size: 0.75rem;
-    padding: 1px 5px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface-2);
-    white-space: nowrap;
   }
 </style>

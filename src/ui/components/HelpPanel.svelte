@@ -28,6 +28,8 @@
   });
 </script>
 
+<!-- Tastatursteuerung für die enthaltenen Schaltflächen (Pfeiltasten, Escape). -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <aside class="help" bind:this={panel} aria-labelledby="help-title" onkeydown={(e) => e.key === 'Escape' && dialogs.closeHelp()}>
   <header>
     <Icon name="help" />

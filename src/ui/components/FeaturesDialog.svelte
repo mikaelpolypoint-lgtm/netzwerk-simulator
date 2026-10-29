@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../../i18n';
-  import { loadFeatureFile, saveFeatureFile } from '../actions';
+  import { loadFeatureFile, unlockFeatureFile, saveFeatureFile } from '../actions';
   import { FEATURES, FEATURE_GROUPS, PROFILE_LEVELS } from '../features';
   import { featureName } from '../labels';
   import { ui } from '../state/ui.svelte';
@@ -66,7 +66,7 @@
   </div>
 
   {#snippet actions()}
-    {#if ui.locked}<button onclick={() => ui.unlock()}>{t('features.unlock')}</button>{/if}
+    {#if ui.locked}<button onclick={() => void unlockFeatureFile()}>{t('features.unlock')}</button>{/if}
     <button onclick={() => void loadFeatureFile()} disabled={ui.locked}>{t('features.load')}</button>
     <button onclick={() => saveFeatureFile(lock, title)}>{t('features.save')}</button>
   {/snippet}

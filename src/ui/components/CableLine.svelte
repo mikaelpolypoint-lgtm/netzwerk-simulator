@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isSwitchType, linkStatus, mediumOf, type Cable, type Device } from '../../core';
+  import { isSwitchType, linkStatus, mediumOf, vlanColor, type Cable, type Device } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -28,10 +28,20 @@
     return iface.vlan ? `${base} · V${iface.vlan}` : base;
   }
 
+  /** Farbe eines Port-Endes: eigenes Farbtag, sonst die Farbe seines VLANs (Access-Port am Switch). */
+  function endColor(device: Device, index: number): string | undefined {
+    const iface = device.interfaces[index];
+    if (!iface) return undefined;
+    if (iface.color) return TAG_HEX[iface.color];
+    if (!isSwitchType(device.type) || iface.trunk) return undefined;
+    const color = vlanColor(editor.topology, iface.vlan ?? 1);
+    return color ? TAG_HEX[color] : undefined;
+  }
+
   const labelA = $derived(portLabel(a, cable.a.iface));
   const labelB = $derived(portLabel(b, cable.b.iface));
 
-  // Im Aktionsmodus: Ist ein Ende durch Spanning Tree blockiert?
+  // Im Simulation: Ist ein Ende durch Spanning Tree blockiert?
   const blocked = $derived.by(() => {
     if (!editor.acting) return false;
     void simStore.tick;
@@ -104,6 +114,15 @@
 >
   <line class="hit" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
   <line class="wire" class:damaged={!!cable.loss} class:blocked x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  {#if medium === 'coax'}
+    <line class="core" x1={a.position.x} y1={a.position.y} x2={b.position.x} y2={b.position.y} />
+  {/if}
+  {#if medium === 'serial' || medium === 'dsl' || medium === 'cellular' || medium === 'coax'}
+    <g class="medium-badge" transform="translate({(a.position.x + b.position.x) / 2} {(a.position.y + b.position.y) / 2})">
+      <rect x="-15" y="-8" width="30" height="16" rx="8" />
+      <text y="1">{{ serial: 'S', dsl: 'DSL', cellular: '4G', coax: 'COAX' }[medium]}</text>
+    </g>
+  {/if}
   {#if medium === 'wireless'}
     <g class="wifi-badge" transform="translate({(a.position.x + b.position.x) / 2} {(a.position.y + b.position.y) / 2})">
       <circle r="11" />
@@ -116,14 +135,15 @@
   {/if}
   {#if geometry.leds}
     {#each ledEnds as { end, device, p } (end)}
-      {@const tag = device.interfaces[cable[end].iface]?.color}
+      {@const tag = endColor(device, cable[end].iface)}
       <circle
         class="led"
         class:up={status.up}
+        class:off={device.interfaces[cable[end].iface]?.shutdown}
         cx={p.x}
         cy={p.y}
         r="4.5"
-        style:stroke={tag ? TAG_HEX[tag] : undefined}
+        style:stroke={tag}
         style:stroke-width={tag ? 3.5 : undefined}
       >
         <title>{status.up ? t('link.up') : t(`link.down.${status.reason ?? 'unknown'}`)}</title>
@@ -134,8 +154,8 @@
     <text class="blocked-label" x={(a.position.x + b.position.x) / 2} y={(a.position.y + b.position.y) / 2 + 14}>{t('switch.blockedCable')}</text>
   {/if}
   {#if geometry.labels}
-    <text class="port" x={geometry.labels.a.x} y={geometry.labels.a.y}>{labelA}</text>
-    <text class="port" x={geometry.labels.b.x} y={geometry.labels.b.y}>{labelB}</text>
+    <text class="port" x={geometry.labels.a.x} y={geometry.labels.a.y} style:fill={endColor(a, cable.a.iface)}>{labelA}</text>
+    <text class="port" x={geometry.labels.b.x} y={geometry.labels.b.y} style:fill={endColor(b, cable.b.iface)}>{labelB}</text>
   {/if}
   {#if cable.loss}
     <text class="loss" x={(a.position.x + b.position.x) / 2} y={(a.position.y + b.position.y) / 2 - 8}>⚡ {cable.loss} %</text>
@@ -195,6 +215,46 @@
     stroke-width: 2;
     stroke-dasharray: 1 7;
     stroke-linecap: round;
+  }
+  .medium-serial .wire {
+    stroke: var(--serial, #b91c1c);
+    stroke-width: 3;
+    stroke-dasharray: 14 4 3 4;
+  }
+  .medium-coax .wire {
+    stroke: var(--coax, #374151);
+    stroke-width: 5;
+  }
+  .core {
+    stroke: #cbd5e1;
+    stroke-width: 1.5;
+    pointer-events: none;
+  }
+  .medium-dsl .wire {
+    stroke: var(--dsl, #15803d);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+  }
+  .medium-cellular .wire {
+    stroke: var(--cellular, #7c3aed);
+    stroke-width: 2;
+    stroke-dasharray: 1 6;
+    stroke-linecap: round;
+  }
+  .medium-badge rect {
+    fill: var(--surface);
+    stroke: var(--border);
+  }
+  .medium-badge text {
+    font-size: 8.5px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    fill: var(--muted);
+    pointer-events: none;
+  }
+  .led.off {
+    fill: var(--bg);
   }
   .down .wire {
     opacity: 0.5;

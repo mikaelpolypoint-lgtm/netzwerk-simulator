@@ -19,7 +19,7 @@ Es gibt drei Wege, je nachdem, was du vorhast:
 ### Mit Git
 
 ```bash
-git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
+git clone https://github.com/vonam-git/netzwerk-simulator.git
 ```
 
 Danach im Ordner `netzwerk-simulator/release/` die Datei **`netzwerk-simulator.html`** doppelklicken. Fertig.
@@ -33,7 +33,7 @@ git pull
 
 ### Ohne Git
 
-1. Auf GitHub das Repository öffnen: <https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator>
+1. Auf GitHub das Repository öffnen: <https://github.com/vonam-git/netzwerk-simulator>
 2. In den Ordner `release` wechseln und `netzwerk-simulator.html` anklicken.
 3. Oben rechts **«Download raw file»** wählen und die Datei speichern.
 
@@ -54,7 +54,7 @@ Der Simulator merkt sich den letzten Stand automatisch im Browser. Wird die Date
 Für den Betrieb im Schulnetz liefert ein kleiner Nginx-Container die Datei aus. Es gibt keine Datenbank, keine Konten und keine Zugriffsprotokolle.
 
 ```bash
-git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
+git clone https://github.com/vonam-git/netzwerk-simulator.git
 cd netzwerk-simulator
 docker compose up -d --build
 ```
@@ -92,7 +92,7 @@ Jeder Webserver kann die Datei ausliefern: `release/netzwerk-simulator.html` als
 Voraussetzung: [Node.js](https://nodejs.org/) ab Version 20 (LTS empfohlen) und Git.
 
 ```bash
-git clone https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git
+git clone https://github.com/vonam-git/netzwerk-simulator.git
 cd netzwerk-simulator
 npm ci
 npm run dev

@@ -6,10 +6,10 @@ Router, Switches und Layer-3-Switches lassen sich zusätzlich zu den Formularen 
 
 | Weg | So geht's |
 |---|---|
-| Konsole | Doppelklick auf Router oder Switch, oder im Eigenschaftenfenster **Befehlszeile (CLI)**. Geht in jedem Modus ausser Dokumentation. |
-| SSH vom PC | Im Aktionsmodus Desktop eines PCs öffnen, `ssh benutzer@adresse` eingeben, Passwort eintippen. Am Router vorher `username …` und `ip ssh` einrichten. Die Verbindung läuft über simuliertes TCP (Port 22) und erscheint verschlüsselt in der Paketliste. |
+| Konsole | Doppelklick auf Router oder Switch, oder im Eigenschaftenfenster **Befehlszeile (CLI)**. Geht im Entwurf und in der Simulation. |
+| SSH vom PC | In der Simulation den Desktop eines PCs öffnen, `ssh benutzer@adresse` eingeben, Passwort eintippen. Am Router vorher `username …` und `ip ssh` einrichten. Die Verbindung läuft über simuliertes TCP (Port 22) und erscheint verschlüsselt in der Paketliste. |
 
-Änderungen in der Befehlszeile wirken sofort, auch während die Simulation läuft. Im Entwurfsmodus lassen sie sich mit **Rückgängig** zurücknehmen.
+Änderungen in der Befehlszeile wirken sofort, auch während die Simulation läuft. Im Entwurf lassen sie sich mit **Rückgängig** zurücknehmen.
 
 ## Bedienung
 
@@ -25,8 +25,8 @@ Router, Switches und Layer-3-Switches lassen sich zusätzlich zu den Formularen 
 ```
 Router>                    enable
 Router#                    configure terminal
-Router(config)#            interface eth0          vlan 10          line vty
-Router(config-if)#         Router(config-vlan)#    Router(config-line)#
+Router(config)#            interface eth0          vlan 10          line vty               router ospf | rip | bgp 65001
+Router(config-if)#         Router(config-vlan)#    Router(config-line)#   Router(config-router)#
 ```
 
 `exit` geht eine Stufe zurück, `end` direkt zu `Router#`, `disable` zurück zu `Router>`.
@@ -35,7 +35,7 @@ Router(config-if)#         Router(config-vlan)#    Router(config-line)#
 
 | Gerät | Namen |
 |---|---|
-| Router | `eth0`, `eth1` …; Subinterfaces `eth0.10` (VLAN 10) |
+| Router | `eth0`, `eth1` …; Subinterfaces `eth0.10` (VLAN 10); serielle Ports `serial0`, `serial1` … (auch `se0`, `s0/0/0`) |
 | Switch | `port1`, `port2` … (wie auf der Frontplatte); auch `gi0/1` oder `fa0/1`. SFP-Einschübe für Glasfaser zählen separat: `sfp1`, `sfp2` … (auch `te0/1`) |
 | Layer-3-Switch | wie Switch, dazu `vlan10` bzw. `interface vlan 10` |
 
@@ -46,16 +46,22 @@ Router(config-if)#         Router(config-vlan)#    Router(config-line)#
 | Befehl | Zeigt |
 |---|---|
 | `show running-config` | aktuelle Konfiguration (nur `#`) |
-| `show ip route` | Routingtabelle (C = direkt verbunden, S = statisch) |
+| `show ip route` | Routingtabelle (C = direkt verbunden, S = statisch, O = OSPF, R = RIP, B = BGP; in Klammern Distanz/Metrik) |
+| `show ip protocols` | aktive Routingprotokolle mit Netzen |
+| `show ip ospf neighbor` | OSPF-Nachbarn und ihr Zustand (Simulation) |
+| `show ip ospf database` | OSPF-Datenbank (LSAs, Simulation) |
+| `show ip rip` | per RIP gelernte Routen (Simulation) |
+| `show ip bgp summary` | BGP-Nachbarn mit Zustand und Anzahl Präfixe (Simulation) |
+| `show ip bgp` | BGP-Tabelle mit AS-Pfad (Simulation) |
 | `show ip interface brief` | Interfaces mit Adresse und Status |
 | `show interface brief` | Kurzübersicht der Anschlüsse |
-| `show ip arp` | ARP-Tabelle (nur im Aktionsmodus) |
+| `show ip arp` | ARP-Tabelle (nur in der Simulation) |
 | `show ip nat translations` | NAT-Tabelle (Router) |
-| `show mac address-table` | MAC-Tabelle (Switch, Aktionsmodus) |
+| `show mac address-table` | MAC-Tabelle (Switch, Simulation) |
 | `show vlan brief` | VLANs mit ihren Ports (Switch) |
 | `show interfaces status` | Ports mit Status und VLAN (Switch) |
 | `show spanning-tree` | Root-Bridge, Port-Rollen und -Zustände (Switch) |
-| `ping 192.168.1.10` | vier Echo-Anfragen vom Gerät aus (Aktionsmodus) |
+| `ping 192.168.1.10` | vier Echo-Anfragen vom Gerät aus (Simulation) |
 | `write memory` | «speichert» (die Konfiguration gilt ohnehin sofort) |
 
 ### Allgemein (`(config)#`)
@@ -90,6 +96,63 @@ ip route 0.0.0.0/0 10.0.0.2
 ip route 172.16.0.0 255.255.0.0 eth1
 no ip route 172.16.0.0/16
 ```
+
+### Serielle Leitungen (Router)
+
+```
+interface serial0              ! Port vorher im Formular auf «seriell» stellen
+ encapsulation ppp             ! oder: encapsulation hdlc (Standard)
+ ip address 10.0.0.1/30
+```
+
+Beide Enden brauchen dieselbe Kapselung, sonst bleibt die Leitung down.
+
+### Statisches NAT (Router)
+
+```
+ip nat inside source static 192.168.0.80 203.0.113.5
+no ip nat inside source static 192.168.0.80 203.0.113.5
+```
+
+### OSPF
+
+```
+router ospf
+ router-id 1.1.1.1             ! optional, sonst höchste Adresse
+ network 10.0.0.0/24 area 0    ! oder: network 10.0.0.0 0.0.0.255 area 0
+ passive-interface eth0        ! keine Hellos ins LAN
+ default-information originate
+ redistribute static           ! connected | static | rip | bgp
+!
+interface eth1
+ ip ospf cost 50               ! Standard 10
+!
+no router ospf
+```
+
+### RIP
+
+```
+router rip
+ version 2
+ network 192.168.1.0/24
+ passive-interface eth0
+ redistribute connected
+```
+
+### BGP
+
+```
+router bgp 65001
+ bgp router-id 1.1.1.1
+ neighbor 172.16.12.2 remote-as 65002
+ network 10.1.0.0/16           ! oder: network 10.1.0.0 mask 255.255.0.0
+ redistribute ospf
+!
+no router bgp
+```
+
+Ein Netz wird nur angekündigt, wenn es in der Routingtabelle steht.
 
 ### Switch
 

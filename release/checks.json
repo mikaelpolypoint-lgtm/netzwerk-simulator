@@ -1,0 +1,108 @@
+{
+  "version": "0.4.0",
+  "date": "2026-10-29T12:42:08.124Z",
+  "checks": [
+    {
+      "id": "privacy.noExternal",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "Keine Skripte, Stile, Schriften oder Bilder von fremden Servern."
+    },
+    {
+      "id": "privacy.csp",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "CSP verbietet Netzwerkzugriffe (connect-src 'none'); die Webversion erlaubt nur den eigenen Server."
+    },
+    {
+      "id": "privacy.noTracking",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "Keine Analyse-, Tracking- oder Werbedienste."
+    },
+    {
+      "id": "privacy.noCookies",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "Weder Server noch Oberfläche setzen Cookies."
+    },
+    {
+      "id": "privacy.storage",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "Browser-Speicher nur für Technik: netzwerk-simulator.addresses, netzwerk-simulator.class, netzwerk-simulator.currency, netzwerk-simulator.features, netzwerk-simulator.level, netzwerk-simulator.locale, netzwerk-simulator.profile, netzwerk-simulator.session, netzwerk-simulator.theme"
+    },
+    {
+      "id": "privacy.noIpLog",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "IP-Adressen nur als gesalzener Hash im Arbeitsspeicher, kein Zugriffsprotokoll."
+    },
+    {
+      "id": "privacy.retention",
+      "category": "privacy",
+      "status": "pass",
+      "detail": "Sessions, Klassen und Rückmeldungen haben ein Ablaufdatum und werden automatisch gelöscht."
+    },
+    {
+      "id": "security.serverDeps",
+      "category": "security",
+      "status": "pass",
+      "detail": "Server nutzt nur Node.js-Bordmittel, keine npm-Pakete."
+    },
+    {
+      "id": "security.runtimeDeps",
+      "category": "security",
+      "status": "pass",
+      "detail": "Keine Laufzeitabhängigkeiten; nur Build-Werkzeuge."
+    },
+    {
+      "id": "security.audit",
+      "category": "security",
+      "status": "pass",
+      "detail": "Build-Werkzeuge: 4 bekannte Schwachstellen (0 hoch/kritisch). Sie sind nicht in der ausgelieferten Datei."
+    },
+    {
+      "id": "security.headers",
+      "category": "security",
+      "status": "pass",
+      "detail": "Sicherheits-Header gesetzt (CSP, nosniff, no-referrer, kein Einbetten)."
+    },
+    {
+      "id": "security.noEval",
+      "category": "security",
+      "status": "pass",
+      "detail": "Kein eval und kein new Function im ausgelieferten Code."
+    },
+    {
+      "id": "security.admin",
+      "category": "security",
+      "status": "pass",
+      "detail": "Admin nur mit ADMIN_PASSWORD, Vergleich in konstanter Zeit, Token nur im Arbeitsspeicher."
+    },
+    {
+      "id": "licenses.bundled",
+      "category": "licenses",
+      "status": "pass",
+      "detail": "2 eingebaute Pakete: clsx MIT, svelte MIT"
+    },
+    {
+      "id": "licenses.notices",
+      "category": "licenses",
+      "status": "pass",
+      "detail": "Lizenztexte sind in der Datei eingebettet und unter «Über» sichtbar."
+    },
+    {
+      "id": "licenses.own",
+      "category": "licenses",
+      "status": "pass",
+      "detail": "Eigener Code unter MIT (Mikael von Allmen & vonam-git)."
+    },
+    {
+      "id": "licenses.tools",
+      "category": "licenses",
+      "status": "pass",
+      "detail": "Alle Build-Werkzeuge mit freier Lizenz."
+    }
+  ]
+}

@@ -37,6 +37,8 @@
     category === 'endpoints' || category === 'servers' ? 'endpoint' : category === 'routers' || category === 'internet' ? 'routing' : category === 'links' || category === 'modules' || category === 'areas' ? 'tool' : 'distribution';
 </script>
 
+<!-- Tastatursteuerung für die enthaltenen Schaltflächen (Pfeiltasten, Escape). -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav class="palette" aria-labelledby="palette-title" {onkeydown} data-help="shop">
   <h2 id="palette-title">{t('palette.title')}</h2>
   <p class="hint">{t('palette.hint')}</p>

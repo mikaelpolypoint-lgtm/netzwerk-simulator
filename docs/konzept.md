@@ -1,5 +1,7 @@
 # Konzept-Spezifikation: Webbasierter Netzwerk-Simulator für den Informatik-Unterricht
 
+> **Hinweis (Stand v0.4):** Dies ist die ursprüngliche Spezifikation. Inzwischen heissen die Modi **Entwurf** und **Simulation**; der frühere Dokumentationsmodus ist im Entwurf aufgegangen, und der Basis/Pro-Schalter wurde durch Funktionsprofile 1–5 ersetzt ([funktionsprofile.md](funktionsprofile.md)). Den aktuellen Funktionsumfang beschreiben [anleitung.md](anleitung.md) und [protokolle.md](protokolle.md).
+
 Ein umbaubares Konzept nach dem Vorbild von FILIUS II (Universität Siegen), ausgerichtet auf den Berufsschul-Unterricht Informatik EFZ in der Schweiz. Dieses Dokument ist als Bauplan formuliert und kann einer KI als grundlegende Anforderungsbeschreibung übergeben werden.
 
 ---

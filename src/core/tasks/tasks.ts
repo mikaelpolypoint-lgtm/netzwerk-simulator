@@ -237,7 +237,7 @@ export function evaluateGoal(topology: Topology, goal: Goal, liveLog: readonly P
       return sent?.ok ? { id, passed: true } : fail(id, 'mailFailed', { from: from.name, to: check.to });
     }
     case 'packetSeen': {
-      // Prüft, was die Lernenden selbst im Aktionsmodus ausgelöst haben.
+      // Prüft, was die Lernenden selbst in der Simulation ausgelöst haben.
       const from = check.from ? need(check.from) : undefined;
       const to = check.to ? need(check.to) : undefined;
       if (check.from && !from) return missing(check.from);

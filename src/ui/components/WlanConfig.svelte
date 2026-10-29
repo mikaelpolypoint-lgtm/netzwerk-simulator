@@ -2,6 +2,7 @@
   import { CHANNELS, type Device, type WlanBand } from '../../core';
   import { t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
+  import { ui } from '../state/ui.svelte';
 
   /** Access Point: Funknetz (SSID, WPA2-Passwort, Band, Kanal) und Mesh-Betrieb. */
   let { device }: { device: Device } = $props();
@@ -60,10 +61,12 @@
         {/each}
       </select>
     </label>
-    <label class="toggle">
-      <input type="checkbox" bind:checked={draft.mesh} />
-      {t('wlan.mesh')}
-    </label>
+    {#if ui.has('net.wlanMesh') || draft.mesh}
+      <label class="toggle">
+        <input type="checkbox" bind:checked={draft.mesh} />
+        {t('wlan.mesh')}
+      </label>
+    {/if}
     <p class="muted">{t(draft.mesh ? 'wlan.meshHint' : 'wlan.hint')}</p>
   {/if}
   {#if error}<p class="error" role="alert">{error.text}</p>{/if}

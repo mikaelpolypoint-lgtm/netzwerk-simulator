@@ -479,10 +479,10 @@ class Editor {
     if (next) this.#commit(next);
   }
 
+  /** Auch während der Simulation, damit sich ein Fehler mitten im Betrieb einbauen lässt. */
   setCableLoss(id: string, percent: number) {
-    if (!this.editable) return;
-    const next = this.#check(setCableLoss(this.topology, id, percent));
-    if (next) this.#commit(next);
+    if (!this.editable && !this.acting) return;
+    this.#live(setCableLoss(this.topology, id, percent));
   }
 
   replugCable(id: string, end: 'a' | 'b', iface: number) {
@@ -780,7 +780,7 @@ class Editor {
   }
 
   /**
-   * Änderungen aus der Befehlszeile: auch im Aktionsmodus erlaubt, denn
+   * Änderungen aus der Befehlszeile: auch in der Simulation erlaubt, denn
    * echte Geräte konfiguriert man im laufenden Betrieb. Rückgängig machen
    * geht danach im Entwurfsmodus.
    */

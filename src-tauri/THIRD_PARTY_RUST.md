@@ -2951,7 +2951,7 @@ SOFTWARE.
 ## MIT License
 
 Verwendet von:
-- netzwerk-simulator 0.1.0 – Quellcode: https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator
+- netzwerk-simulator 0.1.0 – Quellcode: https://github.com/vonam-git/netzwerk-simulator
 - block2 0.6.2 – Quellcode: https://github.com/madsmtm/objc2
 - brotli-decompressor 6.2.0 – Quellcode: https://github.com/dropbox/rust-brotli-decompressor
 - dispatch2 0.3.1 – Quellcode: https://github.com/madsmtm/objc2

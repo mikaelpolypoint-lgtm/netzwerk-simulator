@@ -6,15 +6,22 @@
  */
 import {
   addDevice,
+  addStaticRoute,
   configureHost,
   connect,
   emptyTopology,
   setDhcpServer,
   setDnsServerEnabled,
+  setInterfaceAddress,
+  setInterfaceCount,
+  setInterfaceNat,
+  setPortVlan,
   setWebServerEnabled,
   saveWebFile,
   type Check,
+  type DeviceOptions,
   type DeviceType,
+  type Medium,
   type Goal,
   type Result,
   type TaskSet,
@@ -25,7 +32,6 @@ import { t } from '../i18n';
 export interface CatalogEntry {
   id: string;
   stars: 1 | 2 | 3 | 4 | 5;
-  /** Braucht den Pro-Modus (VLANs, Layer-3-Switch …). */
   /** Funktionen, die die Aufgabe braucht (werden beim Start eingeschaltet). */
   features?: string[];
   /** Empfohlenes Profil (Lehrjahr). */
@@ -43,8 +49,8 @@ class Start {
   topology = emptyTopology();
   #ids = new Map<string, string>();
 
-  add(type: DeviceType, name: string, x: number, y: number): this {
-    const { topology, id } = unwrap(addDevice(this.topology, type, name, { x, y }));
+  add(type: DeviceType, name: string, x: number, y: number, options: DeviceOptions = {}): this {
+    const { topology, id } = unwrap(addDevice(this.topology, type, name, { x, y }, options));
     this.topology = topology;
     this.#ids.set(name, id);
     return this;
@@ -54,8 +60,36 @@ class Start {
     return this.#ids.get(name)!;
   }
 
-  link(a: string, b: string): this {
-    this.topology = unwrap(connect(this.topology, this.id(a), this.id(b))).topology;
+  link(a: string, b: string, medium: Medium = 'tp'): this {
+    this.topology = unwrap(connect(this.topology, this.id(a), this.id(b), medium)).topology;
+    return this;
+  }
+
+  /** Router mit Adressen in CIDR-Schreibweise, z.B. ["192.168.1.1/24", "10.0.0.1/30"]. */
+  router(name: string, x: number, y: number, addresses: string[], type: 'router' | 'internet' = 'router'): this {
+    this.add(type, name, x, y);
+    if (addresses.length > 2) this.topology = unwrap(setInterfaceCount(this.topology, this.id(name), addresses.length));
+    addresses.forEach((cidr, index) => {
+      const [ip, prefix] = cidr.split('/');
+      this.topology = unwrap(setInterfaceAddress(this.topology, this.id(name), index, ip!, prefix!));
+    });
+    return this;
+  }
+
+  route(router: string, network: string, mask: string, gateway: string): this {
+    this.topology = unwrap(addStaticRoute(this.topology, this.id(router), { network, mask, gateway }));
+    return this;
+  }
+
+  nat(router: string, index: number): this {
+    this.topology = unwrap(setInterfaceNat(this.topology, this.id(router), index, true));
+    return this;
+  }
+
+  web(server: string, page: string): this {
+    let next = unwrap(setWebServerEnabled(this.topology, this.id(server), true));
+    next = unwrap(saveWebFile(next, this.id(server), { path: '/index.html', content: page }));
+    this.topology = next;
     return this;
   }
 
@@ -292,6 +326,411 @@ export const CATALOG: CatalogEntry[] = [
           goal('l3', 5, { type: 'dhcpLease', device: 'Notebook B' }),
           goal('l3', 6, { type: 'ping', from: 'Notebook A', to: 'DHCP-Server' }),
           goal('l3', 7, { type: 'ping', from: 'Notebook A', to: 'Notebook B' }),
+        ]),
+      };
+    },
+  },
+
+  // --- Neue Funktionen in v0.4 ---------------------------------------------------
+  {
+    id: 'sniff-arp',
+    stars: 1,
+    features: ['tool.sniffer'],
+    level: 1,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -260, 120)
+        .add('switch', 'Switch', 0, -60)
+        .add('pc', 'PC 2', 260, 120)
+        .link('PC 1', 'Switch')
+        .link('PC 2', 'Switch')
+        .host('PC 1', '192.168.1.10', '24')
+        .host('PC 2', '192.168.1.20', '24');
+      return {
+        topology: s.topology,
+        tasks: task('sniffArp', 1, [
+          goal('sniffArp', 1, { type: 'packetSeen', protocol: 'ARP', from: 'PC 1' }),
+          goal('sniffArp', 2, { type: 'packetSeen', protocol: 'ICMP', from: 'PC 2' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'budget-office',
+    stars: 1,
+    features: ['tool.costs'],
+    level: 2,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -330, 140)
+        .add('pc', 'PC 2', -110, 140)
+        .add('pc', 'PC 3', 110, 140)
+        .add('pc', 'PC 4', 330, 140)
+        .host('PC 1', '10.0.0.1', '24')
+        .host('PC 2', '10.0.0.2', '24')
+        .host('PC 3', '10.0.0.3', '24')
+        .host('PC 4', '10.0.0.4', '24');
+      return {
+        topology: s.topology,
+        tasks: task('budgetOffice', 1, [
+          goal('budgetOffice', 1, { type: 'deviceCount', deviceType: 'switch', min: 1 }),
+          goal('budgetOffice', 2, { type: 'ping', from: 'PC 1', to: 'PC 4' }),
+          goal('budgetOffice', 3, { type: 'budget', max: 4800 }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'server-group',
+    stars: 2,
+    features: ['device.server', 'device.clientgroup', 'service.dhcp'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('server', 'Server', -300, -100)
+        .add('switch', 'Switch', 0, -100, { ports: 24, sfpSlots: 4 })
+        .add('clientgroup', 'Schulzimmer', 0, 140, { groupSize: 25 })
+        .link('Server', 'Switch')
+        .host('Server', '192.168.10.2', '24');
+      return {
+        topology: s.topology,
+        tasks: task('serverGroup', 2, [
+          goal('serverGroup', 1, { type: 'connected', a: 'Schulzimmer', b: 'Switch' }),
+          goal('serverGroup', 2, { type: 'groupLeases', device: 'Schulzimmer' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'vlan-colors',
+    stars: 2,
+    features: ['net.vlan'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('switch', 'Switch', 0, -120)
+        .add('pc', 'Büro 1', -330, 120)
+        .add('pc', 'Büro 2', -110, 120)
+        .add('pc', 'Labor 1', 110, 120)
+        .add('pc', 'Labor 2', 330, 120)
+        .link('Büro 1', 'Switch')
+        .link('Büro 2', 'Switch')
+        .link('Labor 1', 'Switch')
+        .link('Labor 2', 'Switch')
+        .apply((topology, id) => {
+          let next = topology;
+          for (const port of [0, 1]) next = unwrap(setPortVlan(next, id('Switch'), port, 10));
+          for (const port of [2, 3]) next = unwrap(setPortVlan(next, id('Switch'), port, 20));
+          return next;
+        });
+      return {
+        topology: s.topology,
+        tasks: task('vlanColors', 2, [
+          goal('vlanColors', 1, { type: 'vlanDocumented', vlan: 10 }),
+          goal('vlanColors', 2, { type: 'vlanDocumented', vlan: 20 }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'stp-loop',
+    stars: 3,
+    features: ['net.stp'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('switch', 'Switch A', -260, -120)
+        .add('switch', 'Switch B', 260, -120)
+        .add('switch', 'Switch C', 0, 120)
+        .add('pc', 'PC A', -440, -120)
+        .add('pc', 'PC C', 0, 300)
+        .link('Switch A', 'Switch B')
+        .link('Switch B', 'Switch C')
+        .link('Switch C', 'Switch A')
+        .link('PC A', 'Switch A')
+        .link('PC C', 'Switch C')
+        .host('PC A', '10.10.0.1', '24')
+        .host('PC C', '10.10.0.3', '24');
+      return {
+        topology: s.topology,
+        tasks: task('stpLoop', 3, [
+          goal('stpLoop', 1, { type: 'noStorm' }),
+          goal('stpLoop', 2, { type: 'ping', from: 'PC A', to: 'PC C' }),
+          goal('stpLoop', 3, { type: 'deviceCount', deviceType: 'switch', min: 3 }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'internet-nat',
+    stars: 3,
+    features: ['device.internet', 'net.nat', 'routing.static'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC', -420, 0)
+        .router('Heimrouter', -150, 0, ['192.168.1.1/24', '203.0.113.2/30'])
+        .router('Internet', 150, 0, ['203.0.113.1/30', '198.51.100.1/24'], 'internet')
+        .add('server', 'Webserver', 420, 0)
+        .link('PC', 'Heimrouter')
+        .link('Heimrouter', 'Internet')
+        .link('Internet', 'Webserver')
+        .host('PC', '192.168.1.10', '24', '192.168.1.1')
+        .host('Webserver', '198.51.100.10', '24', '198.51.100.1')
+        .web('Webserver', t('catalog.internetNat.page'));
+      return {
+        topology: s.topology,
+        tasks: task('internetNat', 3, [
+          goal('internetNat', 1, { type: 'ping', from: 'PC', to: '198.51.100.10' }),
+          goal('internetNat', 2, { type: 'http', from: 'PC', url: 'http://198.51.100.10/' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'modem-vdsl',
+    stars: 3,
+    features: ['device.modem', 'medium.access', 'device.internet', 'net.nat'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC', -480, 0)
+        .router('Heimrouter', -240, 0, ['192.168.1.1/24', '203.0.113.2/30'])
+        .add('modem', 'Modem', 0, 0, { modem: 'vdsl' })
+        .router('Provider', 240, 0, ['198.51.100.1/24', '203.0.113.1/30'], 'internet')
+        .add('server', 'Server', 480, 0)
+        .link('PC', 'Heimrouter')
+        .link('Heimrouter', 'Modem')
+        .link('Provider', 'Server')
+        .host('PC', '192.168.1.10', '24', '192.168.1.1')
+        .host('Server', '198.51.100.10', '24', '198.51.100.1')
+        .nat('Heimrouter', 1)
+        .route('Heimrouter', '0.0.0.0', '0.0.0.0', '203.0.113.1');
+      return {
+        topology: s.topology,
+        tasks: task('modemVdsl', 3, [
+          goal('modemVdsl', 1, { type: 'linkUp', a: 'Modem', b: 'Provider', medium: 'dsl' }),
+          goal('modemVdsl', 2, { type: 'modemOnline', device: 'Modem' }),
+          goal('modemVdsl', 3, { type: 'ping', from: 'PC', to: '198.51.100.10' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'serial-wan',
+    stars: 4,
+    features: ['medium.serial', 'routing.static'],
+    level: 4,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC Zürich', -440, 0)
+        .router('R Zürich', -160, 0, ['10.1.0.1/24'])
+        .router('R Bern', 160, 0, ['10.2.0.1/24'])
+        .add('pc', 'PC Bern', 440, 0)
+        .link('PC Zürich', 'R Zürich')
+        .link('PC Bern', 'R Bern')
+        .host('PC Zürich', '10.1.0.10', '24', '10.1.0.1')
+        .host('PC Bern', '10.2.0.10', '24', '10.2.0.1');
+      return {
+        topology: s.topology,
+        tasks: task('serialWan', 4, [
+          goal('serialWan', 1, { type: 'linkUp', a: 'R Zürich', b: 'R Bern', medium: 'serial' }),
+          goal('serialWan', 2, { type: 'ping', from: 'PC Zürich', to: 'PC Bern' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'ospf-triangle',
+    stars: 4,
+    features: ['routing.ospf'],
+    level: 4,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -440, -160)
+        .add('pc', 'PC 2', 440, -160)
+        .router('R1', -220, -160, ['192.168.1.1/24', '10.0.12.1/30', '10.0.13.1/30'])
+        .router('R2', 220, -160, ['192.168.2.1/24', '10.0.12.2/30', '10.0.23.2/30'])
+        .router('R3', 0, 140, ['10.0.13.3/30', '10.0.23.3/30'])
+        .link('PC 1', 'R1')
+        .link('PC 2', 'R2')
+        .link('R1', 'R2')
+        .link('R1', 'R3')
+        .link('R2', 'R3')
+        .host('PC 1', '192.168.1.10', '24', '192.168.1.1')
+        .host('PC 2', '192.168.2.10', '24', '192.168.2.1');
+      return {
+        topology: s.topology,
+        tasks: task('ospfTriangle', 4, [
+          goal('ospfTriangle', 1, { type: 'neighbors', device: 'R1', protocol: 'ospf', min: 2 }),
+          goal('ospfTriangle', 2, { type: 'routeLearned', device: 'R1', network: '192.168.2.0/24', protocol: 'ospf' }),
+          goal('ospfTriangle', 3, { type: 'ping', from: 'PC 1', to: 'PC 2' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'static-nat-dmz',
+    stars: 4,
+    features: ['net.nat', 'net.staticNat', 'device.internet', 'service.web'],
+    level: 4,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC', -420, -140)
+        .add('server', 'Webserver', -420, 140)
+        .add('switch', 'Switch', -220, 0)
+        .router('Firmenrouter', 0, 0, ['192.168.0.1/24', '203.0.113.2/29'])
+        .router('Internet', 240, 0, ['203.0.113.1/29', '198.51.100.1/24'], 'internet')
+        .add('pc', 'Kunde', 460, 0)
+        .link('PC', 'Switch')
+        .link('Webserver', 'Switch')
+        .link('Switch', 'Firmenrouter')
+        .link('Firmenrouter', 'Internet')
+        .link('Internet', 'Kunde')
+        .host('PC', '192.168.0.10', '24', '192.168.0.1')
+        .host('Webserver', '192.168.0.80', '24', '192.168.0.1')
+        .host('Kunde', '198.51.100.20', '24', '198.51.100.1')
+        .nat('Firmenrouter', 1)
+        .route('Firmenrouter', '0.0.0.0', '0.0.0.0', '203.0.113.1')
+        .web('Webserver', t('catalog.staticNat.page'));
+      return {
+        topology: s.topology,
+        tasks: task('staticNat', 4, [
+          goal('staticNat', 1, { type: 'http', from: 'Kunde', url: 'http://203.0.113.5/' }),
+          goal('staticNat', 2, { type: 'ping', from: 'PC', to: '198.51.100.20' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'port-shutdown',
+    stars: 1,
+    features: ['net.portShutdown'],
+    level: 2,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -300, -120)
+        .add('pc', 'PC 2', -300, 120)
+        .add('notebook', 'Gast', 300, 0)
+        .add('switch', 'Switch', 0, 0)
+        .link('PC 1', 'Switch')
+        .link('PC 2', 'Switch')
+        .link('Gast', 'Switch')
+        .host('PC 1', '10.0.0.1', '24')
+        .host('PC 2', '10.0.0.2', '24')
+        .host('Gast', '10.0.0.99', '24');
+      return {
+        topology: s.topology,
+        tasks: task('portShutdown', 1, [
+          goal('portShutdown', 1, { type: 'noPing', from: 'PC 1', to: 'Gast' }),
+          goal('portShutdown', 2, { type: 'ping', from: 'PC 1', to: 'PC 2' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'subnetting-vlsm',
+    stars: 3,
+    features: ['tool.ipCalculator'],
+    level: 2,
+    build() {
+      const s = new Start()
+        .add('pc', 'Verwaltung', -320, -160)
+        .add('pc', 'Labor', -320, 160)
+        .add('pc', 'Gäste', 320, 0)
+        .add('router', 'Router', 0, 0, { ports: 3 })
+        .link('Verwaltung', 'Router')
+        .link('Labor', 'Router')
+        .link('Gäste', 'Router');
+      return {
+        topology: s.topology,
+        tasks: task('vlsm', 3, [
+          goal('vlsm', 1, { type: 'inNetwork', device: 'Verwaltung', network: '192.168.10.0/25' }),
+          goal('vlsm', 2, { type: 'inNetwork', device: 'Labor', network: '192.168.10.128/26' }),
+          goal('vlsm', 3, { type: 'inNetwork', device: 'Gäste', network: '192.168.10.192/27' }),
+          goal('vlsm', 4, { type: 'ping', from: 'Verwaltung', to: 'Gäste' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'fiber-ont',
+    stars: 2,
+    features: ['device.modem', 'medium.access', 'medium.fiber', 'device.internet', 'net.nat'],
+    level: 3,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC', -480, 0)
+        .router('Heimrouter', -240, 0, ['192.168.1.1/24', '203.0.113.2/30'])
+        .add('modem', 'ONT', 0, 0, { modem: 'fiber' })
+        .router('Provider', 240, 0, ['198.51.100.1/24', '203.0.113.1/30'], 'internet')
+        .add('server', 'Server', 480, 0)
+        .link('PC', 'Heimrouter')
+        .link('Heimrouter', 'ONT')
+        .link('Provider', 'Server')
+        .host('PC', '192.168.1.10', '24', '192.168.1.1')
+        .host('Server', '198.51.100.10', '24', '198.51.100.1')
+        .nat('Heimrouter', 1)
+        .route('Heimrouter', '0.0.0.0', '0.0.0.0', '203.0.113.1');
+      return {
+        topology: s.topology,
+        tasks: task('fiberOnt', 2, [
+          goal('fiberOnt', 1, { type: 'linkUp', a: 'ONT', b: 'Provider', medium: 'fiber' }),
+          goal('fiberOnt', 2, { type: 'modemOnline', device: 'ONT' }),
+          goal('fiberOnt', 3, { type: 'ping', from: 'PC', to: '198.51.100.10' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'rip-chain',
+    stars: 3,
+    features: ['routing.rip'],
+    level: 4,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC 1', -520, 0)
+        .router('R1', -260, 0, ['192.168.1.1/24', '10.0.12.1/30'])
+        .router('R2', 0, 0, ['10.0.12.2/30', '10.0.23.1/30'])
+        .router('R3', 260, 0, ['10.0.23.2/30', '192.168.3.1/24'])
+        .add('pc', 'PC 3', 520, 0)
+        .link('PC 1', 'R1')
+        .link('R1', 'R2')
+        .link('R2', 'R3')
+        .link('R3', 'PC 3')
+        .host('PC 1', '192.168.1.10', '24', '192.168.1.1')
+        .host('PC 3', '192.168.3.10', '24', '192.168.3.1');
+      return {
+        topology: s.topology,
+        tasks: task('ripChain', 3, [
+          goal('ripChain', 1, { type: 'routeLearned', device: 'R1', network: '192.168.3.0/24', protocol: 'rip' }),
+          goal('ripChain', 2, { type: 'ping', from: 'PC 1', to: 'PC 3' }),
+        ]),
+      };
+    },
+  },
+  {
+    id: 'bgp-two-as',
+    stars: 5,
+    features: ['routing.bgp'],
+    level: 5,
+    build() {
+      const s = new Start()
+        .add('pc', 'PC Firma', -440, 0)
+        .router('R Firma', -160, 0, ['10.1.0.1/16', '172.16.12.1/30'])
+        .router('R Provider', 160, 0, ['172.16.12.2/30', '10.2.0.1/16'])
+        .add('pc', 'PC Provider', 440, 0)
+        .link('PC Firma', 'R Firma')
+        .link('R Firma', 'R Provider')
+        .link('R Provider', 'PC Provider')
+        .host('PC Firma', '10.1.0.10', '16', '10.1.0.1')
+        .host('PC Provider', '10.2.0.10', '16', '10.2.0.1');
+      return {
+        topology: s.topology,
+        tasks: task('bgpTwoAs', 5, [
+          goal('bgpTwoAs', 1, { type: 'neighbors', device: 'R Firma', protocol: 'bgp' }),
+          goal('bgpTwoAs', 2, { type: 'routeLearned', device: 'R Firma', network: '10.2.0.0/16', protocol: 'bgp' }),
+          goal('bgpTwoAs', 3, { type: 'ping', from: 'PC Firma', to: 'PC Provider' }),
         ]),
       };
     },

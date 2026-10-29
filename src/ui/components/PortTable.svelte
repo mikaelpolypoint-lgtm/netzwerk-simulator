@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { SFP_MODULES, cableAt, getDevice, linkStatus, otherEnd, type Device, type SfpModule, type TagColor } from '../../core';
+  import { SFP_MODULES, cableAt, getDevice, linkStatus, otherEnd, vlanColor, vlanLabel, type Device, type SfpModule, type TagColor } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
+  import { ui } from '../state/ui.svelte';
   import { TAG_HEX, TAG_ORDER } from '../tags';
 
   /**
@@ -12,6 +13,18 @@
   let { device }: { device: Device } = $props();
 
   const canTag = $derived(editor.editable);
+  /** Ports abschalten geht im Entwurf immer, in der Simulation mit der Funktion «Ports abschalten». */
+  const canShutdown = $derived(editor.editable || (editor.acting && ui.has('net.portShutdown')));
+  const switching = $derived((device.type === 'switch' || device.type === 'l3switch') && ui.has('net.vlan'));
+
+  function vlanBadge(iface: Device['interfaces'][number]): { text: string; color?: string; title: string } | null {
+    if (!switching) return null;
+    if (iface.trunk) return { text: 'Trunk', title: t('ports.trunk') };
+    const vlan = iface.vlan ?? 1;
+    const color = vlanColor(editor.topology, vlan);
+    const name = vlanLabel(editor.topology, vlan);
+    return { text: `${vlan}`, color: color ? TAG_HEX[color] : undefined, title: name ? `VLAN ${vlan} – ${name}` : `VLAN ${vlan}` };
+  }
   let open = $state<number | null>(null);
 
   const rows = $derived(
@@ -53,6 +66,8 @@
           <button class="port" onclick={() => (open = open === iface.index ? null : iface.index)} aria-expanded={open === iface.index}>
             {interfaceLabel(device, iface.index)}
           </button>
+          {#if vlanBadge(iface)}{@const badge = vlanBadge(iface)!}<span class="vlan" class:colored={!!badge.color} style:--vlan={badge.color} title={badge.title}>{badge.text}</span>{/if}
+          {#if iface.shutdown}<span class="off" title={t('ports.shutdown')}>⏻</span>{/if}
           {#if iface.description}<span class="desc">{iface.description}</span>{/if}
         </th>
         <td>
@@ -105,7 +120,7 @@
               <input
                 type="checkbox"
                 checked={!iface.shutdown}
-                disabled={!editor.editable}
+                disabled={!canShutdown}
                 onchange={(e) => editor.setInterfaceShutdown(device.id, iface.index, !e.currentTarget.checked)}
               />
               {t('ports.enabled')}
@@ -122,6 +137,24 @@
 <p class="muted">{t('ports.hint')}</p>
 
 <style>
+  .vlan {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 0.68rem;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .vlan.colored {
+    background: var(--vlan);
+    border-color: var(--vlan);
+    color: #fff;
+  }
+  .off {
+    margin-left: 4px;
+    color: var(--danger, #c0392b);
+  }
   table {
     width: 100%;
     border-collapse: collapse;

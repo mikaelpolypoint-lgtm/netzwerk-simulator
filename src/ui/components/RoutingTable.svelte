@@ -1,44 +1,64 @@
 <script lang="ts">
-  import { buildRoutes, formatIp, maskToText, type Device } from '../../core';
+  import { buildRoutes, formatIp, maskToText, type Device, type Route } from '../../core';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
 
-  let { device }: { device: Device } = $props();
+  /** `live`: wirksame Tabelle aus der Simulation, inklusive gelernter Routen (OSPF, RIP, BGP). */
+  let { device, live }: { device: Device; live?: readonly Route[] } = $props();
 
-  const table = $derived(buildRoutes(device));
+  const configured = $derived(buildRoutes(device));
+  const routes = $derived(live ?? configured.routes);
+  const CODES: Record<Route['kind'], string> = { connected: 'C', static: 'S', default: 'S*', ospf: 'O', rip: 'R', bgp: 'B' };
+  const dynamic = $derived(routes.some((r) => r.kind === 'ospf' || r.kind === 'rip' || r.kind === 'bgp'));
 </script>
 
 <h3>{t('routing.title')}</h3>
-{#if table.routes.length === 0}
+{#if routes.length === 0}
   <p class="muted">{t('routing.empty')}</p>
 {:else}
   <table>
     <thead>
       <tr>
+        <th scope="col" title={t('routing.codeHint')}>{t('routing.code')}</th>
         <th scope="col">{t('routing.destination')}</th>
         <th scope="col">{t('routing.gateway')}</th>
         <th scope="col">{t('routing.iface')}</th>
+        {#if dynamic}<th scope="col" title={t('routing.metricHint')}>[AD/{t('routing.metric')}]</th>{/if}
       </tr>
     </thead>
     <tbody>
-      {#each table.routes as route, i (i)}
+      {#each routes as route, i (i)}
         <tr title={t(`routing.kind.${route.kind}`)}>
+          <td class="mono code code-{route.kind}">{CODES[route.kind]}</td>
           <td class="mono">
             {formatIp(route.network)}/{route.prefix}
             <span class="mask">{maskToText(route.prefix)}</span>
           </td>
           <td class="mono">{route.via === null ? t('routing.direct') : formatIp(route.via)}</td>
           <td>{interfaceLabel(device, route.iface)}</td>
+          {#if dynamic}<td class="mono">{route.distance !== undefined ? `[${route.distance}/${route.metric ?? 0}]` : ''}</td>{/if}
         </tr>
       {/each}
     </tbody>
   </table>
 {/if}
-{#if table.unusable.length > 0}
-  <p class="warning" role="note">⚠ {t('routing.unusable', { n: table.unusable.length })}</p>
+{#if configured.unusable.length > 0}
+  <p class="warning" role="note">⚠ {t('routing.unusable', { n: configured.unusable.length })}</p>
 {/if}
 
 <style>
+  .code {
+    font-weight: 700;
+  }
+  .code-ospf {
+    color: #16a085;
+  }
+  .code-rip {
+    color: #2e86c1;
+  }
+  .code-bgp {
+    color: #8e44ad;
+  }
   h3 {
     margin: 16px 0 6px;
     font-size: 0.85rem;

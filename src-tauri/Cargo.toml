@@ -1,10 +1,10 @@
 [package]
 name = "netzwerk-simulator"
-version = "0.2.0"
+version = "0.4.0"
 description = "Netzwerk-Simulator für den Informatik-Unterricht"
 authors = ["Mikael von Allmen", "vonam-git"]
 license = "MIT"
-repository = "https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator"
+repository = "https://github.com/vonam-git/netzwerk-simulator"
 edition = "2021"
 rust-version = "1.77"
 

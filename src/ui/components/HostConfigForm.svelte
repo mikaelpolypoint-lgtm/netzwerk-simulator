@@ -107,7 +107,7 @@
   </div>
 
   {#if device.dhcp}
-    <!-- Adresse steht erst im Aktionsmodus fest. -->
+    <!-- Adresse steht erst in der Simulation fest. -->
   {:else if networkInfo}
     <p class="muted">{#if ui.has('tool.addressBadges')}<ScopeBadge ip={saved.ip} /> {/if}{networkInfo}</p>
   {:else}

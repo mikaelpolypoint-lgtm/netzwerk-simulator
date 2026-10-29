@@ -54,6 +54,8 @@
 
 <svelte:window onpointerdown={onwindowpointer} />
 
+<!-- Tastatursteuerung für die enthaltenen Schaltflächen (Pfeiltasten, Escape). -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav class="menubar" bind:this={bar} aria-label={t('menu.label')} onkeydown={onkeydown}>
   <span class="brand" aria-hidden="true">
     <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="6" cy="6" r="3" fill="currentColor" /><circle cx="18" cy="6" r="3" fill="currentColor" /><circle cx="12" cy="18" r="3" fill="currentColor" /><path d="M6 6 12 18 18 6 6 6" stroke="currentColor" stroke-width="1.6" fill="none" /></svg>

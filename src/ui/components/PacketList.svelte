@@ -144,6 +144,11 @@
               tabindex="0"
               aria-selected={row.id === selectedId}
               onclick={() => (selectedId = row.id)}
+              onmousedown={(e) => {
+                // Fokus ohne horizontales Scrollen: Die Zeile ist breiter als die Liste.
+                e.preventDefault();
+                e.currentTarget.focus({ preventScroll: true });
+              }}
               onkeydown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
@@ -153,7 +158,7 @@
             >
               <td class="num">{row.id}</td>
               <td class="num">{row.time}</td>
-              <td>{row.route}</td>
+              <td class="route" title={row.route}>{row.route}</td>
               <td><span class="badge">{row.protocol}</span></td>
               <td class="mono">{row.source}</td>
               <td class="mono">{row.destination}</td>
@@ -296,6 +301,11 @@
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
     line-height: 23px;
+  }
+  td.route {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   td.info {
     min-width: 16rem;
