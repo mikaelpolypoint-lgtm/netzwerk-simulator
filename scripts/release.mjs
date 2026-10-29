@@ -6,6 +6,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runChecks, writeReport } from './release-checks.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = join(root, 'dist', 'index.html');
@@ -37,6 +38,10 @@ for (const p of packages ?? []) {
   if (!p.text) problems.push(`Lizenztext für ${p.name} fehlt.`);
 }
 
+// Datenschutz, Sicherheit, Lizenzen: Bericht für die Admin-Konsole.
+const report = runChecks({ html, packages });
+for (const c of report.checks) if (c.status === 'fail') problems.push(`Prüfung ${c.id}: ${c.detail}`);
+
 if (problems.length) {
   console.error('Release abgebrochen:\n  ' + problems.join('\n  '));
   process.exit(1);
@@ -45,6 +50,9 @@ if (problems.length) {
 mkdirSync(dirname(target), { recursive: true });
 copyFileSync(source, target);
 writeFileSync(join(root, 'release', 'THIRD_PARTY_NOTICES.md'), notices(packages));
+writeReport(report);
+const counts = report.checks.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] ?? 0) + 1 }), {});
+console.log(`Prüfungen: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')} → release/checks.json`);
 const kb = Math.round(statSync(target).size / 1024);
 console.log(`release/netzwerk-simulator.html erstellt (${kb} KB), offline geprüft.`);
 

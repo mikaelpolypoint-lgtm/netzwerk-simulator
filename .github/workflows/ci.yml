@@ -29,11 +29,22 @@ jobs:
 
       - name: release/netzwerk-simulator.html ist aktuell
         run: |
-          if ! git diff --quiet -- release/; then
+          # checks.json enthält Datum und Audit-Stand und ändert sich bei jedem Lauf.
+          if ! git diff --quiet -- release/ ':!release/checks.json'; then
             echo "::error file=release/netzwerk-simulator.html::Die verteilte Datei passt nicht zum Code. Lokal 'npm run release' ausführen und das Ergebnis committen."
             git diff --stat -- release/
             exit 1
           fi
+
+      # Datenschutz, Sicherheit, Lizenzen (dieselbe Liste zeigt die Admin-Konsole).
+      - name: Release-Prüfungen
+        run: cat release/checks.json >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-checks
+          path: release/checks.json
+          retention-days: 30
 
       # Oberflächentests mit dem auf dem Runner installierten Chrome.
       - run: npx playwright test
