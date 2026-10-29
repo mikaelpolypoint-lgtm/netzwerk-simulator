@@ -181,9 +181,11 @@ export interface EthernetFrame {
   /** 802.1Q-Tag, nur auf Trunk-Verbindungen. */
   vlan?: number;
   l2?: 'hdlc' | 'ppp';
-  access?: 'docsis' | 'gpon' | 'adsl' | 'vdsl' | 'lte';
+  access?: AccessTech;
   payload: ArpPacket | Ipv4Packet | StpBpdu | PppControl | LinkControl;
 }
+
+export type AccessTech = 'docsis' | 'gpon' | 'adsl' | 'vdsl' | 'lte';
 
 /** Ziel-MAC für BPDUs (Multicast, nur zwischen Switches). */
 export const STP_MAC = '01:80:C2:00:00:00';

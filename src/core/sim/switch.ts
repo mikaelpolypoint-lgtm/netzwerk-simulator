@@ -1,5 +1,8 @@
+import { MODEM_WAN } from '../model/links';
 import { cableAt, getDevice, otherEnd } from '../model/topology';
-import { BROADCAST_MAC, STP_MAC, type EthernetFrame, type StpBpdu } from './frames';
+import type { ModemKind } from '../model/types';
+import { ACCESS_PROFILES, nextSteps, stepIndex } from './access';
+import { BROADCAST_MAC, STP_MAC, type EthernetFrame, type LinkControl, type StpBpdu } from './frames';
 import type { NodeContext, SimNode } from './simulation';
 
 /** Lebensdauer eines gelernten Eintrags (5 Minuten virtuelle Zeit). */
@@ -346,18 +349,107 @@ export class SwitchNode implements SimNode {
   }
 }
 
-/** Modem als reine Transportstrecke: Was an einem Anschluss ankommt, geht am anderen hinaus. */
+export interface ModemState {
+  kind: ModemKind;
+  standard: string;
+  phase: 'idle' | 'connecting' | 'online';
+  /** Erledigte Schritte des Verbindungsaufbaus. */
+  progress: number;
+  total: number;
+  downstream: number;
+  upstream: number;
+}
+
+/**
+ * Modem: Brücke zwischen LAN-Buchse (Anschluss 0) und Zugangsleitung
+ * (Anschluss 1). Mit Zugangstechnik baut es zuerst die Leitung zum Provider
+ * auf (siehe access.ts) und überträgt erst danach Nutzdaten. Ohne Technik
+ * (ältere Projekte) ist es eine reine Transportstrecke.
+ */
 export class ModemNode implements SimNode {
+  #phase: ModemState['phase'] = 'idle';
+  #progress = 0;
+  #run = 0;
+
   constructor(private readonly ctx: NodeContext) {}
 
-  receive(inPort: number, frame: EthernetFrame) {
-    const device = this.ctx.device();
-    for (const port of device?.interfaces ?? []) {
-      if (port.index !== inPort) this.ctx.transmit(port.index, frame);
+  #kind(): ModemKind | undefined {
+    return this.ctx.device()?.modem?.kind;
+  }
+
+  boot() {
+    const kind = this.#kind();
+    if (!kind) return;
+    if (!this.ctx.isConnected(MODEM_WAN)) {
+      if (this.#phase !== 'idle') this.ctx.print('modem.down');
+      this.#phase = 'idle';
+      this.#progress = 0;
+      this.#run++;
+      return;
+    }
+    if (this.#phase !== 'idle') return;
+    this.#phase = 'connecting';
+    this.ctx.print('modem.connecting', { standard: ACCESS_PROFILES[kind].standard });
+    if (ACCESS_PROFILES[kind].steps[0]?.from === 'cpe') this.#sendFrom(kind, 0);
+  }
+
+  /** Eigene Schritte ab `index` senden, jeweils nach ihrer Wartezeit. */
+  #sendFrom(kind: ModemKind, index: number) {
+    const steps = nextSteps(kind, index, 'cpe');
+    const run = this.#run;
+    let delay = 0;
+    steps.forEach((step, i) => {
+      delay += step.delay ?? 1;
+      this.ctx.schedule(delay, () => {
+        if (run !== this.#run) return;
+        const mac = this.ctx.device()?.interfaces[MODEM_WAN]?.mac ?? '';
+        const payload: LinkControl = { kind: 'link', tech: step.tech, message: step.message, ...(step.fields ? { fields: step.fields } : {}) };
+        this.ctx.transmit(MODEM_WAN, { src: mac, dst: '', payload });
+        this.#progress = index + i + 1;
+        this.#checkDone(kind);
+      });
+    });
+  }
+
+  #checkDone(kind: ModemKind) {
+    const total = ACCESS_PROFILES[kind].steps.length;
+    if (this.#phase === 'connecting' && this.#progress >= total) {
+      this.#phase = 'online';
+      const p = ACCESS_PROFILES[kind];
+      this.ctx.print('modem.online', { standard: p.standard, down: p.downstream, up: p.upstream });
     }
   }
 
+  receive(inPort: number, frame: EthernetFrame) {
+    const device = this.ctx.device();
+    const kind = this.#kind();
+    if (!kind) {
+      for (const port of device?.interfaces ?? []) {
+        if (port.index !== inPort) this.ctx.transmit(port.index, frame);
+      }
+      return;
+    }
+    if (frame.payload.kind === 'link') {
+      if (inPort !== MODEM_WAN) return;
+      const index = stepIndex(kind, frame.payload, 'provider');
+      if (index < 0) return;
+      if (this.#phase === 'idle') this.#phase = 'connecting';
+      this.#progress = Math.max(this.#progress, index + 1);
+      this.#checkDone(kind);
+      if (ACCESS_PROFILES[kind].steps[index + 1]?.from === 'cpe') this.#sendFrom(kind, index + 1);
+      return;
+    }
+    // Nutzdaten erst, wenn die Leitung steht.
+    if (this.#phase !== 'online') return;
+    const { access: _a, ...plain } = frame;
+    this.ctx.transmit(inPort === MODEM_WAN ? 0 : MODEM_WAN, inPort === MODEM_WAN ? plain : frame);
+  }
+
   state() {
-    return {};
+    const kind = this.#kind();
+    if (!kind) return {};
+    const p = ACCESS_PROFILES[kind];
+    const modem: ModemState = { kind, standard: p.standard, phase: this.#phase, progress: this.#progress, total: p.steps.length, downstream: p.downstream, upstream: p.upstream };
+    return { modem };
   }
 }

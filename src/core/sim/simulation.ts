@@ -4,7 +4,9 @@ import { cableAt, getCable, getDevice, otherEnd } from '../model/topology';
 import type { Device, Endpoint, Medium, Topology } from '../model/types';
 import { runCommand } from './commands';
 import type { LeaseRecord } from './dhcp';
-import type { EthernetFrame } from './frames';
+import type { AccessTech, EthernetFrame } from './frames';
+import { ACCESS_PROFILES } from './access';
+import { MODEM_WAN } from '../model/links';
 import type { DnsCacheEntry } from './dns';
 import { HostNode, type AddressState, type ConnectionInfo } from './host';
 import { ClientGroupNode, type GroupMemberState } from './group';
@@ -13,7 +15,7 @@ import type { MailClientState } from './mail';
 import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
 import { EventQueue } from './queue';
 import { L3SwitchNode } from './l3switch';
-import { ModemNode, SwitchNode, type MacEntry, type StormState, type StpState } from './switch';
+import { ModemNode, SwitchNode, type MacEntry, type ModemState, type StormState, type StpState } from './switch';
 
 /** Übertragungszeit pro Kabel in Millisekunden (virtuelle Zeit). */
 export const LINK_DELAY = 1;
@@ -76,6 +78,8 @@ export interface DeviceState {
   storm?: StormState;
   /** Client-Gruppe: Adressen der einzelnen Rechner. */
   group?: GroupMemberState[];
+  /** Modem: Zustand der Zugangsleitung. */
+  modem?: ModemState;
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -267,6 +271,14 @@ export class Simulation {
   }
 
   /** Endgerät; bei einer Client-Gruppe deren erstes (oder gewähltes) Mitglied. */
+  #accessOn(a: Endpoint, b: Endpoint): AccessTech | undefined {
+    for (const end of [a, b]) {
+      const device = getDevice(this.#topology, end.device);
+      if (device?.type === 'modem' && device.modem && end.iface === MODEM_WAN) return ACCESS_PROFILES[device.modem.kind].data;
+    }
+    return undefined;
+  }
+
   #host(id: string, member = 1): HostNode | undefined {
     const node = this.#node(id);
     if (node instanceof ClientGroupNode) return node.member(member);
@@ -320,11 +332,14 @@ export class Simulation {
     };
   }
 
-  #transmit(from: Endpoint, frame: EthernetFrame): boolean {
+  #transmit(from: Endpoint, original: EthernetFrame): boolean {
     const cable = cableAt(this.#topology, from);
     // Abgeschaltete Anschlüsse und Funkverbindungen ohne Anmeldung übertragen nichts.
     if (!cable || !linkStatus(this.#topology, cable).up) return false;
     const to = otherEnd(cable, from.device);
+    // Auf der Zugangsleitung eines Modems reisen Nutzdaten in dessen Technik (DOCSIS, GPON, PPPoE, LTE).
+    const access = original.payload.kind === 'link' ? undefined : this.#accessOn(from, to);
+    const frame = access ? { ...original, access } : original;
     const entry: PacketLogEntry = {
       id: this.#nextLogId++,
       sent: this.#now,

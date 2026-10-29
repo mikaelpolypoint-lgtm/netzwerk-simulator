@@ -15,7 +15,10 @@ import {
   type UdpDatagram,
 } from './frames';
 import type { NodeContext, SimNode } from './simulation';
-import { deviceSeq } from '../model/topology';
+import { cableAt, deviceSeq, getDevice, otherEnd } from '../model/topology';
+import { MODEM_WAN } from '../model/links';
+import type { ModemKind } from '../model/types';
+import { ACCESS_PROFILES, nextSteps, stepIndex } from './access';
 import { PingRun, type IcmpApp } from './apps';
 import { SSH_PORT, startSshServer } from './ssh';
 import { TcpStack } from './tcp';
@@ -680,10 +683,60 @@ export class RouterNode extends IpNode {
 export class InternetNode extends IpNode {
   protected override readonly forwarding = true;
   readonly cgnat: PatTable;
+  /** Zugangsleitungen, deren Aufbau begonnen hat (Kabel-ID), damit er nicht doppelt startet. */
+  #access = new Set<string>();
 
   constructor(ctx: NodeContext) {
     super(ctx);
     this.cgnat = new PatTable(ctx, 'cgnat');
+  }
+
+  /** Modem der Gegenseite an diesem Anschluss (mit seiner Technik). */
+  #modemAt(port: number): ModemKind | undefined {
+    const device = this.ctx.device();
+    if (!device) return undefined;
+    const topology = this.ctx.topology();
+    const cable = cableAt(topology, { device: device.id, iface: port });
+    if (!cable) return undefined;
+    const end = otherEnd(cable, device.id);
+    const peer = getDevice(topology, end.device);
+    return peer?.type === 'modem' && end.iface === MODEM_WAN ? peer.modem?.kind : undefined;
+  }
+
+  /** Provider-Seite der Zugangsleitungen: beginnt den Aufbau, wo die Norm es so vorsieht. */
+  boot() {
+    const device = this.ctx.device();
+    if (!device) return;
+    const topology = this.ctx.topology();
+    for (const port of device.interfaces) {
+      const cable = cableAt(topology, { device: device.id, iface: port.index });
+      const kind = this.#modemAt(port.index);
+      if (!cable || !kind || this.#access.has(cable.id) || !this.ctx.isConnected(port.index)) continue;
+      this.#access.add(cable.id);
+      if (ACCESS_PROFILES[kind].steps[0]?.from === 'provider') this.#sendAccess(port.index, kind, 0);
+    }
+  }
+
+  #sendAccess(port: number, kind: ModemKind, index: number) {
+    let delay = 0;
+    for (const step of nextSteps(kind, index, 'provider')) {
+      delay += step.delay ?? 1;
+      this.ctx.schedule(delay, () => {
+        const mac = this.ctx.device()?.interfaces[port]?.mac ?? '';
+        this.ctx.transmit(port, { src: mac, dst: '', payload: { kind: 'link', tech: step.tech, message: step.message, ...(step.fields ? { fields: step.fields } : {}) } });
+      });
+    }
+  }
+
+  override receive(port: number, frame: EthernetFrame) {
+    if (frame.payload.kind === 'link') {
+      const kind = this.#modemAt(port);
+      if (!kind) return;
+      const index = stepIndex(kind, frame.payload, 'cpe');
+      if (index >= 0 && ACCESS_PROFILES[kind].steps[index + 1]?.from === 'provider') this.#sendAccess(port, kind, index + 1);
+      return;
+    }
+    super.receive(port, frame);
   }
 
   #cgnatPort(index: number) {
