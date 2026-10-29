@@ -1,5 +1,6 @@
 import type { Medium } from '../model/types';
 import { decodeBgp, isBgpData } from '../sim/bgp';
+import { decodeUtf8 } from '../net/http';
 import { TCP_APPS } from '../sim/protocol';
 import {
   BROADCAST_MAC,
@@ -145,7 +146,8 @@ const APP_NAMES: Record<number, string> = { ...TCP_APPS };
 function tcp(segment: TcpSegment, srcIp: string, dstIp: string): Part {
   const p = new Part();
   const binary = isBgpData(segment.data);
-  const payload = binary ? latin1(segment.data) : utf8(segment.data);
+  // TCP-Nutzdaten sind Bytes («Binärtext»); nur Zeichen über 255 (z.B. € in einer Mail) werden UTF-8-kodiert.
+  const payload = binary || !/[^\u0000-\u00ff]/.test(segment.data) ? latin1(segment.data) : utf8(segment.data);
   const syn = segment.flags.includes('SYN');
   const headerLength = syn ? 24 : 20;
   p.u16('tcp.srcPort', segment.srcPort, portName(segment.srcPort));
@@ -174,8 +176,18 @@ function appText(segment: TcpSegment, payload: number[]): Part {
   const name = APP_NAMES[segment.dstPort] ?? APP_NAMES[segment.srcPort] ?? 'Data';
   const encrypted = name === 'SSH' && !segment.data.startsWith('SSH-');
   p.field(encrypted ? 'app.encrypted' : 'app.data', encrypted ? `${payload.length} Bytes` : (segment.data.split('\r\n')[0] ?? '').slice(0, 120), payload);
-  p.close(7, name, 0, encrypted ? { note: 'note.sshEncrypted' } : { text: segment.data });
+  p.close(7, name, 0, encrypted ? { note: 'note.sshEncrypted' } : { text: readable(segment.data) });
   return p;
+}
+
+/** Anwendungsdaten lesbar machen: UTF-8 dekodieren, Binäres (Bilder) abkürzen. */
+function readable(data: string): string {
+  const head = data.indexOf('\r\n\r\n');
+  const type = /content-type:\s*([^\r\n;]+)/i.exec(data.slice(0, head > 0 ? head : 400))?.[1] ?? '';
+  if (type.startsWith('image/') && !type.includes('svg') && head > 0) return `${data.slice(0, head)}\r\n\r\n[${data.length - head - 4} Bytes ${type}]`;
+  // Nicht-druckbare Bytes in Fortsetzungssegmenten (Bilddaten) zusammenfassen.
+  if (/[\u0000-\u0008\u000e-\u001f]/.test(data)) return `[${data.length} Bytes]`;
+  return decodeUtf8(data);
 }
 
 function portName(port: number): string {

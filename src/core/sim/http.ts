@@ -1,5 +1,5 @@
 import { parseIp } from '../net/ipv4';
-import { buildRequest, buildResponse, formatUrl, parseRequest, parseResponse, parseUrl, serve, type HttpResponse } from '../net/http';
+import { buildRequest, buildResponse, decodeUtf8, formatUrl, imagePaths, parseRequest, parseResponse, parseUrl, serve, type HttpResponse, type Url as ParsedUrl } from '../net/http';
 import type { DnsResolver } from './dns';
 import { HTTP_PORT } from './frames';
 import type { NodeContext } from './simulation';
@@ -19,6 +19,8 @@ export interface BrowserState {
   response?: HttpResponse;
   /** Vollständige Antwort als Text, für die Quelltext-Ansicht. */
   raw?: string;
+  /** Nachgeladene Bilder der Seite: Pfad → data:-URL. */
+  images?: Record<string, string>;
 }
 
 interface HttpHost {
@@ -46,6 +48,10 @@ export class HttpClient {
     if (this.state) this.state.status = 'error';
   }
 
+  #loadImages(ip: string, url: ParsedUrl, paths: string[], run: number) {
+    loadImagesImpl(this, this.host, ip, url, paths, () => run === this.#run);
+  }
+
   get(urlText: string) {
     const run = ++this.#run;
     const url = parseUrl(urlText);
@@ -65,9 +71,13 @@ export class HttpClient {
         complete = true;
         if (!current() || !this.state) return;
         this.state.response = response;
-        this.state.raw = buffer;
-        this.state.status = 'done';
-        this.#step('browser.response', { status: response.status, reason: response.reason, size: response.body.length });
+        // Quelltext lesbar: Kopf und Text dekodiert, Bilder nur mit Grösse.
+        this.state.raw = response.dataUrl ? `${buffer.slice(0, buffer.indexOf('\r\n\r\n'))}\r\n\r\n[${response.size} Bytes]` : decodeUtf8(buffer);
+        this.#step('browser.response', { status: response.status, reason: response.reason, size: response.size });
+        // Eingebundene Bilder wie ein echter Browser mit eigenen Anfragen nachladen.
+        const images = response.status === 200 && !response.dataUrl ? imagePaths(response.body, url.path) : [];
+        if (images.length) this.#loadImages(ip, url, images, run);
+        else this.state.status = 'done';
       };
       const conn = this.host.tcp.connect(ip, url.port, {
         onOpen: (c) => {
@@ -111,6 +121,45 @@ export class HttpClient {
   }
 }
 
+/** Bilder einer Seite nacheinander laden, je mit eigener TCP-Verbindung (HTTP/1.1 mit «Connection: close»). */
+function loadImagesImpl(client: HttpClient, host: HttpHost, ip: string, url: ParsedUrl, paths: string[], isCurrent: () => boolean) {
+  const state = client.state;
+  if (!state) return;
+  state.images = {};
+  const next = (i: number) => {
+    if (!isCurrent()) return;
+    const path = paths[i];
+    if (path === undefined) {
+      state.status = 'done';
+      return;
+    }
+    let buffer = '';
+    let done = false;
+    const finish = (response: HttpResponse | null) => {
+      if (done) return;
+      done = true;
+      if (response?.dataUrl && state.images) state.images[path] = response.dataUrl;
+      state.steps.push({ time: host.ctx.now, code: 'browser.image', params: { path, status: response?.status ?? 0, size: response?.size ?? 0 } });
+      next(i + 1);
+    };
+    const conn = host.tcp.connect(ip, url.port, {
+      onOpen: (c) => c.write(buildRequest({ ...url, path })),
+      onData: (_c, data) => {
+        buffer += data;
+        const response = parseResponse(buffer);
+        if (response) finish(response);
+      },
+      onEnd: (c) => {
+        finish(parseResponse(buffer, true));
+        c.close();
+      },
+      onError: () => finish(null),
+    });
+    if (!conn) finish(null);
+  };
+  next(0);
+}
+
 /** Webserver-Dienst auf Port 80; liefert die konfigurierten Seiten aus. */
 export class HttpServer {
   constructor(private readonly host: HttpHost) {
@@ -125,9 +174,9 @@ export class HttpServer {
           const files = this.host.ctx.device()?.webServer?.files;
           if (!request || answered || !files) return;
           answered = true;
-          const { status, body } = serve(files, request);
+          const { status, body, type } = serve(files, request);
           this.host.ctx.print('http.request', { method: request.method, path: request.path, status, client: conn.remote.ip });
-          conn.write(buildResponse(status, body));
+          conn.write(buildResponse(status, body, type));
           conn.close();
         },
         onEnd: (conn) => conn.close(),

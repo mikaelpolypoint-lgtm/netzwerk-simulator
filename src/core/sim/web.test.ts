@@ -82,7 +82,7 @@ group('Webseite über einen Namen abrufen (Abnahme M5)', () => {
   });
 
   it('teilt lange Seiten in mehrere Segmente und setzt sie wieder zusammen', () => {
-    const page = `<p>${'x'.repeat(1200)}</p>`;
+    const page = `<p>${'x'.repeat(4000)}</p>`;
     const { net, client, web } = network(page);
     const sim = new Simulation(net.topology);
     sim.browse(client, 'http://webserver1/');
@@ -92,7 +92,7 @@ group('Webseite über einen Namen abrufen (Abnahme M5)', () => {
       .getPacketLog()
       .filter((e) => e.from.device === web)
       .filter((e) => e.frame.payload.kind === 'ipv4' && e.frame.payload.payload.kind === 'tcp' && e.frame.payload.payload.data.length > 0);
-    expect(dataSegments.length).toBeGreaterThanOrEqual(4);
+    expect(dataSegments.length).toBeGreaterThanOrEqual(3);
   });
 });
 

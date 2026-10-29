@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRequest, buildResponse, formatUrl, parseRequest, parseResponse, parseUrl, resolveLink, serve } from './http';
+import { imagePaths, buildRequest, buildResponse, formatUrl, parseRequest, parseResponse, parseUrl, resolveLink, serve } from './http';
 import { isValidName, normalizeName } from './dns';
 
 describe('URLs', () => {
@@ -35,9 +35,26 @@ describe('HTTP-Nachrichten', () => {
 
   it('liefert Seiten und Fehlerseiten aus', () => {
     const files = [{ path: '/index.html', content: 'start' }];
-    expect(serve(files, { method: 'GET', path: '/', headers: {} })).toEqual({ status: 200, body: 'start' });
+    expect(serve(files, { method: 'GET', path: '/', headers: {} })).toEqual({ status: 200, body: 'start', type: 'text/html; charset=utf-8' });
     expect(serve(files, { method: 'GET', path: '/x', headers: {} }).status).toBe(404);
     expect(serve(files, { method: 'POST', path: '/', headers: {} }).status).toBe(405);
+  });
+
+  it('Bilder: Bytes aus der data:-URL, Content-Length in Bytes, zurück als data:-URL', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const files = [{ path: '/logo.png', content: png }];
+    const served = serve(files, { method: 'GET', path: '/logo.png', headers: {} });
+    expect(served.type).toBe('image/png');
+    expect(served.body.length).toBe(8);
+    const response = parseResponse(buildResponse(200, served.body, served.type))!;
+    expect(response.headers['content-length']).toBe('8');
+    expect(response.dataUrl).toBe(png);
+    // UTF-8: «ä» sind zwei Bytes.
+    expect(parseResponse(buildResponse(200, 'ä'))!.headers['content-length']).toBe('2');
+  });
+
+  it('findet eingebundene Bilder', () => {
+    expect(imagePaths('<img src="bild.jpg"><img alt="x" src="/a/logo.png"><img src="http://x/y.png">', '/index.html')).toEqual(['/bild.jpg', '/a/logo.png']);
   });
 });
 

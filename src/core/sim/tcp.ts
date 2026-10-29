@@ -2,8 +2,8 @@ import type { TcpFlag, TcpSegment } from './frames';
 import type { SendError, SendOptions } from './ip';
 import type { NodeContext } from './simulation';
 
-/** Höchstens so viele Zeichen pro Segment; längere Daten werden aufgeteilt. */
-export const MSS = 400;
+/** Höchstens so viele Bytes pro Segment (Ethernet-MTU 1500 − 20 IP − 20 TCP); längere Daten werden aufgeteilt. */
+export const MSS = 1460;
 /** Wiederholung eines unbestätigten Segments nach 1 s, höchstens 3-mal. */
 export const RTO = 1000;
 export const MAX_RETRIES = 3;
