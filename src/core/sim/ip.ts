@@ -642,6 +642,7 @@ export class ForwardingNode extends IpNode {
     const device = this.ctx.device();
     return {
       ...super.state(),
+      routes: this.routes(),
       ...(device?.ospf ? { ospf: this.ospf.state() } : {}),
       ...(device?.bgp ? { bgp: this.bgp.peers() } : {}),
     };

@@ -31,16 +31,23 @@ import {
   setSvi,
   removeSvi,
   setVlanName,
+  addStaticNat,
+  removeStaticNat,
+  setBgp,
+  setEncapsulation,
+  setOspf,
+  setOspfCost,
+  setRip,
   type Result,
   type TopologyError,
 } from '../model/topology';
-import type { CliConfig, Device, DeviceType, Topology } from '../model/types';
+import type { BgpConfig, CliConfig, Device, DeviceType, OspfConfig, RedistributeSource, RipConfig, RoutedNetwork, Topology } from '../model/types';
 import { formatIp, maskToText, networkOf, parseIp, parseMask } from '../net/ipv4';
-import { buildRoutes, decodeIface, logicalInterfaces } from '../net/routing';
+import { buildRoutes, decodeIface, logicalInterfaces, type Route } from '../net/routing';
 import type { DeviceState } from '../sim/simulation';
 import { cliIfaceName, ifaceIdOf, parseIfaceName, usesPortNames } from './names';
 
-export type CliMode = 'user' | 'enable' | 'config' | 'if' | 'vlan' | 'line';
+export type CliMode = 'user' | 'enable' | 'config' | 'if' | 'vlan' | 'line' | 'router-ospf' | 'router-rip' | 'router-bgp';
 
 export interface CliSession {
   device: string;
@@ -59,6 +66,8 @@ export interface CliEnv {
   topology: Topology;
   /** Zustand aus der laufenden Simulation (ARP, MAC-Tabelle …); fehlt im Entwurfsmodus. */
   state?: DeviceState;
+  /** Virtuelle Zeit der Simulation (für Timer in Anzeigen). */
+  now?: number;
 }
 
 export interface CliOutput {
@@ -104,6 +113,10 @@ export function prompt(topology: Topology, session: CliSession): string {
       return `${name}(config-vlan)#`;
     case 'line':
       return `${name}(config-line)#`;
+    case 'router-ospf':
+    case 'router-rip':
+    case 'router-bgp':
+      return `${name}(config-router)#`;
   }
 }
 
@@ -133,7 +146,8 @@ const ROUTERS: DeviceType[] = ['router'];
 const SWITCHES: DeviceType[] = ['switch', 'l3switch'];
 const L3: DeviceType[] = ['router', 'l3switch'];
 const EXEC: CliMode[] = ['user', 'enable'];
-const CONFIG_ALL: CliMode[] = ['config', 'if', 'vlan', 'line'];
+const ROUTER_MODES: CliMode[] = ['router-ospf', 'router-rip', 'router-bgp'];
+const CONFIG_ALL: CliMode[] = ['config', 'if', 'vlan', 'line', ...ROUTER_MODES];
 
 /** Kurze Erklärungen für Schlüsselwörter mitten in einem Befehl (für «?»). */
 const KEYWORD_HELP: Record<string, string> = {
@@ -187,6 +201,28 @@ const KEYWORD_HELP: Record<string, string> = {
   version: 'Software version',
   name: 'Name',
   vty: 'Remote (SSH) lines',
+  ospf: 'Open Shortest Path First (OSPFv2)',
+  rip: 'Routing Information Protocol (RIPv2)',
+  bgp: 'Border Gateway Protocol (BGP-4)',
+  router: 'Enable a routing process',
+  network: 'Network to include / announce',
+  area: 'OSPF area',
+  neighbor: 'Neighbour / peer',
+  'remote-as': 'AS number of the neighbour',
+  'router-id': 'Router ID',
+  'passive-interface': 'Do not send updates on this interface',
+  'default-information': 'Distribute a default route',
+  originate: 'Announce 0.0.0.0/0',
+  redistribute: 'Import routes from another source',
+  cost: 'Interface cost',
+  summary: 'Summary of neighbours',
+  database: 'Link-state database',
+  source: 'Source address translation',
+  static: 'Static (1:1) translation',
+  ppp: 'Point-to-Point Protocol (RFC 1661)',
+  hdlc: 'Cisco HDLC',
+  'address-family': 'Address family configuration',
+  'exit-address-family': 'Leave the address family',
 };
 
 function ok(lines: string[] = []): Partial<CliOutput> {
@@ -286,6 +322,9 @@ function exitMode(session: CliSession): Partial<CliOutput> {
     case 'if':
     case 'vlan':
     case 'line':
+    case 'router-ospf':
+    case 'router-rip':
+    case 'router-bgp':
       return { session: { device: session.device, mode: 'config', ...(session.remote ? { remote: true } : {}) } };
     case 'config':
       return { session: { device: session.device, mode: 'enable', ...(session.remote ? { remote: true } : {}) } };
@@ -323,7 +362,13 @@ const COMMANDS: Command[] = [
   },
   { modes: EXEC, syntax: 'show version', help: 'Software version', run: ({ device }) => ok(showVersion(device)) },
   { modes: ['enable'], syntax: 'show running-config', help: 'Current operating configuration', run: ({ device }) => ok(runningConfig(device)) },
-  { modes: EXEC, types: L3, syntax: 'show ip route', help: 'IP routing table', run: ({ device }) => ok(showIpRoute(device)) },
+  { modes: EXEC, types: L3, syntax: 'show ip route', help: 'IP routing table', run: ({ device, env }) => ok(showIpRoute(device, env)) },
+  { modes: EXEC, types: L3, syntax: 'show ip ospf neighbor', help: 'OSPF neighbours', run: ({ device, env }) => ok(showOspfNeighbors(device, env)) },
+  { modes: EXEC, types: L3, syntax: 'show ip ospf database', help: 'OSPF link-state database', run: ({ device, env }) => ok(showOspfDatabase(device, env)) },
+  { modes: EXEC, types: L3, syntax: 'show ip bgp summary', help: 'BGP neighbours', run: ({ device, env }) => ok(showBgpSummary(device, env)) },
+  { modes: EXEC, types: L3, syntax: 'show ip bgp', help: 'BGP routes', run: ({ device, env }) => ok(showBgpRoutes(device, env)) },
+  { modes: EXEC, types: L3, syntax: 'show ip rip', help: 'RIP routes', run: ({ device, env }) => ok(showProtocolRoutes(device, env, 'rip')) },
+  { modes: EXEC, types: L3, syntax: 'show ip protocols', help: 'Active routing protocols', run: ({ device }) => ok(showProtocols(device)) },
   { modes: EXEC, types: L3, syntax: 'show ip interface brief', help: 'Interface addresses and status', run: ({ device, env }) => ok(showIpInterfaceBrief(device, env)) },
   { modes: EXEC, syntax: 'show interface brief', help: 'Interface status summary', run: ({ device, env }) => ok(usesPortNames(device) ? showInterfacesStatus(device, env) : showIpInterfaceBrief(device, env)) },
   { modes: EXEC, types: L3, syntax: 'show ip arp', help: 'ARP table', run: ({ device, env }) => ok(showArp(device, env)) },
@@ -441,6 +486,94 @@ const COMMANDS: Command[] = [
   { modes: ['config'], syntax: 'line vty', help: 'Configure remote (SSH) access', run: ({ session }) => ({ session: { ...session, mode: 'line' } }) },
   { modes: ['config'], syntax: 'line vty <num> <num>', help: 'Configure remote (SSH) access', run: ({ session }) => ({ session: { ...session, mode: 'line' } }) },
 
+  // --- Dynamisches Routing und NAT ----------------------------------------------
+  { modes: ['config'], types: L3, syntax: 'router ospf', help: 'Enable OSPF', run: (call) => routerMode(call, 'router-ospf') },
+  { modes: ['config'], types: L3, syntax: 'no router ospf', help: 'Disable OSPF', run: ({ device, env }) => apply(setOspf(env.topology, device.id, null)) },
+  { modes: ['config'], types: L3, syntax: 'router rip', help: 'Enable RIP', run: (call) => routerMode(call, 'router-rip') },
+  { modes: ['config'], types: L3, syntax: 'no router rip', help: 'Disable RIP', run: ({ device, env }) => apply(setRip(env.topology, device.id, null)) },
+  { modes: ['config'], types: L3, syntax: 'router bgp <num>', help: 'Enable BGP with this AS number', run: (call) => routerMode(call, 'router-bgp', Number(call.args[0])) },
+  { modes: ['config'], types: L3, syntax: 'no router bgp', help: 'Disable BGP', run: ({ device, env }) => apply(setBgp(env.topology, device.id, null)) },
+  { modes: ['config'], types: L3, syntax: 'no router bgp <num>', help: 'Disable BGP', run: ({ device, env }) => apply(setBgp(env.topology, device.id, null)) },
+  {
+    modes: ['config'],
+    types: ROUTERS,
+    syntax: 'ip nat inside source static <ip> <ip>',
+    help: 'Static NAT: inside address, outside address',
+    run: ({ args, device, env }) => apply(addStaticNat(env.topology, device.id, { inside: args[0]!, outside: args[1]! })),
+  },
+  {
+    modes: ['config'],
+    types: ROUTERS,
+    syntax: 'no ip nat inside source static <ip> <ip>',
+    help: 'Remove a static NAT entry',
+    run: ({ args, device, env }) => {
+      const index = (device.staticNat ?? []).findIndex((r) => r.inside === args[0] && r.outside === args[1]);
+      return index < 0 ? ok(['% No such translation']) : apply(removeStaticNat(env.topology, device.id, index));
+    },
+  },
+
+  // --- router ospf / rip / bgp ----------------------------------------------
+  { modes: ['router-ospf'], syntax: 'ospf router-id <ip>', help: 'Router ID', run: (call) => editOspf(call, (c) => ({ ...c, routerId: call.args[0]! })) },
+  { modes: ['router-ospf'], syntax: 'router-id <ip>', help: 'Router ID', run: (call) => editOspf(call, (c) => ({ ...c, routerId: call.args[0]! })) },
+  { modes: ['router-ospf'], syntax: 'no ospf router-id', help: 'Router ID from the highest address', run: (call) => editOspf(call, ({ routerId: _r, ...c }) => c) },
+  {
+    modes: ['router-ospf'],
+    syntax: 'network <cidr> area <num>',
+    help: 'Interfaces in this network take part, e.g. 10.0.0.0/24 area 0',
+    run: (call) => editOspf(call, (c) => ({ ...c, networks: [...c.networks.filter((n) => !sameNet(n, call.args[0]!)), { ...netOf(call.args[0]!), area: Number(call.args[1]) }] })),
+  },
+  {
+    modes: ['router-ospf'],
+    syntax: 'network <ip> <ip> area <num>',
+    help: 'Network with wildcard mask (Cisco style), e.g. 10.0.0.0 0.0.0.255 area 0',
+    run: (call) => {
+      const cidr = fromWildcard(call.args[0]!, call.args[1]!);
+      if (!cidr) return ok(['% Invalid wildcard mask']);
+      return editOspf(call, (c) => ({ ...c, networks: [...c.networks.filter((n) => !sameNet(n, cidr)), { ...netOf(cidr), area: Number(call.args[2]) }] }));
+    },
+  },
+  { modes: ['router-ospf'], syntax: 'no network <cidr> area <num>', help: 'Remove a network', run: (call) => editOspf(call, (c) => ({ ...c, networks: c.networks.filter((n) => !sameNet(n, call.args[0]!)) })) },
+  { modes: ['router-ospf'], syntax: 'passive-interface <iface>', help: 'No hellos on this interface', run: (call) => passive(call, true, 'ospf') },
+  { modes: ['router-ospf'], syntax: 'no passive-interface <iface>', help: 'Send hellos again', run: (call) => passive(call, false, 'ospf') },
+  { modes: ['router-ospf'], syntax: 'default-information originate', help: 'Announce a default route', run: (call) => editOspf(call, (c) => ({ ...c, defaultOriginate: true })) },
+  { modes: ['router-ospf'], syntax: 'no default-information originate', help: 'Stop announcing a default route', run: (call) => editOspf(call, ({ defaultOriginate: _d, ...c }) => c) },
+  { modes: ['router-ospf'], syntax: 'redistribute <word>', help: 'connected | static | rip | bgp', run: (call) => redistribute(call, 'ospf', true) },
+  { modes: ['router-ospf'], syntax: 'no redistribute <word>', help: 'Stop importing routes', run: (call) => redistribute(call, 'ospf', false) },
+
+  { modes: ['router-rip'], syntax: 'version 2', help: 'RIP version 2 (the only one simulated)', run: () => ok() },
+  { modes: ['router-rip'], syntax: 'network <cidr>', help: 'Interfaces in this network take part', run: (call) => editRip(call, (c) => ({ ...c, networks: [...c.networks.filter((n) => !sameNet(n, call.args[0]!)), netOf(call.args[0]!)] })) },
+  { modes: ['router-rip'], syntax: 'no network <cidr>', help: 'Remove a network', run: (call) => editRip(call, (c) => ({ ...c, networks: c.networks.filter((n) => !sameNet(n, call.args[0]!)) })) },
+  { modes: ['router-rip'], syntax: 'passive-interface <iface>', help: 'No updates on this interface', run: (call) => passive(call, true, 'rip') },
+  { modes: ['router-rip'], syntax: 'no passive-interface <iface>', help: 'Send updates again', run: (call) => passive(call, false, 'rip') },
+  { modes: ['router-rip'], syntax: 'default-information originate', help: 'Announce a default route', run: (call) => editRip(call, (c) => ({ ...c, defaultOriginate: true })) },
+  { modes: ['router-rip'], syntax: 'no default-information originate', help: 'Stop announcing a default route', run: (call) => editRip(call, ({ defaultOriginate: _d, ...c }) => c) },
+  { modes: ['router-rip'], syntax: 'redistribute <word>', help: 'connected | static | ospf | bgp', run: (call) => redistribute(call, 'rip', true) },
+  { modes: ['router-rip'], syntax: 'no redistribute <word>', help: 'Stop importing routes', run: (call) => redistribute(call, 'rip', false) },
+
+  { modes: ['router-bgp'], syntax: 'bgp router-id <ip>', help: 'Router ID', run: (call) => editBgp(call, (c) => ({ ...c, routerId: call.args[0]! })) },
+  {
+    modes: ['router-bgp'],
+    syntax: 'neighbor <ip> remote-as <num>',
+    help: 'Peer address and its AS number',
+    run: (call) => editBgp(call, (c) => ({ ...c, neighbors: [...c.neighbors.filter((n) => n.ip !== call.args[0]), { ip: call.args[0]!, remoteAs: Number(call.args[1]) }] })),
+  },
+  { modes: ['router-bgp'], syntax: 'no neighbor <ip>', help: 'Remove a peer', run: (call) => editBgp(call, (c) => ({ ...c, neighbors: c.neighbors.filter((n) => n.ip !== call.args[0]) })) },
+  { modes: ['router-bgp'], syntax: 'network <cidr>', help: 'Announce this network (must be in the routing table)', run: (call) => editBgp(call, (c) => ({ ...c, networks: [...c.networks.filter((n) => !sameNet(n, call.args[0]!)), netOf(call.args[0]!)] })) },
+  {
+    modes: ['router-bgp'],
+    syntax: 'network <ip> mask <mask>',
+    help: 'Announce this network (Cisco style)',
+    run: (call) => {
+      const cidr = `${call.args[0]}/${parseMask(call.args[1]!)}`;
+      return editBgp(call, (c) => ({ ...c, networks: [...c.networks.filter((n) => !sameNet(n, cidr)), netOf(cidr)] }));
+    },
+  },
+  { modes: ['router-bgp'], syntax: 'no network <cidr>', help: 'Stop announcing', run: (call) => editBgp(call, (c) => ({ ...c, networks: c.networks.filter((n) => !sameNet(n, call.args[0]!)) })) },
+  { modes: ['router-bgp'], syntax: 'redistribute <word>', help: 'connected | static | ospf | rip', run: (call) => redistribute(call, 'bgp', true) },
+  { modes: ['router-bgp'], syntax: 'no redistribute <word>', help: 'Stop importing routes', run: (call) => redistribute(call, 'bgp', false) },
+  { modes: ['router-bgp'], syntax: 'address-family ipv4 unicast', help: 'IPv4 settings (the only family simulated)', run: () => ok() },
+  { modes: ['router-bgp'], syntax: 'exit-address-family', help: 'Leave the address family', run: () => ok() },
+
   // --- line vty ------------------------------------------------------------
   { modes: ['line'], types: L3, syntax: 'transport input ssh', help: 'Allow SSH logins', run: (call) => updateCli(call, (cli) => ({ ...cli, ssh: true })) },
   { modes: ['line'], syntax: 'transport input none', help: 'Allow no remote logins', run: (call) => updateCli(call, ({ ssh: _s, ...cli }) => cli) },
@@ -492,6 +625,22 @@ const COMMANDS: Command[] = [
       return ok();
     },
   },
+  {
+    modes: ['if'],
+    types: ROUTERS,
+    syntax: 'encapsulation ppp',
+    help: 'PPP on a serial line (RFC 1661)',
+    run: (call) => forPorts(call, (t, p) => setEncapsulation(t, call.device.id, p, 'ppp')),
+  },
+  {
+    modes: ['if'],
+    types: ROUTERS,
+    syntax: 'encapsulation hdlc',
+    help: 'Cisco HDLC on a serial line',
+    run: (call) => forPorts(call, (t, p) => setEncapsulation(t, call.device.id, p, 'hdlc')),
+  },
+  { modes: ['if'], types: L3, syntax: 'ip ospf cost <num>', help: 'OSPF cost of this interface (1–65535)', run: (call) => forPorts(call, (t, p) => setOspfCost(t, call.device.id, p, Number(call.args[0]))) },
+  { modes: ['if'], types: L3, syntax: 'no ip ospf cost', help: 'Default OSPF cost (10)', run: (call) => forPorts(call, (t, p) => setOspfCost(t, call.device.id, p, null)) },
   { modes: ['if'], syntax: 'shutdown', help: 'Disable the interface', run: (call) => forPorts(call, (t, p) => setInterfaceShutdown(t, call.device.id, p, true)) },
   { modes: ['if'], syntax: 'no shutdown', help: 'Enable the interface', run: (call) => forPorts(call, (t, p) => setInterfaceShutdown(t, call.device.id, p, false)) },
   { modes: ['if'], syntax: 'description <text>', help: 'Interface description', run: (call) => forPorts(call, (t, p) => setInterfaceDescription(t, call.device.id, p, call.args[0]!)) },
@@ -502,6 +651,83 @@ const COMMANDS: Command[] = [
   { modes: ['if'], types: SWITCHES, syntax: 'no switchport access vlan', help: 'Back to VLAN 1', run: (call) => forPorts(call, (t, p) => setPortVlan(t, call.device.id, p, 1)) },
   { modes: ['if'], types: SWITCHES, syntax: 'spanning-tree portfast', help: 'Ports with end devices forward at once (always on here)', run: () => ok() },
 ];
+
+// --- Hilfen für Routingprotokolle ------------------------------------------------
+
+function netOf(cidr: string): RoutedNetwork {
+  const [network = '', prefix = '0'] = cidr.split('/');
+  const ip = parseIp(network) ?? 0;
+  const len = parseMask(prefix) ?? 0;
+  return { network: formatIp(networkOf(ip, len)), mask: maskToText(len) };
+}
+
+function sameNet(n: RoutedNetwork, cidr: string): boolean {
+  const other = netOf(cidr);
+  return n.network === other.network && n.mask === other.mask;
+}
+
+/** Cisco-Wildcard (0.0.0.255) in Präfix umrechnen. */
+function fromWildcard(ip: string, wildcard: string): string | null {
+  const w = parseIp(wildcard);
+  if (w === null) return null;
+  const prefix = parseMask(formatIp(~w >>> 0));
+  return prefix === null ? null : `${ip}/${prefix}`;
+}
+
+function routerMode(call: Call, mode: 'router-ospf' | 'router-rip' | 'router-bgp', asn?: number): Partial<CliOutput> {
+  const { device, env, session } = call;
+  const next = { ...session, mode };
+  if (mode === 'router-ospf' && !device.ospf) return { ...apply(setOspf(env.topology, device.id, { networks: [] })), session: next };
+  if (mode === 'router-rip' && !device.rip) return { ...apply(setRip(env.topology, device.id, { networks: [] })), session: next };
+  if (mode === 'router-bgp') {
+    if (device.bgp && device.bgp.asn !== asn) return ok([`% BGP is already running; AS is ${device.bgp.asn}`]);
+    if (!device.bgp) {
+      const result = apply(setBgp(env.topology, device.id, { asn: asn ?? 0, neighbors: [], networks: [] }));
+      return result.topology ? { ...result, session: next } : result;
+    }
+  }
+  return { session: next };
+}
+
+function editOspf(call: Call, change: (c: OspfConfig) => OspfConfig): Partial<CliOutput> {
+  return apply(setOspf(call.env.topology, call.device.id, change(call.device.ospf ?? { networks: [] })));
+}
+
+function editRip(call: Call, change: (c: RipConfig) => RipConfig): Partial<CliOutput> {
+  return apply(setRip(call.env.topology, call.device.id, change(call.device.rip ?? { networks: [] })));
+}
+
+function editBgp(call: Call, change: (c: BgpConfig) => BgpConfig): Partial<CliOutput> {
+  if (!call.device.bgp) return ok(['% BGP is not running']);
+  return apply(setBgp(call.env.topology, call.device.id, change(call.device.bgp)));
+}
+
+function passive(call: Call, on: boolean, protocol: 'ospf' | 'rip'): Partial<CliOutput> {
+  const ref = parseIfaceName(call.device, call.args[0]!);
+  if (!ref) return ok(['% Unknown interface']);
+  const id = ifaceIdOf(ref);
+  const update = <T extends { passive?: number[] }>(c: T): T => {
+    const list = new Set(c.passive ?? []);
+    if (on) list.add(id);
+    else list.delete(id);
+    return { ...c, passive: [...list] };
+  };
+  return protocol === 'ospf' ? editOspf(call, update) : editRip(call, update);
+}
+
+function redistribute(call: Call, protocol: 'ospf' | 'rip' | 'bgp', on: boolean): Partial<CliOutput> {
+  const source = call.args[0]!.toLowerCase() as RedistributeSource;
+  if (!['connected', 'static', 'ospf', 'rip', 'bgp'].includes(source) || source === protocol) return ok(['% Use connected, static, ospf, rip or bgp']);
+  const update = <T extends { redistribute?: RedistributeSource[] }>(c: T): T => {
+    const list = new Set(c.redistribute ?? []);
+    if (on) list.add(source);
+    else list.delete(source);
+    return { ...c, redistribute: [...list] };
+  };
+  if (protocol === 'ospf') return editOspf(call, update);
+  if (protocol === 'rip') return editRip(call, update);
+  return editBgp(call, update);
+}
 
 function splitCidr(cidr: string): [string, string] {
   const [ip = '', prefix = ''] = cidr.split('/');
@@ -759,18 +985,97 @@ function showVersion(device: Device): string[] {
 
 const prefixText = (ip: number, prefix: number) => `${formatIp(networkOf(ip, prefix))}/${prefix}`;
 
-export function showIpRoute(device: Device): string[] {
-  const { routes } = buildRoutes(device);
-  const lines = ['Codes: C - connected, S - static', '       > - selected route, * - FIB route', ''];
-  const sorted = [...routes].sort((a, b) => (a.network >>> 0) - (b.network >>> 0) || a.prefix - b.prefix);
+const ROUTE_CODES: Record<Route['kind'], string> = { connected: 'C', static: 'S', default: 'S', ospf: 'O', rip: 'R', bgp: 'B' };
+
+/** Routingtabelle; in der Simulation inklusive dynamisch gelernter Routen. */
+export function showIpRoute(device: Device, env?: CliEnv): string[] {
+  const routes = env?.state?.routes ?? buildRoutes(device).routes;
+  const lines = ['Codes: C - connected, S - static, O - OSPF, R - RIP, B - BGP', '       > - selected route, * - FIB route', ''];
+  const sorted = [...routes].sort((a, b) => (a.network >>> 0) - (b.network >>> 0) || a.prefix - b.prefix || (a.distance ?? 0) - (b.distance ?? 0));
+  const selected = new Set<string>();
   for (const r of sorted) {
     const name = cliIfaceName(device, r.iface);
     const net = `${formatIp(r.network)}/${r.prefix}`;
-    if (r.kind === 'connected') lines.push(`C>* ${net} is directly connected, ${name}`);
-    else lines.push(`S>* ${net} [1/0] ${r.via !== null ? `via ${formatIp(r.via)}, ${name}` : `is directly connected, ${name}`}`);
+    const best = !selected.has(net);
+    selected.add(net);
+    const mark = best ? '>*' : '  ';
+    if (r.kind === 'connected') lines.push(`C${mark} ${net} is directly connected, ${name}`);
+    else {
+      const metric = `[${r.distance ?? 1}/${r.metric ?? 0}]`;
+      lines.push(`${ROUTE_CODES[r.kind]}${mark} ${net} ${metric} ${r.via !== null ? `via ${formatIp(r.via)}, ${name}` : `is directly connected, ${name}`}`);
+    }
   }
   if (sorted.length === 0) lines.push('(no routes)');
+  if (!env?.state && (device.ospf || device.rip || device.bgp)) lines.push('', '% Dynamic routes appear while the simulation runs');
   return lines;
+}
+
+function needsSim(env: CliEnv): string[] | null {
+  return env.state ? null : ['% Only available while the simulation runs'];
+}
+
+function showOspfNeighbors(device: Device, env: CliEnv): string[] {
+  if (!device.ospf) return ['% OSPF is not enabled ("router ospf")'];
+  const ospf = env.state?.ospf;
+  if (!ospf) return needsSim(env) ?? [];
+  const now = env.now ?? 0;
+  return table(
+    ['Neighbor ID', 'State', 'Dead Time', 'Address', 'Interface'],
+    ospf.neighbors.map((n) => [n.routerId, { init: 'Init', '2way': '2-Way', exchange: 'Exchange', full: 'Full' }[n.state], `${Math.max(0, Math.round((n.lastHello + 8000 - now) / 1000))}s`, n.ip, cliIfaceName(device, n.iface)]),
+  );
+}
+
+function showOspfDatabase(device: Device, env: CliEnv): string[] {
+  if (!device.ospf) return ['% OSPF is not enabled ("router ospf")'];
+  const ospf = env.state?.ospf;
+  if (!ospf) return needsSim(env) ?? [];
+  return [
+    `OSPF Router with ID (${ospf.routerId})`,
+    '',
+    ...table(
+      ['Type', 'Link ID', 'ADV Router', 'Seq#', 'Links'],
+      ospf.lsdb.map((l) => [l.type === 'router' ? 'Router' : 'AS-External', l.advertisingRouter, l.advertisingRouter, `0x${(l.seq >>> 0).toString(16)}`, String(l.links)]),
+    ),
+  ];
+}
+
+function showBgpSummary(device: Device, env: CliEnv): string[] {
+  if (!device.bgp) return ['% BGP is not running ("router bgp ASN")'];
+  const peers = env.state?.bgp;
+  if (!peers) return needsSim(env) ?? [];
+  return [
+    `BGP router identifier, local AS number ${device.bgp.asn}`,
+    '',
+    ...table(
+      ['Neighbor', 'V', 'AS', 'State/PfxRcd'],
+      peers.map((p) => [p.ip, '4', String(p.remoteAs), p.state === 'established' ? String(p.received) : { idle: 'Idle', connect: 'Connect', openSent: 'OpenSent', openConfirm: 'OpenConfirm', established: '' }[p.state]]),
+    ),
+  ];
+}
+
+function showBgpRoutes(device: Device, env: CliEnv): string[] {
+  if (!device.bgp) return ['% BGP is not running ("router bgp ASN")'];
+  return showProtocolRoutes(device, env, 'bgp');
+}
+
+function showProtocolRoutes(device: Device, env: CliEnv, kind: 'bgp' | 'rip'): string[] {
+  if (kind === 'rip' && !device.rip) return ['% RIP is not enabled ("router rip")'];
+  const routes = env.state?.routes;
+  if (!routes) return needsSim(env) ?? [];
+  const own = routes.filter((r) => r.kind === kind);
+  if (!own.length) return ['(no routes learned yet)'];
+  return table(
+    ['Network', 'Next Hop', 'Metric', 'Interface'],
+    own.map((r) => [`${formatIp(r.network)}/${r.prefix}`, r.via !== null ? formatIp(r.via) : '0.0.0.0', String(r.metric ?? 0), cliIfaceName(device, r.iface)]),
+  );
+}
+
+function showProtocols(device: Device): string[] {
+  const lines: string[] = [];
+  if (device.ospf) lines.push(`Routing Protocol is "ospf"`, ...device.ospf.networks.map((n) => `  network ${n.network}/${parseMask(n.mask)} area ${n.area}`));
+  if (device.rip) lines.push(`Routing Protocol is "rip" (version 2)`, ...device.rip.networks.map((n) => `  network ${n.network}/${parseMask(n.mask)}`));
+  if (device.bgp) lines.push(`Routing Protocol is "bgp ${device.bgp.asn}"`, ...device.bgp.neighbors.map((n) => `  neighbor ${n.ip} remote-as ${n.remoteAs}`));
+  return lines.length ? lines : ['(no dynamic routing protocol is running)'];
 }
 
 interface IfaceRow {
@@ -924,7 +1229,9 @@ export function runningConfig(device: Device): string[] {
     } else {
       if (p.ip && p.mask) lines.push(` ip address ${p.ip}/${parseMask(p.mask)}`);
       if (p.dhcpRelay) lines.push(` ip helper-address ${p.dhcpRelay}`);
+      if (p.serial) lines.push(` encapsulation ${p.encapsulation ?? 'hdlc'}`);
       if (p.nat) lines.push(' ip nat outside');
+      if (p.ospfCost) lines.push(` ip ospf cost ${p.ospfCost}`);
     }
     if (p.shutdown) lines.push(' shutdown');
     lines.push('!');
@@ -947,6 +1254,25 @@ export function runningConfig(device: Device): string[] {
     lines.push(`ip route ${r.network}/${prefix} ${via}`);
   }
   if (device.routes?.length) lines.push('!');
+  for (const r of device.staticNat ?? []) lines.push(`ip nat inside source static ${r.inside} ${r.outside}`);
+  if (device.staticNat?.length) lines.push('!');
+  const prefixOf = (n: RoutedNetwork) => `${n.network}/${parseMask(n.mask)}`;
+  const common = (c: { passive?: number[]; defaultOriginate?: boolean; redistribute?: RedistributeSource[] }) => [
+    ...(c.passive ?? []).map((i) => ` passive-interface ${cliIfaceName(device, i)}`),
+    ...(c.defaultOriginate ? [' default-information originate'] : []),
+    ...(c.redistribute ?? []).map((r) => ` redistribute ${r}`),
+  ];
+  if (device.ospf) {
+    lines.push('router ospf');
+    if (device.ospf.routerId) lines.push(` ospf router-id ${device.ospf.routerId}`);
+    lines.push(...device.ospf.networks.map((n) => ` network ${prefixOf(n)} area ${n.area}`), ...common(device.ospf), '!');
+  }
+  if (device.rip) lines.push('router rip', ' version 2', ...device.rip.networks.map((n) => ` network ${prefixOf(n)}`), ...common(device.rip), '!');
+  if (device.bgp) {
+    lines.push(`router bgp ${device.bgp.asn}`);
+    if (device.bgp.routerId) lines.push(` bgp router-id ${device.bgp.routerId}`);
+    lines.push(...device.bgp.neighbors.map((n) => ` neighbor ${n.ip} remote-as ${n.remoteAs}`), ...device.bgp.networks.map((n) => ` network ${prefixOf(n)}`), ...common(device.bgp), '!');
+  }
   lines.push('line vty', cli?.ssh ? ' transport input ssh' : ' transport input none');
   if (cli?.users?.length) lines.push(' login local');
   lines.push('!', 'end');

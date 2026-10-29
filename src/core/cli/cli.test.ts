@@ -182,3 +182,55 @@ group('Netzinfo', () => {
     expect(networkInfo('kein Netz')).toBeNull();
   });
 });
+
+group('CLI: dynamisches Routing, serielle Leitungen, NAT', () => {
+  function pair() {
+    const net = new NetBuilder();
+    const r1 = net.router('R1', ['10.0.0.1/30', '192.168.1.1/24']);
+    const r2 = net.router('R2', ['10.0.0.2/30', '192.168.2.1/24']);
+    net.link(r1, r2);
+    return { net, r1, r2 };
+  }
+
+  it('OSPF per Befehlszeile: Konfiguration, show ip route mit O-Routen, Nachbarn', () => {
+    const { net, r1, r2 } = pair();
+    let topology = run(net.topology, r1, ['en', 'conf t', 'router ospf', 'ospf router-id 1.1.1.1', 'network 192.168.1.0/24 area 0', 'network 10.0.0.0 0.0.0.3 area 0', 'end']).topology;
+    topology = run(topology, r2, ['en', 'conf t', 'router ospf', 'network 0.0.0.0/0 area 0', 'end']).topology;
+    expect(getDevice(topology, r1)!.ospf).toMatchObject({ routerId: '1.1.1.1', networks: [{ network: '192.168.1.0', area: 0 }, { network: '10.0.0.0', mask: '255.255.255.252', area: 0 }] });
+    const config = runningConfig(getDevice(topology, r1)!);
+    expect(config).toContain('router ospf');
+    expect(config).toContain(' network 10.0.0.0/30 area 0');
+    const sim = new Simulation(topology);
+    sim.runUntil(10_000);
+    const { output } = run(topology, r2, ['show ip route', 'show ip ospf neighbor'], () => sim.getDeviceState(r2));
+    expect(output.some((l) => /^O>\* 192\.168\.1\.0\/24 \[110\/20\] via 10\.0\.0\.1/.test(l))).toBe(true);
+    expect(output.some((l) => l.startsWith('1.1.1.1') && l.includes('Full'))).toBe(true);
+  });
+
+  it('BGP per Befehlszeile', () => {
+    const { net, r1, r2 } = pair();
+    let topology = run(net.topology, r1, ['en', 'conf t', 'router bgp 65001', 'neighbor 10.0.0.2 remote-as 65002', 'network 192.168.1.0/24', 'end']).topology;
+    topology = run(topology, r2, ['en', 'conf t', 'router bgp 65002', 'neighbor 10.0.0.1 remote-as 65001', 'address-family ipv4 unicast', 'network 192.168.2.0 mask 255.255.255.0', 'exit-address-family', 'end']).topology;
+    const sim = new Simulation(topology);
+    sim.runUntil(15_000);
+    const { output } = run(topology, r1, ['show ip bgp summary', 'show ip route'], () => sim.getDeviceState(r1));
+    expect(output.some((l) => l.startsWith('10.0.0.2') && l.trim().endsWith('1'))).toBe(true);
+    expect(output.some((l) => /^B>\* 192\.168\.2\.0\/24 \[20\/1\] via 10\.0\.0\.2/.test(l))).toBe(true);
+  });
+
+  it('serielle Schnittstelle: Kapselung PPP, Name serial0', () => {
+    const net = new NetBuilder();
+    const r = net.router('R1', ['192.168.1.1/24', '10.0.0.1/30']);
+    net.serial(r, 1);
+    const { topology, output } = run(net.topology, r, ['en', 'conf t', 'interface serial0', 'encapsulation ppp', 'ip ospf cost 50', 'end', 'show ip interface brief']);
+    expect(getDevice(topology, r)!.interfaces[1]).toMatchObject({ serial: true, encapsulation: 'ppp', ospfCost: 50 });
+    expect(output.some((l) => l.startsWith('serial0'))).toBe(true);
+    expect(runningConfig(getDevice(topology, r)!)).toContain(' encapsulation ppp');
+  });
+
+  it('statisches NAT per Befehlszeile', () => {
+    const { net, r1 } = pair();
+    const { topology } = run(net.topology, r1, ['en', 'conf t', 'ip nat inside source static 192.168.1.10 10.0.0.5', 'end']);
+    expect(getDevice(topology, r1)!.staticNat).toEqual([{ inside: '192.168.1.10', outside: '10.0.0.5' }]);
+  });
+});
