@@ -28,7 +28,7 @@
 
   const entries = $derived.by((): Entry[] => {
     const commands = allCommands().map(
-      (c: Command): Entry => ({ id: c.id, label: c.label(), detail: t(`menu.${c.id.split('.')[0]}`), keys: c.keys?.[0], icon: c.icon, run: c.run, disabled: c.enabled ? !c.enabled() : false }),
+      (c: Command): Entry => ({ id: c.id, label: c.label(), detail: categoryOf(c.id), keys: c.keys?.[0], icon: c.icon, run: c.run, disabled: c.enabled ? !c.enabled() : false }),
     );
     const items = SHOP.filter((item) => item.features.every((f) => ui.has(f))).map(
       (item): Entry => ({ id: `shop.${item.id}`, label: itemLabel(item), detail: t('menu.insert'), icon: 'plus', run: () => shop.use(item), disabled: false }),
@@ -43,11 +43,27 @@
     active = 0;
   });
 
+  /**
+   * Der Befehl läuft erst, wenn die Suche geschlossen ist: Das close-Ereignis
+   * kommt verzögert und würde sonst einen eben geöffneten Dialog wieder schliessen.
+   */
+  let pending: Entry | null = null;
   function choose(entry: Entry | undefined) {
     if (!entry || entry.disabled) return;
+    pending = entry;
     dialog.close();
-    entry.run();
   }
+
+  function closed() {
+    const entry = pending;
+    pending = null;
+    onclose();
+    entry?.run();
+  }
+
+  /** Kategorie eines Befehls, wie in der Menüleiste. */
+  const MENU_OF: Record<string, string> = { file: 'menu.file', edit: 'menu.edit', view: 'menu.view', sim: 'menu.simulation', tool: 'menu.tools', help: 'menu.help', insert: 'menu.insert' };
+  const categoryOf = (id: string) => t(MENU_OF[id.split('.')[0]!] ?? 'menu.tools');
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key === 'ArrowDown') active = Math.min(entries.length - 1, active + 1);
@@ -58,10 +74,10 @@
   }
 </script>
 
-<dialog bind:this={dialog} {onclose} aria-label={t('menu.help.palette')} onclick={(e) => e.target === dialog && dialog.close()}>
+<dialog bind:this={dialog} onclose={closed} aria-label={t('menu.help.palette')} onclick={(e) => e.target === dialog && dialog.close()}>
   <div class="search">
     <Icon name="search" />
-    <input bind:value={query} placeholder={t('palette.placeholder')} {onkeydown} aria-controls="palette-list" aria-activedescendant="palette-{active}" />
+    <input bind:value={query} placeholder={t('palette.placeholder')} aria-label={t('palette.placeholder')} {onkeydown} aria-controls="palette-list" aria-activedescendant="palette-{active}" />
   </div>
   <ul id="palette-list" role="listbox">
     {#each entries as entry, i (entry.id)}

@@ -34,10 +34,15 @@ export function saveProject() {
 }
 
 /** Funktionen einschalten, die das Projekt verwendet, und kurz darauf hinweisen. */
-export function ensureProjectFeatures() {
+/**
+ * Schaltet die Funktionen ein, die das Projekt nutzt. `message` ist die
+ * eigentliche Meldung (z.B. «geladen»); der Hinweis wird angehängt, damit
+ * keine Meldung die andere verdrängt.
+ */
+export function ensureProjectFeatures(message?: string) {
   const { enabled, blocked } = ui.ensure(usedFeatures(editor.topology));
-  if (enabled.length) editor.notify(t('features.autoEnabled', { list: enabled.map(featureName).join(', ') }));
-  if (blocked.length) editor.notify(t('features.blocked', { list: blocked.map(featureName).join(', ') }), 'error');
+  const parts = [message, enabled.length ? t('features.autoEnabled', { list: enabled.map(featureName).join(', ') }) : '', blocked.length ? t('features.blocked', { list: blocked.map(featureName).join(', ') }) : ''].filter(Boolean);
+  if (parts.length) editor.notify(parts.join(' '), blocked.length ? 'error' : 'info');
 }
 
 export async function openProject() {
@@ -50,8 +55,7 @@ export async function openProject() {
   }
   if (editor.acting) editor.setMode('design');
   editor.replace(parsed.topology, { undoable: true, tasks: parsed.tasks ?? null, snapshots: parsed.snapshots ?? [] });
-  ensureProjectFeatures();
-  editor.notify(t(parsed.tasks ? 'status.loadedTask' : 'status.loaded', { file: file.name, title: parsed.tasks?.title ?? '' }));
+  ensureProjectFeatures(t(parsed.tasks ? 'status.loadedTask' : 'status.loaded', { file: file.name, title: parsed.tasks?.title ?? '' }));
 }
 
 /** Paketmitschnitt für Wireshark. */

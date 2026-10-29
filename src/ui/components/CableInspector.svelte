@@ -73,12 +73,13 @@
   <p class="muted">{t('cable.replugHint')}</p>
 {/if}
 
+{#if ui.has('net.cableDamage') || (cable.loss ?? 0) > 0}
 <h3>{t('cable.condition')}</h3>
 <label class="end">
   <span>{t('cable.loss')}</span>
   <select
     value={cable.loss ?? 0}
-    disabled={!editor.editable}
+    disabled={!editor.editable && !editor.acting}
     onchange={(e) => editor.setCableLoss(cable.id, Number(e.currentTarget.value))}
   >
     {#each LOSS_LEVELS as level (level)}
@@ -87,6 +88,7 @@
   </select>
 </label>
 <p class="muted">{t('cable.lossHint')}</p>
+{/if}
 
 {#if editor.editable}
   <button class="danger" onclick={() => editor.deleteSelection()}>{t('inspector.delete')}</button>
