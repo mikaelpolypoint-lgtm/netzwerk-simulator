@@ -11,34 +11,146 @@ export const BGP_RETRY = 4000;
 
 export type BgpPeerState = 'idle' | 'connect' | 'openSent' | 'openConfirm' | 'established';
 
-/**
- * BGP-4-Nachrichten (RFC 4271). Sie reisen als Textzeilen «BGP {json}» über
- * TCP-Port 179; die Paketansicht zeigt sie wie ein Analysator an.
- */
 export type BgpMessage =
   | { type: 'OPEN'; version: 4; asn: number; holdTime: number; bgpId: string }
   | { type: 'KEEPALIVE' }
   | { type: 'UPDATE'; withdrawn: string[]; nlri: string[]; asPath: number[]; nextHop: string }
   | { type: 'NOTIFICATION'; code: string };
 
-export const BGP_PREFIX = 'BGP ';
+/**
+ * BGP-4-Nachrichten im Binärformat nach RFC 4271 (mit 4-Byte-AS nach RFC 6793).
+ * In der Simulation reisen sie als «Binärtext» (ein Zeichen = ein Byte) in
+ * TCP-Segmenten an Port 179; Länge und Sequenznummern stimmen so mit echten Bytes überein.
+ */
+const MARKER = '\xff'.repeat(16);
+const TYPES = { OPEN: 1, UPDATE: 2, NOTIFICATION: 3, KEEPALIVE: 4 } as const;
+/** Fehlercodes (Code/Subcode) der NOTIFICATION. */
+export const BGP_ERRORS: Record<string, [number, number]> = {
+  'Bad Peer AS': [2, 2],
+  'Hold Timer Expired': [4, 0],
+  Cease: [6, 0],
+};
+const AS_TRANS = 23456;
 
-export function encodeBgp(message: BgpMessage): string {
-  return `${BGP_PREFIX}${JSON.stringify(message)}\n`;
+const byte = (n: number) => String.fromCharCode(n & 0xff);
+const u16 = (n: number) => byte(n >>> 8) + byte(n);
+const u32 = (n: number) => u16(n >>> 16) + u16(n);
+const ipBytes = (ip: string) => (ip.split('.').map(Number) as number[]).map(byte).join('');
+const at = (s: string, i: number) => s.charCodeAt(i) & 0xff;
+const r16 = (s: string, i: number) => (at(s, i) << 8) | at(s, i + 1);
+const r32 = (s: string, i: number) => r16(s, i) * 65536 + r16(s, i + 2);
+const rip = (s: string, i: number) => [0, 1, 2, 3].map((k) => at(s, i + k)).join('.');
+
+function prefixBytes(text: string): string {
+  const [ip = '0.0.0.0', len = '0'] = text.split('/');
+  const prefix = Number(len);
+  return byte(prefix) + ipBytes(ip).slice(0, Math.ceil(prefix / 8));
 }
 
-/** Liest BGP-Nachrichten aus TCP-Nutzdaten (für die Paketansicht). */
+function readPrefixes(s: string, start: number, end: number): string[] {
+  const result: string[] = [];
+  let i = start;
+  while (i < end) {
+    const prefix = at(s, i);
+    const n = Math.ceil(prefix / 8);
+    const octets = [0, 0, 0, 0].map((_, k) => (k < n ? at(s, i + 1 + k) : 0));
+    result.push(`${octets.join('.')}/${prefix}`);
+    i += 1 + n;
+  }
+  return result;
+}
+
+export function encodeBgp(message: BgpMessage): string {
+  let body = '';
+  if (message.type === 'OPEN') {
+    // Optionaler Parameter: Capability 65 (4-Byte-AS).
+    const capability = byte(65) + byte(4) + u32(message.asn);
+    const param = byte(2) + byte(capability.length) + capability;
+    body = byte(4) + u16(message.asn > 65535 ? AS_TRANS : message.asn) + u16(message.holdTime) + ipBytes(message.bgpId) + byte(param.length) + param;
+  } else if (message.type === 'UPDATE') {
+    const withdrawn = message.withdrawn.map(prefixBytes).join('');
+    let attrs = '';
+    if (message.nlri.length) {
+      const origin = byte(0x40) + byte(1) + byte(1) + byte(0);
+      const segment = message.asPath.length ? byte(2) + byte(message.asPath.length) + message.asPath.map(u32).join('') : '';
+      const asPath = byte(0x40) + byte(2) + byte(segment.length) + segment;
+      const nextHop = byte(0x40) + byte(3) + byte(4) + ipBytes(message.nextHop);
+      attrs = origin + asPath + nextHop;
+    }
+    body = u16(withdrawn.length) + withdrawn + u16(attrs.length) + attrs + message.nlri.map(prefixBytes).join('');
+  } else if (message.type === 'NOTIFICATION') {
+    const [code, sub] = BGP_ERRORS[message.code] ?? [6, 0];
+    body = byte(code) + byte(sub);
+  }
+  return MARKER + u16(19 + body.length) + byte(TYPES[message.type as keyof typeof TYPES]) + body;
+}
+
+/** Eine vollständige Nachricht ab Position `i`, oder null, wenn noch Bytes fehlen. */
+function decodeOne(s: string, i: number): { message: BgpMessage | null; length: number } | null {
+  if (s.length - i < 19) return null;
+  const length = r16(s, i + 16);
+  if (length < 19 || s.length - i < length) return null;
+  const type = at(s, i + 18);
+  const b = i + 19;
+  let message: BgpMessage | null = null;
+  if (type === 4) message = { type: 'KEEPALIVE' };
+  else if (type === 1) {
+    let asn = r16(s, b + 1);
+    const optLen = at(s, b + 9);
+    for (let p = b + 10; p < b + 10 + optLen; ) {
+      const paramType = at(s, p);
+      const paramLen = at(s, p + 1);
+      if (paramType === 2 && at(s, p + 2) === 65) asn = r32(s, p + 4);
+      p += 2 + paramLen;
+    }
+    message = { type: 'OPEN', version: 4, asn, holdTime: r16(s, b + 3), bgpId: rip(s, b + 5) };
+  } else if (type === 2) {
+    const wLen = r16(s, b);
+    const withdrawn = readPrefixes(s, b + 2, b + 2 + wLen);
+    const aStart = b + 2 + wLen + 2;
+    const aLen = r16(s, b + 2 + wLen);
+    let asPath: number[] = [];
+    let nextHop = '0.0.0.0';
+    for (let p = aStart; p < aStart + aLen; ) {
+      const flags = at(s, p);
+      const code = at(s, p + 1);
+      const extended = (flags & 0x10) !== 0;
+      const len = extended ? r16(s, p + 2) : at(s, p + 2);
+      const v = p + (extended ? 4 : 3);
+      if (code === 2 && len >= 2) asPath = Array.from({ length: at(s, v + 1) }, (_, k) => r32(s, v + 2 + k * 4));
+      if (code === 3) nextHop = rip(s, v);
+      p = v + len;
+    }
+    message = { type: 'UPDATE', withdrawn, nlri: readPrefixes(s, aStart + aLen, i + length), asPath, nextHop };
+  } else if (type === 3) {
+    const code = at(s, b);
+    const sub = at(s, b + 1);
+    const name = Object.entries(BGP_ERRORS).find(([, [c, x]]) => c === code && x === sub)?.[0] ?? `Error ${code}/${sub}`;
+    message = { type: 'NOTIFICATION', code: name };
+  }
+  return { message, length };
+}
+
+/** Liest alle vollständigen BGP-Nachrichten; `rest` sind Bytes einer noch unvollständigen Nachricht. */
+export function decodeBgpStream(data: string): { messages: BgpMessage[]; rest: string } {
+  const messages: BgpMessage[] = [];
+  let i = 0;
+  for (;;) {
+    const one = decodeOne(data, i);
+    if (!one) break;
+    if (one.message) messages.push(one.message);
+    i += one.length;
+  }
+  return { messages, rest: data.slice(i) };
+}
+
+/** Für die Paketansicht: BGP-Nachrichten in einem Segment (unvollständige werden ignoriert). */
 export function decodeBgp(data: string): BgpMessage[] {
-  return data
-    .split('\n')
-    .filter((line) => line.startsWith(BGP_PREFIX))
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line.slice(BGP_PREFIX.length)) as BgpMessage];
-      } catch {
-        return [];
-      }
-    });
+  return decodeBgpStream(data).messages;
+}
+
+export function isBgpData(data: string): boolean {
+  return data.startsWith(MARKER);
 }
 
 interface Path {
@@ -197,14 +309,9 @@ export class Bgp {
         this.#sendOpen(peer);
       },
       onData: (_conn: TcpConnection, data: string) => {
-        peer.buffer += data;
-        let newline = peer.buffer.indexOf('\n');
-        while (newline >= 0) {
-          const line = peer.buffer.slice(0, newline + 1);
-          peer.buffer = peer.buffer.slice(newline + 1);
-          for (const message of decodeBgp(line)) this.#onMessage(peer, message);
-          newline = peer.buffer.indexOf('\n');
-        }
+        const { messages, rest } = decodeBgpStream(peer.buffer + data);
+        peer.buffer = rest;
+        for (const message of messages) this.#onMessage(peer, message);
       },
       onEnd: () => this.#reset(peer, true),
       onClose: () => this.#reset(peer, true),
