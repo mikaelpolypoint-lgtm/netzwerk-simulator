@@ -48,7 +48,7 @@ describe('Editor', () => {
     expect(editor.topology.devices[0]!.position).toEqual({ x: 60, y: 20 });
   });
 
-  it('sperrt Änderungen im Aktionsmodus', () => {
+  it('sperrt Änderungen in der Simulation', () => {
     editor.addDevice('pc', { x: 0, y: 0 });
     editor.setMode('simulation');
     editor.select({ kind: 'device', id: 'd1' });

@@ -13,6 +13,24 @@
   const browser = $derived((simStore.tick, simStore.sim?.getDeviceState(device.id).browser));
   const response = $derived(browser?.response);
 
+  /**
+   * Nachgeladene Bilder (eigene GET-Anfragen in der Simulation) als data:-URL
+   * in die Seite setzen; noch nicht geladene bleiben leer.
+   */
+  const page = $derived.by(() => {
+    if (!response || !browser) return '';
+    const images = browser.images ?? {};
+    const parsed = parseUrl(browser.url);
+    const base = typeof parsed === 'string' ? '/' : parsed.path;
+    const dir = base.slice(0, base.lastIndexOf('/') + 1) || '/';
+    return response.body.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi, (match, head: string, quote: string, src: string) => {
+      if (/^[a-z]+:/i.test(src) || src.startsWith('//')) return match;
+      const path = src.startsWith('/') ? src : `${dir}${src}`;
+      const data = images[path];
+      return data ? `${head}${quote}${data}${quote}` : `${head}${quote}${quote}`;
+    });
+  });
+
   function load(url: string) {
     address = url;
     simStore.browse(device.id, url);
@@ -70,12 +88,14 @@
       <p class="muted pad">{t('browser.empty')}</p>
     {:else if view === 'source'}
       <pre>{browser.raw ?? t('browser.noSource')}</pre>
+    {:else if response?.dataUrl}
+      <div class="image"><img src={response.dataUrl} alt={browser.url} /></div>
     {:else if response}
       <iframe
         bind:this={frame}
         title={t('browser.pageTitle', { url: browser.url })}
         sandbox="allow-same-origin"
-        srcdoc={response.body}
+        srcdoc={page}
         onload={onFrameLoad}
       ></iframe>
     {/if}
@@ -83,6 +103,13 @@
 </div>
 
 <style>
+  .image {
+    padding: 10px;
+    text-align: center;
+  }
+  .image img {
+    max-width: 100%;
+  }
   .browser {
     display: flex;
     flex-direction: column;

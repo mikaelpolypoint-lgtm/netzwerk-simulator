@@ -14,7 +14,7 @@ export type Speed = 'realtime' | 'slow' | 'slower';
 const SLOWDOWN: Record<Speed, number> = { realtime: 1, slow: 300, slower: 1000 };
 
 /**
- * Verbindet die Simulation mit der Oberfläche: Im Aktionsmodus läuft die
+ * Verbindet die Simulation mit der Oberfläche: Im Simulation läuft die
  * virtuelle Zeit, im Entwurfsmodus ist sie angehalten. In der Zeitlupe
  * laufen Übertragungen verlangsamt, Wartezeiten dazwischen werden
  * übersprungen, damit man jedem Rahmen folgen kann.

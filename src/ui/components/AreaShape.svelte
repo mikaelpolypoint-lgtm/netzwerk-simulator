@@ -59,7 +59,16 @@
     <rect class="rail" x={area.x + area.width - 14} y={area.y + 34} width="8" height={area.height - 42} />
     <text class="rack-title" x={area.x + area.width / 2} y={area.y + 22}>{area.title}</text>
   {:else}
-    <text class="title" x={area.x + 14} y={area.y + 22}>{area.title}</text>
+    {#if area.public}
+      <!-- Öffentliches Netz: Weltkugel vor dem Titel. -->
+      <g class="globe" transform="translate({area.x + 22} {area.y + 17})" aria-hidden="true">
+        <title>{t('area.publicHint')}</title>
+        <circle r="8" />
+        <ellipse rx="3.5" ry="8" />
+        <path d="M-8 0 H8 M-7 -4 H7 M-7 4 H7" />
+      </g>
+    {/if}
+    <text class="title" x={area.x + (area.public ? 36 : 14)} y={area.y + 22}>{area.title}</text>
     {#each details as line, i (i)}
       <text class="info" x={area.x + 14} y={area.y + 40 + i * 15}>{line}</text>
     {/each}
@@ -79,6 +88,13 @@
 </g>
 
 <style>
+  .globe circle,
+  .globe ellipse,
+  .globe path {
+    fill: none;
+    stroke: var(--area);
+    stroke-width: 1.4;
+  }
   .area {
     pointer-events: none;
   }

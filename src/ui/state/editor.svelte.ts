@@ -780,7 +780,7 @@ class Editor {
   }
 
   /**
-   * Änderungen aus der Befehlszeile: auch im Aktionsmodus erlaubt, denn
+   * Änderungen aus der Befehlszeile: auch in der Simulation erlaubt, denn
    * echte Geräte konfiguriert man im laufenden Betrieb. Rückgängig machen
    * geht danach im Entwurfsmodus.
    */

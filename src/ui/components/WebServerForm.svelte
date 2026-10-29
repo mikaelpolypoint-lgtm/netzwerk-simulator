@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Device } from '../../core';
+  import { MAX_WEB_FILE, isImageContent, type Device } from '../../core';
   import { t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
 
@@ -34,6 +34,50 @@
     if (!failure) editing = null;
   }
 
+  /**
+   * Bild hochladen: im Browser auf höchstens 480 px verkleinert und als JPEG
+   * (bzw. PNG bei Transparenz-Formaten) in die Projektdatei gelegt. So bleiben
+   * Konfiguration und Speicherdatei klein.
+   */
+  let uploadError = $state<string | null>(null);
+  async function upload(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    uploadError = null;
+    if (!file) return;
+    if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) {
+      uploadError = t('web.imageType');
+      return;
+    }
+    try {
+      const bitmap = await createImageBitmap(file);
+      let size = 480;
+      let data = '';
+      // Notfalls kleiner rechnen, bis die Grenze eingehalten ist.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const scale = Math.min(1, size / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('canvas');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        data = canvas.toDataURL('image/jpeg', 0.8);
+        if (data.length <= MAX_WEB_FILE) break;
+        size = Math.round(size * 0.7);
+      }
+      bitmap.close();
+      const base = file.name.replace(/\.[^.]*$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'bild';
+      const failure = editor.saveWebFile(device.id, { path: `/${base}.jpg`, content: data });
+      uploadError = failure ? t(`error.${failure.code}`, failure.params) : null;
+    } catch {
+      uploadError = t('web.imageFailed');
+    }
+  }
+
   function remove() {
     if (editing) editor.removeWebFile(device.id, editing);
     editing = null;
@@ -49,13 +93,30 @@
   <ul class="files">
     {#each files as file (file.path)}
       <li>
-        <button class="link" onclick={() => edit(file.path)} aria-pressed={editing === file.path}>{file.path}</button>
-        <span class="muted">{t('web.size', { n: file.content.length })}</span>
+        {#if isImageContent(file.content)}
+          <span class="image-file">
+            <img src={file.content} alt="" />
+            <code>{file.path}</code>
+          </span>
+          <span class="muted">{t('web.kb', { n: Math.ceil((file.content.length * 3) / 4 / 1000) })}</span>
+          <button class="link danger" onclick={() => editor.removeWebFile(device.id, file.path)} aria-label={t('web.removeImage', { path: file.path })}>✕</button>
+        {:else}
+          <button class="link" onclick={() => edit(file.path)} aria-pressed={editing === file.path}>{file.path}</button>
+          <span class="muted">{t('web.size', { n: file.content.length })}</span>
+        {/if}
       </li>
     {/each}
   </ul>
   {#if editing === null}
-    <button onclick={() => edit(null)}>{t('web.newFile')}</button>
+    <div class="actions">
+      <button onclick={() => edit(null)}>{t('web.newFile')}</button>
+      <label class="upload">
+        {t('web.uploadImage')}
+        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={upload} />
+      </label>
+    </div>
+    {#if uploadError}<p class="error" role="alert">{uploadError}</p>{/if}
+    <p class="muted">{t('web.imageHint')}</p>
   {:else}
     <form class="editor" onsubmit={save}>
       <label>
@@ -82,6 +143,35 @@
 {/if}
 
 <style>
+  .image-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+  }
+  .image-file img {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .upload {
+    position: relative;
+    display: inline-block;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .upload input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
   .toggle {
     display: flex;
     align-items: center;

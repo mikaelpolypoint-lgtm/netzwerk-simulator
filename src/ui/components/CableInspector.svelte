@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { cableAt, getDevice, linkStatus, mediumOf, type Cable, type Medium } from '../../core';
+  import { MEDIA as ALL_MEDIA, cableAt, getDevice, linkStatus, mediumOf, type Cable, type Medium } from '../../core';
+  import { mediumFeature } from '../features';
+  import { ui } from '../state/ui.svelte';
   import { t } from '../../i18n';
   import { interfaceLabel } from '../labels';
   import { editor } from '../state/editor.svelte';
@@ -12,7 +14,8 @@
 
   const status = $derived(linkStatus(editor.topology, cable));
   const medium = $derived(mediumOf(cable));
-  const MEDIA: Medium[] = ['tp', 'fiber', 'wireless'];
+  /** Nur Verbindungsarten, die im Funktionsumfang eingeschaltet sind (die aktuelle immer). */
+  const MEDIA = $derived(ALL_MEDIA.filter((m) => m === medium || !mediumFeature(m) || ui.has(mediumFeature(m)!)));
 
   const ends = $derived(
     (['a', 'b'] as const).flatMap((end) => {

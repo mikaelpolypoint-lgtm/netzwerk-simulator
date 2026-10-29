@@ -1,4 +1,4 @@
-import { DEVICE_SPECS, decodeIface, type Device, type DeviceType } from '../core';
+import { DEVICE_SPECS, decodeIface, isModemWan, type Device, type DeviceType } from '../core';
 import { t } from '../i18n';
 
 export function typeLabel(type: DeviceType): string {
@@ -18,6 +18,11 @@ export function interfaceLabel(device: Device, index: number): string {
   const ref = decodeIface(index);
   if (ref.kind === 'sub') return t('iface.sub', { index: ref.port, vlan: ref.vlan });
   if (ref.kind === 'svi') return t('iface.svi', { vlan: ref.vlan });
+  if (device.interfaces[index]?.serial) {
+    const n = device.interfaces.slice(0, index + 1).filter((i) => i.serial).length - 1;
+    return t('iface.serial', { n });
+  }
+  if (device.type === 'modem' && device.modem && isModemWan(device, index)) return t('iface.wan');
   if (device.type === 'accesspoint') return index === 0 ? t('iface.lan') : t('iface.radio', { n: index });
   if (device.interfaces[index]?.sfpSlot) {
     const n = device.interfaces.slice(0, index + 1).filter((i) => i.sfpSlot).length;

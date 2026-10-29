@@ -6,7 +6,7 @@
   import AddressView from './AddressView.svelte';
   import StateTables from './StateTables.svelte';
 
-  /** Aktionsmodus, Endgerät: wirksame Adresse, Desktop öffnen, ARP-Tabelle. */
+  /** Simulation, Endgerät: wirksame Adresse, Desktop öffnen, ARP-Tabelle. */
   let { device }: { device: Device } = $props();
 
   const arp = $derived((simStore.tick, simStore.sim?.getDeviceState(device.id).arp ?? []));
