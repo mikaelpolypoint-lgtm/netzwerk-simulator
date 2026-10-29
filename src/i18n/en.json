@@ -1190,5 +1190,26 @@
 
   "admin.menu": "Admin console …",
 
-  "admin.loadFailed": "The overview could not be loaded."
+  "admin.loadFailed": "The overview could not be loaded.",
+
+  "console.bgp.holdExpired": "BGP: neighbour {peer} went silent (hold timer expired)",
+  "console.bgp.down": "BGP: session with {peer} down",
+  "console.bgp.badPeerAs": "BGP: {peer} announces AS {got}, expected AS {expected} – session refused",
+  "console.bgp.established": "BGP: session with {peer} (AS {as}) established",
+  "console.bgp.notification": "BGP: {peer} closed the session: {code}",
+  "console.wlan.connected": "Wi-Fi: connected to «{ssid}»",
+  "console.wlan.associated": "Wi-Fi: client {client} associating (radio slot {port})",
+  "console.ospf.down": "OSPF: neighbour {neighbor} ({ip}) down",
+  "console.ospf.areaMismatch": "OSPF: hello from {neighbor} in area {area}, this interface is area {own} – no adjacency",
+  "console.ospf.helloMismatch": "OSPF: hello from {neighbor} does not match (mask {mask} or timers differ)",
+  "console.ospf.init": "OSPF: neighbour {neighbor} ({ip}) seen (Init)",
+  "console.ospf.full": "OSPF: adjacency with {neighbor} ({ip}) is Full",
+  "console.ppp.lcpOpen": "PPP: link on port {port} negotiated (LCP)",
+  "console.ppp.up": "PPP: line on port {port} up, IP flowing (IPCP)",
+  "console.storm.detected": "Broadcast storm! Frames are looping – enable Spanning Tree or remove a cable",
+  "console.storm.ended": "Broadcast storm over",
+  "console.modem.down": "Modem: access line down",
+  "console.modem.connecting": "Modem: bringing up the line ({standard})",
+  "console.modem.online": "Modem: online via {standard}, {down}/{up} Mbit/s",
+  "console.cgnat.new": "CGNAT: {protocol} {inside} appears on the Internet as {outside}"
 }

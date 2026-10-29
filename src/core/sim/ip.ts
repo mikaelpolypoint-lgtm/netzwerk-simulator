@@ -198,6 +198,14 @@ export class IpNode implements SimNode {
     return device && macOfIface(device, index);
   }
 
+  /** Gratuitous ARP: die eigene Adresse im Netz bekannt machen (z.B. nach dem WLAN-Roaming). */
+  announce() {
+    for (const iface of this.interfaces()) {
+      const ip = formatIp(iface.ip);
+      this.sendFrame(iface.index, { src: iface.mac, dst: BROADCAST_MAC, payload: { kind: 'arp', op: 'request', senderMac: iface.mac, senderIp: ip, targetMac: ZERO_MAC, targetIp: ip } });
+    }
+  }
+
   /** Nachbarn auch ohne ARP bekannt machen, z.B. den DHCP-Server aus seinem Ack. */
   learnNeighbor(ip: string, mac: string, iface: number) {
     this.#learn(ip, mac, iface);

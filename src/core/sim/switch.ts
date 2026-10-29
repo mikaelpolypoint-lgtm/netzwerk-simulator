@@ -2,6 +2,7 @@ import { MODEM_WAN } from '../model/links';
 import { cableAt, getDevice, otherEnd } from '../model/topology';
 import type { ModemKind } from '../model/types';
 import { ACCESS_PROFILES, nextSteps, stepIndex } from './access';
+import { toLink, wlanRun, wlanStepIndex, wlanSteps } from './wlan';
 import { BROADCAST_MAC, STP_MAC, type EthernetFrame, type LinkControl, type StpBpdu } from './frames';
 import type { NodeContext, SimNode } from './simulation';
 
@@ -287,6 +288,9 @@ export class SwitchNode implements SimNode {
     const device = this.#device;
     if (!device) return;
     if (frame.payload.kind === 'stp' && this.#stp) return this.#onBpdu(inPort, frame.payload);
+    // Steuermeldungen der Leitung (802.11-Anmeldung) gehen nie weiter.
+    if (frame.payload.kind === 'link') return this.#onLinkControl(inPort, frame);
+    if (frame.payload.kind === 'ppp') return;
     if (!this.#admit(frame)) return;
 
     const inState = this.#state(inPort);
@@ -314,6 +318,24 @@ export class SwitchNode implements SimNode {
     for (const port of device.interfaces) {
       if (port.index === inPort || !this.#member(port.index, vlan) || this.#state(port.index) !== 'forwarding') continue;
       this.#send(port.index, frame, vlan);
+    }
+  }
+
+  /** Access Point: Anmeldung eines Clients beantworten (Probe, Authentication, Association, 4-Way-Handshake). */
+  #onLinkControl(port: number, frame: EthernetFrame) {
+    const device = this.#device;
+    const control = frame.payload;
+    if (!device || device.type !== 'accesspoint' || !device.wlan || port === 0 || control.kind !== 'link' || control.tech !== 'wlan') return;
+    const reassociation = control.message.startsWith('Reassociation');
+    const steps = wlanSteps(!!device.wlan.password, reassociation, device.wlan.ssid);
+    const index = wlanStepIndex(steps, control, 'sta');
+    if (index < 0) return;
+    if (control.message.endsWith('Request') && control.message.includes('ssociation')) this.ctx.print('wlan.associated', { client: frame.src, port });
+    const mac = device.interfaces[port]?.mac ?? '';
+    let delay = 0;
+    for (const step of wlanRun(steps, index + 1, 'ap')) {
+      delay += 1;
+      this.ctx.schedule(delay, () => this.ctx.transmit(port, { src: mac, dst: frame.src, payload: toLink(step) }));
     }
   }
 

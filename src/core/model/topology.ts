@@ -5,7 +5,7 @@ import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, decodeIface, normalizeRoute } from '../net/routing';
 import { DEFAULT_GROUP_SIZE, DEVICE_SPECS, MAX_GROUP_SIZE, canHostServices, canRouteDynamically, hasRoutingTable, isRackable, isSwitchType, isWifiCapable } from './devices';
-import { portMedium } from './links';
+import { MIN_SIGNAL, portMedium, signalBetween } from './links';
 import { macFor } from './mac';
 import type {
   Cable,
@@ -1559,4 +1559,52 @@ export function vlanColor(t: Topology, vlan: number): TagColor | undefined {
 /** Name eines VLANs aus der Dokumentation (VLAN-Liste oder Bereichstitel). */
 export function vlanLabel(t: Topology, vlan: number): string | undefined {
   return t.vlans?.find((v) => v.id === vlan)?.name ?? t.areas?.find((a) => a.vlan === vlan && a.kind !== 'rack')?.title;
+}
+
+// --- WLAN-Roaming --------------------------------------------------------------
+
+/** Signal muss um so viele Prozentpunkte besser sein, bevor ein Client wechselt (Hysterese, verhindert Hin und Her). */
+export const ROAMING_MARGIN = 10;
+
+export interface RoamingDecision {
+  cable: string;
+  from: string;
+  to: string;
+  iface: number;
+  signal: number;
+}
+
+/**
+ * Würde ein WLAN-Client zu einem anderen Access Point wechseln? Kandidaten
+ * strahlen dieselbe SSID mit demselben Passwort aus, haben einen freien
+ * Funkplatz und ein deutlich besseres Signal als der aktuelle.
+ */
+export function roamingTarget(t: Topology, clientId: string): RoamingDecision | null {
+  const client = getDevice(t, clientId);
+  if (!client?.wifi || !isWifiCapable(client.type)) return null;
+  const cable = cablesOf(t, clientId).find((c) => c.medium === 'wireless');
+  if (!cable) return null;
+  const currentAp = getDevice(t, otherEnd(cable, clientId).device);
+  if (!currentAp || currentAp.type !== 'accesspoint') return null;
+  const current = signalBetween(client, currentAp);
+  let best: RoamingDecision | null = null;
+  for (const ap of t.devices) {
+    if (ap.type !== 'accesspoint' || ap.id === currentAp.id || !ap.wlan) continue;
+    if (ap.wlan.ssid !== client.wifi.ssid || (ap.wlan.password ?? '') !== (client.wifi.password ?? '')) continue;
+    const signal = signalBetween(client, ap);
+    if (signal < MIN_SIGNAL || signal < current + ROAMING_MARGIN) continue;
+    const free = ap.interfaces.find((i) => i.index > 0 && !i.shutdown && !cableAt(t, { device: ap.id, iface: i.index }));
+    if (!free) continue;
+    if (!best || signal > best.signal) best = { cable: cable.id, from: currentAp.id, to: ap.id, iface: free.index, signal };
+  }
+  return best;
+}
+
+/** Funkverbindung des Clients auf den neuen Access Point umhängen. */
+export function applyRoaming(t: Topology, decision: RoamingDecision): Result<Topology> {
+  const cable = getCable(t, decision.cable);
+  if (!cable) return fail('unknownCable');
+  const end: 'a' | 'b' = cable.a.device === decision.from ? 'a' : 'b';
+  if (cableAt(t, { device: decision.to, iface: decision.iface })) return fail('interfaceInUse', { device: decision.to, index: decision.iface });
+  return ok({ ...t, cables: t.cables.map((c) => (c.id === cable.id ? { ...c, [end]: { device: decision.to, iface: decision.iface } } : c)) });
 }

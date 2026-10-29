@@ -1251,5 +1251,26 @@
 
   "admin.menu": "Admin-Konsole …",
 
-  "admin.loadFailed": "Die Übersicht konnte nicht geladen werden."
+  "admin.loadFailed": "Die Übersicht konnte nicht geladen werden.",
+
+  "console.bgp.holdExpired": "BGP: Nachbar {peer} meldet sich nicht mehr (Hold-Timer abgelaufen)",
+  "console.bgp.down": "BGP: Sitzung mit {peer} getrennt",
+  "console.bgp.badPeerAs": "BGP: {peer} meldet AS {got}, erwartet ist AS {expected} – Sitzung abgelehnt",
+  "console.bgp.established": "BGP: Sitzung mit {peer} (AS {as}) steht (Established)",
+  "console.bgp.notification": "BGP: {peer} beendet die Sitzung: {code}",
+  "console.wlan.connected": "WLAN: mit «{ssid}» verbunden",
+  "console.wlan.associated": "WLAN: Client {client} meldet sich an (Funkplatz {port})",
+  "console.ospf.down": "OSPF: Nachbar {neighbor} ({ip}) nicht mehr erreichbar",
+  "console.ospf.areaMismatch": "OSPF: Hello von {neighbor} in Area {area}, hier ist Area {own} – keine Nachbarschaft",
+  "console.ospf.helloMismatch": "OSPF: Hello von {neighbor} passt nicht (Maske {mask} oder Intervalle verschieden)",
+  "console.ospf.init": "OSPF: Nachbar {neighbor} ({ip}) gefunden (Init)",
+  "console.ospf.full": "OSPF: Nachbarschaft mit {neighbor} ({ip}) ist Full",
+  "console.ppp.lcpOpen": "PPP: Verbindung auf Anschluss {port} ausgehandelt (LCP)",
+  "console.ppp.up": "PPP: Leitung auf Anschluss {port} bereit, IP fliesst (IPCP)",
+  "console.storm.detected": "Broadcast-Sturm! Rahmen kreisen in einer Schleife – Spanning Tree aktivieren oder ein Kabel entfernen",
+  "console.storm.ended": "Broadcast-Sturm vorbei",
+  "console.modem.down": "Modem: Zugangsleitung getrennt",
+  "console.modem.connecting": "Modem: Leitung wird aufgebaut ({standard})",
+  "console.modem.online": "Modem: online mit {standard}, {down}/{up} Mbit/s",
+  "console.cgnat.new": "CGNAT: {protocol} {inside} erscheint im Internet als {outside}"
 }

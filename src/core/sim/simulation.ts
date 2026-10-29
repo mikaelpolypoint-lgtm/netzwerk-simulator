@@ -158,7 +158,7 @@ export class Simulation {
   #bootDhcpClients() {
     const order = (d: Device) => (DEVICE_SPECS[d.type].role === 'endpoint' ? 1 : 0);
     for (const device of [...this.#topology.devices].sort((a, b) => order(a) - order(b))) {
-      if (DEVICE_SPECS[device.type].role === 'endpoint' && !device.dhcp) continue;
+      if (DEVICE_SPECS[device.type].role === 'endpoint' && !device.dhcp && !device.wifi) continue;
       this.#node(device.id)?.boot?.();
     }
   }
@@ -278,6 +278,11 @@ export class Simulation {
 
   sshClose(deviceId: string) {
     this.#host(deviceId)?.ssh.close();
+  }
+
+  /** WLAN-Client hat den Access Point gewechselt: neu anmelden (Reassociation) und Gratuitous ARP. */
+  reassociate(deviceId: string) {
+    this.#host(deviceId)?.wlanConnect(true);
   }
 
   /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */
