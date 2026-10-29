@@ -59,6 +59,9 @@ const dirs = {
 
 function ensureDirs() {
   for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // Sicherung, falls der Webserver den Datenordner doch ausliefern würde (falscher Dokumentstamm).
+  const guard = path.join(DATA_DIR, '.htaccess');
+  if (!fs.existsSync(guard)) fs.writeFileSync(guard, 'Require all denied\n', { mode: 0o644 });
 }
 
 function readJson(file) {
