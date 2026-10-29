@@ -7,7 +7,30 @@
     <title>Netzwerk-Simulator</title>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- Bleibt nur stehen, wenn das Programm nicht startet (Skripte blockiert oder Fehler beim Start). -->
+    <div id="app">
+      <div id="boot" style="font: 15px system-ui, sans-serif; max-width: 40rem; margin: 15vh auto; padding: 0 16px; color: #334155">
+        <h1 style="font-size: 20px">Netzwerk-Simulator</h1>
+        <p id="boot-text">Wird geladen … / Loading …</p>
+        <p style="color: #64748b; font-size: 13px">
+          Bleibt diese Seite so, startet das Programm nicht. Häufige Ursachen: ein sehr alter Browser, eine Erweiterung, die Skripte blockiert,
+          oder ein Webserver, der eine eigene Content-Security-Policy ohne <code>script-src 'unsafe-inline'</code> setzt.
+          Details zeigt die Browser-Konsole (F12).
+        </p>
+        <pre id="boot-error" style="white-space: pre-wrap; color: #b91c1c; font-size: 12px"></pre>
+      </div>
+    </div>
+    <script>
+      // Fehler beim Start sichtbar machen statt einer weissen Seite.
+      window.addEventListener('error', function (e) {
+        var box = document.getElementById('boot-error');
+        if (box) box.textContent += (e.message || e.type) + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '') + '\n';
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var box = document.getElementById('boot-error');
+        if (box) box.textContent += String(e.reason && (e.reason.stack || e.reason.message) || e.reason) + '\n';
+      });
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
