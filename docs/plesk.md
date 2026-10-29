@@ -12,8 +12,8 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
 1. **Subdomain anlegen**, z.B. `simulator-test.deine-domain.ch` (Websites & Domains → Subdomain hinzufügen).
 2. **Git hinzufügen**: bei der Subdomain auf **Git** klicken.
    - Repository: **Remote-Git-Hosting**
-   - URL: `https://github.com/mikaelpolypoint-lgtm/netzwerk-simulator.git`
-     (bei einem privaten Repository die SSH-URL `git@github.com:mikaelpolypoint-lgtm/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
+   - URL: `https://github.com/vonam-git/netzwerk-simulator.git`
+     (bei einem privaten Repository die SSH-URL `git@github.com:vonam-git/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
    - Bereitstellungsmodus: **Automatisch**
    - Serverpfad: `/httpdocs`
    - Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
@@ -36,15 +36,21 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
 4. **SSL/TLS** für die Subdomain aktivieren (Let's Encrypt in Plesk) und *Permanente SEO-sichere 301-Weiterleitung von HTTP zu HTTPS* einschalten.
 5. **Zugriffsprotokolle** (Datenschutz): Plesk speichert standardmässig IP-Adressen im Access-Log des Webservers. Unter *Protokolle → Protokollrotation* die Aufbewahrung auf wenige Tage begrenzen oder die Protokollierung für die Subdomain abschalten (siehe [datenschutz.md](datenschutz.md#webserver-protokolle)).
 
-Danach unter der Adresse der Subdomain den Simulator öffnen. Oben rechts erscheint der Session-Code, unter **Einstellungen → Admin-Konsole** die Anmeldung.
+Danach unter der Adresse der Subdomain den Simulator öffnen. Oben rechts erscheint der Session-Code, unter **Werkzeuge → Admin-Konsole** die Anmeldung.
 
 ## Admin-Konsole
 
 - **Klassen**: Klassen-Sessions eröffnen (nur eine Bezeichnung wie «INF22a», keine Namen), den Klassencode verteilen, die Arbeiten der Klasse öffnen und die Klasse schliessen.
 - **Rückmeldungen**: Probleme und Ideen der Lernenden, mit Status *neu / in Arbeit / erledigt*.
-- **Einstellungen**: erlaubte Modi (Entwurf, Aktion, Dokumentation), Pro-Version erlaubt ja/nein, Aufbewahrung von Sessions, Klassen und Rückmeldungen, Rückmeldungen ein/aus.
+- **Einstellungen**:
+  - erlaubte Modi (Entwurf, Simulation)
+  - **Standardprofil** und **höchstes Profil** (1 = 1. Lehrjahr … 5 = Studium) sowie einzelne **gesperrte Funktionen** (siehe [funktionsprofile.md](funktionsprofile.md))
+  - Aufbewahrung von Sessions, Klassen und Rückmeldungen, Rückmeldungen ein/aus
+- **Prüfungen**: Ergebnis der Release-Prüfung (Datenschutz, Sicherheit, Lizenzen) der ausgelieferten Version aus `release/checks.json` (siehe [datenschutz.md](datenschutz.md#prüfung-bei-jedem-release)).
 
-In der lokalen HTML-Datei und in der Desktop-Version gibt es keinen Server; dort ist die Admin-Konsole ausgegraut und alles erlaubt.
+Ältere Einstellungen (Aktions- und Dokumentationsmodus, Pro-Version) werden beim ersten Start automatisch übernommen: «Pro aus» wird zu höchstem Profil 3.
+
+In der lokalen HTML-Datei und in der Desktop-Version gibt es keinen Server; dort ist die Admin-Konsole ausgegraut und alles erlaubt. Lehrpersonen steuern den Funktionsumfang dort mit einer Funktionsdatei.
 
 ## Automatisch aktualisieren nach jedem Push
 

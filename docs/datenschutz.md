@@ -1,6 +1,6 @@
 # Datenschutz
 
-Der Netzwerk-Simulator ist so gebaut, dass er **keine Personendaten** braucht und keine speichert. Dieses Dokument beschreibt, was wo verarbeitet wird, und dient Schulen als Grundlage für ihre eigene Datenschutzerklärung. Der Text im Simulator (**Einstellungen → Datenschutz**) fasst dasselbe für Lernende zusammen.
+Der Netzwerk-Simulator ist so gebaut, dass er **keine Personendaten** braucht und keine speichert. Dieses Dokument beschreibt, was wo verarbeitet wird, und dient Schulen als Grundlage für ihre eigene Datenschutzerklärung. Der Text im Simulator (**Hilfe → Datenschutz**) fasst dasselbe für Lernende zusammen.
 
 > Hinweis: Dies ist eine technische Beschreibung, keine Rechtsberatung. Verantwortlich im Sinne von revDSG und DSGVO ist, wer eine Webversion betreibt (in der Regel die Schule). Bei Unsicherheit die kantonale bzw. schulinterne Datenschutzstelle beiziehen.
 
@@ -17,9 +17,11 @@ Das Konzept folgt dem Schweizer Datenschutzgesetz (revDSG, in Kraft seit 1.9.202
 
 | Was | Wo | Dauer |
 |---|---|---|
-| Aktuelles Projekt (Autosave) | IndexedDB im Browserprofil bzw. im App-Datenordner | bis «Neu» oder Löschen der Browserdaten |
-| Sprache, Darstellung (hell/dunkel), Basis/Pro | `localStorage` | bis Löschen der Browserdaten |
-| Gespeicherte Projekte | `.json`-Datei, die die Person selbst ablegt | liegt in ihrer Hand |
+| Aktuelles Projekt (Autosave) inkl. Snapshots | IndexedDB im Browserprofil bzw. im App-Datenordner | bis «Neues Netz» oder Löschen der Browserdaten |
+| Sprache, Darstellung (hell/dunkel), Funktionsprofil bzw. Funktionsauswahl, Währung, Adressanzeige ein/aus | `localStorage` | bis Löschen der Browserdaten |
+| Gespeicherte Projekte und Funktionsdateien | `.json`-Dateien, die die Person selbst ablegt | liegt in ihrer Hand |
+
+Projektdateien enthalten Geräte, Kabel, Adressen und Konfiguration, auch Webseiten und Bilder, die auf einem simulierten Webserver liegen. Bilder werden beim Hochladen auf höchstens 480 Pixel verkleinert und neu kodiert, dabei gehen Metadaten wie Ort und Kamera verloren (EXIF). Trotzdem gilt: **keine Fotos von Personen hochladen.** Gerätenamen sind frei wählbar; sie sollten neutral sein («PC 1», nicht «PC Anna»).
 
 Es wird nichts übertragen. Die Admin-Konsole, Sessions und Rückmeldungen sind hier ausgegraut.
 
@@ -27,10 +29,10 @@ Es wird nichts übertragen. Die Admin-Konsole, Sessions und Rückmeldungen sind 
 
 ### Sessions
 
-- Inhalt: nur die **Projektdatei** (Geräte, Kabel, IP-Konfiguration, Dokumentationsbereiche, Snapshots) und technische Metadaten (Erstellungs- und Ablaufzeit, optional der Klassencode).
+- Inhalt: nur die **Projektdatei** (Geräte, Kabel, IP-Konfiguration, Dokumentationsbereiche, Snapshots, Inhalte simulierter Webserver) und technische Metadaten (Erstellungs- und Ablaufzeit, optional der Klassencode).
 - Schlüssel: ein **Zufallscode** (z.B. `DHGT-V8SS`, rund 40 Bit Zufall aus `crypto.randomInt`). Wer den Code kennt, kann die Session öffnen; der Code ist keiner Person zugeordnet.
 - Löschung: automatisch nach der eingestellten Zeit ohne Änderung (Standard **24 Stunden**, Admin wählbar 1 Stunde bis 30 Tage) oder sofort mit **Session löschen**.
-- Im Browser wird nur der Code in `localStorage` gemerkt, damit die Session nach einem Neuladen weiterläuft.
+- Im Browser wird nur der Code in `localStorage` gemerkt, damit die Session nach einem Neuladen weiterläuft. Eine neue Session beginnt immer leer.
 
 ### Klassen-Sessions
 
@@ -63,6 +65,18 @@ Vor dem Node.js-Server steht bei Plesk ein Webserver (Apache/Nginx), der **eigen
 - in der Datenschutzerklärung der Schule erwähnen.
 
 Auch ein vorgeschaltetes CDN oder ein Reverse-Proxy kann protokollieren.
+
+## Prüfung bei jedem Release
+
+`npm run release` führt `scripts/release-checks.mjs` aus und bricht bei einem Fehler ab. Das Ergebnis steht in `release/checks.json` und in der Webversion unter **Admin-Konsole → Prüfungen**. Geprüft wird automatisch:
+
+| Bereich | Prüfung |
+|---|---|
+| Datenschutz | keine externen Ressourcen in der HTML-Datei; CSP `connect-src 'none'`; keine Analyse-, Tracking- oder Werbedienste; keine Cookies; Browser-Speicher nur mit technischen Schlüsseln; IP-Adressen nur gesalzen gehasht im Arbeitsspeicher, kein Zugriffsprotokoll; automatische Löschfristen |
+| Sicherheit | Server ohne npm-Pakete; keine Laufzeitabhängigkeiten; `npm audit` der Build-Werkzeuge; Sicherheits-Header (CSP, nosniff, no-referrer, kein Einbetten); kein `eval`; Admin nur mit Passwort, Vergleich in konstanter Zeit |
+| Lizenzen | eingebaute Pakete nur mit freigegebener Lizenz; Lizenztexte eingebettet; eigener Code unter MIT; Lizenzen der Build-Werkzeuge |
+
+Die Prüfung ersetzt keine rechtliche Beurteilung, verhindert aber, dass sich unbemerkt ein Tracker, eine externe Schrift oder eine unpassende Lizenz einschleicht.
 
 ## Ort der Daten
 

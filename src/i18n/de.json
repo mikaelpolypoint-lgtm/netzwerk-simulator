@@ -1018,9 +1018,9 @@
   "privacy.classes": "Klassen-Sessions tragen nur eine Klassenbezeichnung ohne Personenbezug (z.B. «INF22a»). Lehrpersonen sehen Codes und Ergebnisse, aber keine Namen.",
   "privacy.feedback": "Rückmeldungen enthalten nur den eingegebenen Text, die Programmversion und die Sprache; sie werden nach {days} Tagen gelöscht.",
   "privacy.noIp": "IP-Adressen werden weder gespeichert noch protokolliert. Gegen Missbrauch zählt der Server Anfragen kurzzeitig im Arbeitsspeicher, anonymisiert.",
-  "privacy.storage": "Im Browser werden nur technisch notwendige Werte gespeichert (Session-Code, Sprache, Darstellung). Es gibt keine Cookies.",
+  "privacy.storage": "Im Browser werden nur technisch notwendige Werte gespeichert (Session-Code, Sprache, Darstellung, Funktionsprofil, Währung). Es gibt keine Cookies.",
   "privacy.rulesTitle": "Rechtsgrundlage",
-  "privacy.rules": "Das Konzept folgt dem Schweizer Datenschutzgesetz (revDSG) und der EU-Datenschutz-Grundverordnung (DSGVO): Datenvermeidung, Zweckbindung, kurze Aufbewahrung und Datenschutz durch Technikgestaltung. Bitte in Rückmeldungen und Bezeichnungen keine Namen oder andere Personendaten eingeben.",
+  "privacy.rules": "Das Konzept folgt dem Schweizer Datenschutzgesetz (revDSG) und der EU-Datenschutz-Grundverordnung (DSGVO): Datenvermeidung, Zweckbindung, kurze Aufbewahrung und Datenschutz durch Technikgestaltung. Bitte keine Namen oder andere Personendaten eingeben – weder in Rückmeldungen noch in Geräte- und Bereichsnamen – und keine Fotos von Personen auf simulierte Webserver laden. Jedes Release wird automatisch auf Datenschutz, Sicherheit und Lizenzen geprüft.",
   "privacy.rightsTitle": "Verantwortlich und Löschung",
   "privacy.rights": "Verantwortlich für eine Webversion ist die Schule oder Person, die sie betreibt. Sessions lassen sich jederzeit selbst löschen; alles andere löscht der Betreiber auf Anfrage oder automatisch nach Ablauf der Frist.",
   "session.title": "Online-Session",
@@ -1402,7 +1402,7 @@
   "features.fileName": "Titel",
   "features.fileNamePlaceholder": "z.B. INF 1. Lehrjahr",
   "features.lock": "Für Lernende sperren",
-  "features.unlock": "Entsperren",
+  "features.unlock": "Mit Datei entsperren …",
   "features.load": "Datei laden …",
   "features.save": "Datei speichern",
   "features.chipHint": "Funktionsprofil wählen",
@@ -2098,5 +2098,8 @@
   "catalog.ripChain.description": "Drei Router in einer Reihe, aber keine Routen. Schalte auf allen drei RIP ein und trage ihre Netze ein. Beobachte in der Paketliste die RIP-Responses und in der Routingtabelle die Einträge mit «R».",
   "catalog.ripChain.goal1": "R1 kennt das Netz von PC 3 per RIP.",
   "catalog.ripChain.goal2": "PC 1 erreicht PC 3.",
-  "catalog.ripChain.hint1": "Router anklicken → Routing-Protokolle → RIP einschalten → «Eigene Netze eintragen»."
+  "catalog.ripChain.hint1": "Router anklicken → Routing-Protokolle → RIP einschalten → «Eigene Netze eintragen».",
+
+  "features.unlocked": "Auswahl entsperrt.",
+  "features.unlockFailed": "Das ist nicht die Datei, mit der die Auswahl gesperrt wurde."
 }

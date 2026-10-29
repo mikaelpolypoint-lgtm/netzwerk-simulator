@@ -188,9 +188,20 @@ class Ui {
     return file;
   }
 
-  /** Gesperrte Auswahl wieder freigeben (z.B. am Ende des Kurses). */
-  unlock() {
-    this.#store({ ...this.#profile, lock: false });
+  /**
+   * Gesperrte Auswahl wieder freigeben (z.B. am Ende des Kurses). Das geht nur
+   * mit der Datei, die sie gesperrt hat: gleiches Profil, gleiche Abweichungen, gleicher Titel.
+   */
+  unlockWith(text: string): boolean {
+    const file = parseFeatureFile(text);
+    const p = this.#profile;
+    if (!file?.lock) return false;
+    const base = file.base ?? (file.profile === 'custom' ? 2 : file.profile);
+    const same = (a: Record<string, boolean>, b: Record<string, boolean>) =>
+      Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+    if (file.profile !== p.profile || base !== p.base || (file.title ?? undefined) !== p.title || !same(file.features ?? {}, p.features)) return false;
+    this.#store({ ...p, lock: false });
+    return true;
   }
 
   exportFile(options: { lock?: boolean; title?: string } = {}): string {

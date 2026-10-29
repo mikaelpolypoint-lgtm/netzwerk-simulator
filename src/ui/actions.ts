@@ -79,6 +79,14 @@ export async function loadFeatureFile() {
   editor.notify(applied ? t('features.loaded', { title: applied.title ?? file.name }) : t('features.invalidFile'), applied ? 'info' : 'error');
 }
 
+/** Gesperrte Auswahl mit der Datei der Lehrperson freigeben. */
+export async function unlockFeatureFile() {
+  const file = await pickFile('.json,application/json');
+  if (!file) return;
+  const ok = ui.unlockWith(file.text);
+  editor.notify(t(ok ? 'features.unlocked' : 'features.unlockFailed'), ok ? 'info' : 'error');
+}
+
 export function saveFeatureFile(lock = false, title = '') {
   downloadText('funktionen.json', ui.exportFile({ lock, title }));
 }

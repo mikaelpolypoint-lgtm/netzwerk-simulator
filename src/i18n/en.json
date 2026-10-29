@@ -957,9 +957,9 @@
   "privacy.classes": "Class sessions only carry a class label without personal reference (e.g. “INF22a”). Teachers see codes and results, but no names.",
   "privacy.feedback": "Feedback only contains the entered text, the program version and the language; it is deleted after {days} days.",
   "privacy.noIp": "IP addresses are neither stored nor logged. To prevent abuse, the server briefly counts requests in memory, anonymised.",
-  "privacy.storage": "Only technically necessary values are stored in the browser (session code, language, appearance). There are no cookies.",
+  "privacy.storage": "The browser stores only technically necessary values (session code, language, theme, feature profile, currency). There are no cookies.",
   "privacy.rulesTitle": "Legal basis",
-  "privacy.rules": "The concept follows the Swiss Federal Act on Data Protection (revFADP) and the EU General Data Protection Regulation (GDPR): data minimisation, purpose limitation, short retention and privacy by design. Please do not enter names or other personal data in feedback or labels.",
+  "privacy.rules": "The concept follows the Swiss Data Protection Act (revFADP) and the EU GDPR: data minimisation, purpose limitation, short retention and privacy by design. Please do not enter names or other personal data – neither in feedback nor in device or area names – and do not upload photos of people to simulated web servers. Every release is checked automatically for privacy, security and licences.",
   "privacy.rightsTitle": "Controller and deletion",
   "privacy.rights": "The school or person operating a web version is the controller. Sessions can be deleted by yourself at any time; the operator deletes everything else on request or automatically when the period expires.",
   "session.title": "Online session",
@@ -1341,7 +1341,7 @@
   "features.fileName": "Title",
   "features.fileNamePlaceholder": "e.g. IT year 1",
   "features.lock": "Lock for learners",
-  "features.unlock": "Unlock",
+  "features.unlock": "Unlock with file …",
   "features.load": "Load file …",
   "features.save": "Save file",
   "features.chipHint": "Choose feature profile",
@@ -2037,5 +2037,8 @@
   "catalog.ripChain.description": "Three routers in a row but no routes. Enable RIP on all three and add their networks. Watch the RIP responses in the packet list and the «R» entries in the routing table.",
   "catalog.ripChain.goal1": "R1 knows PC 3's network via RIP.",
   "catalog.ripChain.goal2": "PC 1 reaches PC 3.",
-  "catalog.ripChain.hint1": "Click a router → routing protocols → enable RIP → «Add own networks»."
+  "catalog.ripChain.hint1": "Click a router → routing protocols → enable RIP → «Add own networks».",
+
+  "features.unlocked": "Selection unlocked.",
+  "features.unlockFailed": "This is not the file the selection was locked with."
 }
