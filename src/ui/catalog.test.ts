@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  Simulation,
+  addDevice,
   addDnsRecord,
+  addStaticNat,
+  addStaticRoute,
+  setBgp,
+  setEncapsulation,
+  setOspf,
+  setPortSerial,
+  setStp,
+  setVlanDef,
+  type PacketLogEntry,
   configureHost,
   connect,
   evaluateTasks,
@@ -10,6 +21,7 @@ import {
   serializeProject,
   setDhcpServer,
   setInterfaceAddress,
+  setInterfaceNat,
   setInterfaceRelay,
   setPortTrunk,
   setPortVlan,
@@ -31,14 +43,70 @@ function unwrap<T>(r: Result<T>): T {
 }
 
 const byName = (t: Topology, name: string) => t.devices.find((d) => d.name === name)!.id;
-const passed = (t: Topology, id: string) => {
+const passed = (t: Topology, id: string, log: readonly PacketLogEntry[] = []) => {
   const entry = CATALOG.find((e) => e.id === id)!;
   const { tasks } = entry.build();
-  return evaluateTasks(t, tasks, []);
+  return evaluateTasks(t, tasks, log);
+};
+
+/** Mitschnitt einer Simulation, für Aufgaben, die gesendete Pakete prüfen. */
+const LOGS: Record<string, (t: Topology) => readonly PacketLogEntry[]> = {
+  'sniff-arp': (t) => {
+    const sim = new Simulation(t);
+    sim.ping(byName(t, 'PC 1'), '192.168.1.20');
+    sim.runUntil(10_000);
+    return sim.getPacketLog();
+  },
 };
 
 /** Musterlösungen: Jede Aufgabe muss lösbar sein. */
 const SOLUTIONS: Record<string, (t: Topology) => Topology> = {
+  'sniff-arp': (t) => t,
+  'budget-office': (t) => {
+    const added = unwrap(addDevice(t, 'switch', 'Switch', { x: 0, y: 0 }, { ports: 8, sfpSlots: 0 }));
+    t = added.topology;
+    for (const n of ['PC 1', 'PC 2', 'PC 3', 'PC 4']) t = unwrap(connect(t, byName(t, n), added.id)).topology;
+    return t;
+  },
+  'server-group': (t) => {
+    t = unwrap(connect(t, byName(t, 'Schulzimmer'), byName(t, 'Switch'))).topology;
+    return unwrap(setDhcpServer(t, byName(t, 'Server'), { start: '192.168.10.100', end: '192.168.10.199', leaseTime: 3600 }));
+  },
+  'vlan-colors': (t) => {
+    t = unwrap(setVlanDef(t, { id: 10, name: 'Büro', color: 'blue' }));
+    return unwrap(setVlanDef(t, { id: 20, name: 'Labor', color: 'orange' }));
+  },
+  'stp-loop': (t) => {
+    for (const n of ['Switch A', 'Switch B', 'Switch C']) t = unwrap(setStp(t, byName(t, n), true));
+    return t;
+  },
+  'internet-nat': (t) => {
+    const r = byName(t, 'Heimrouter');
+    t = unwrap(setInterfaceNat(t, r, 1, true));
+    return unwrap(addStaticRoute(t, r, { network: '0.0.0.0', mask: '0.0.0.0', gateway: '203.0.113.1' }));
+  },
+  'modem-vdsl': (t) => unwrap(connect(t, byName(t, 'Modem'), byName(t, 'Provider'), 'dsl')).topology,
+  'serial-wan': (t) => {
+    const zh = byName(t, 'R Zürich');
+    const be = byName(t, 'R Bern');
+    for (const [r, ip] of [[zh, '10.0.0.1'], [be, '10.0.0.2']] as const) {
+      t = unwrap(setPortSerial(t, r, 1, true));
+      t = unwrap(setEncapsulation(t, r, 1, 'ppp'));
+      t = unwrap(setInterfaceAddress(t, r, 1, ip, '30'));
+    }
+    t = unwrap(connect(t, zh, be, 'serial')).topology;
+    t = unwrap(addStaticRoute(t, zh, { network: '10.2.0.0', mask: '255.255.255.0', gateway: '10.0.0.2' }));
+    return unwrap(addStaticRoute(t, be, { network: '10.1.0.0', mask: '255.255.255.0', gateway: '10.0.0.1' }));
+  },
+  'ospf-triangle': (t) => {
+    for (const n of ['R1', 'R2', 'R3']) t = unwrap(setOspf(t, byName(t, n), { networks: [{ network: '0.0.0.0', mask: '0.0.0.0', area: 0 }] }));
+    return t;
+  },
+  'static-nat-dmz': (t) => unwrap(addStaticNat(t, byName(t, 'Firmenrouter'), { inside: '192.168.0.80', outside: '203.0.113.5' })),
+  'bgp-two-as': (t) => {
+    t = unwrap(setBgp(t, byName(t, 'R Firma'), { asn: 65001, neighbors: [{ ip: '172.16.12.2', remoteAs: 65002 }], networks: [{ network: '10.1.0.0', mask: '255.255.0.0' }] }));
+    return unwrap(setBgp(t, byName(t, 'R Provider'), { asn: 65002, neighbors: [{ ip: '172.16.12.1', remoteAs: 65001 }], networks: [{ network: '10.2.0.0', mask: '255.255.0.0' }] }));
+  },
   'two-pcs': (t) => {
     t = unwrap(connect(t, byName(t, 'PC 1'), byName(t, 'PC 2'))).topology;
     t = unwrap(configureHost(t, byName(t, 'PC 1'), { ip: '192.168.1.1', mask: '24' }));
@@ -141,8 +209,8 @@ describe('Aufgabenkatalog', () => {
     expect(parsed.ok).toBe(true);
     expect(tasks.difficulty).toBe(entry.stars);
     expect(passed(topology, id).every((r) => r.passed)).toBe(false);
-    const solution = SOLUTIONS[id]!;
-    const results = passed(solution(topology), id);
+    const solved = SOLUTIONS[id]!(topology);
+    const results = passed(solved, id, LOGS[id]?.(solved));
     expect(results.filter((r) => !r.passed)).toEqual([]);
   });
 });
