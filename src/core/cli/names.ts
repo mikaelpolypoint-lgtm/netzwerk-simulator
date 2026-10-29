@@ -12,10 +12,15 @@ export function cliIfaceName(device: Device, id: number): string {
   const ref = decodeIface(id);
   if (ref.kind === 'svi') return `vlan${ref.vlan}`;
   if (ref.kind === 'sub') return `eth${ref.port}.${ref.vlan}`;
+  if (device.interfaces[ref.port]?.serial) return `serial${serialOrdinal(device, ref.port) - 1}`;
   if (!usesPortNames(device)) return `eth${ref.port}`;
   // SFP-Einschübe zählen separat: sfp1, sfp2 …
   if (device.interfaces[ref.port]?.sfpSlot) return `sfp${sfpOrdinal(device, ref.port)}`;
   return `port${ref.port + 1}`;
+}
+
+function serialOrdinal(device: Device, index: number): number {
+  return device.interfaces.slice(0, index + 1).filter((i) => i.serial).length;
 }
 
 function sfpOrdinal(device: Device, index: number): number {
@@ -53,10 +58,15 @@ export function parseIfaceName(device: Device, raw: string): ParsedIface | null 
     const n = port(Number(m[1]) - 1);
     return n === null || device.interfaces[n]?.sfpSlot ? null : { kind: 'port', port: n };
   }
+  const serial = /^(?:serial|se|s)(?:0\/0\/)?(\d+)$/.exec(text);
+  if (serial) {
+    const slot = device.interfaces.filter((i) => i.serial)[Number(serial[1])];
+    return slot ? { kind: 'port', port: slot.index } : null;
+  }
   const m = /^(?:eth|ethernet|e|gi(?:gabitethernet)?0\/|g0\/)(\d+)(?:\.(\d+))?$/.exec(text);
   if (!m) return null;
   const n = port(Number(m[1]));
-  if (n === null) return null;
+  if (n === null || device.interfaces[n]?.serial) return null;
   if (m[2] === undefined) return { kind: 'port', port: n };
   const v = Number(m[2]);
   return device.type === 'router' && v >= 1 && v <= 4094 ? { kind: 'sub', port: n, vlan: v } : null;

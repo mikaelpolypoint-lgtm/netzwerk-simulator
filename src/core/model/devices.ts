@@ -9,11 +9,28 @@ export interface DeviceSpec {
   maxInterfaces: number;
 }
 
-export const DEVICE_TYPES: readonly DeviceType[] = ['notebook', 'pc', 'switch', 'l3switch', 'router', 'accesspoint', 'modem', 'internet'];
+export const DEVICE_TYPES: readonly DeviceType[] = [
+  'notebook',
+  'pc',
+  'server',
+  'clientgroup',
+  'switch',
+  'l3switch',
+  'router',
+  'accesspoint',
+  'modem',
+  'internet',
+];
+
+/** Client-Gruppe: so viele Rechner höchstens (eine /23 reicht dafür). */
+export const MAX_GROUP_SIZE = 500;
+export const DEFAULT_GROUP_SIZE = 20;
 
 export const DEVICE_SPECS: Record<DeviceType, DeviceSpec> = {
   notebook: { role: 'endpoint', defaultInterfaces: 1, minInterfaces: 1, maxInterfaces: 1 },
   pc: { role: 'endpoint', defaultInterfaces: 1, minInterfaces: 1, maxInterfaces: 1 },
+  server: { role: 'endpoint', defaultInterfaces: 1, minInterfaces: 1, maxInterfaces: 1 },
+  clientgroup: { role: 'endpoint', defaultInterfaces: 1, minInterfaces: 1, maxInterfaces: 1 },
   switch: { role: 'distribution', sfpSlots: 2, defaultInterfaces: 8, minInterfaces: 2, maxInterfaces: 24 },
   l3switch: { role: 'distribution', sfpSlots: 4, defaultInterfaces: 8, minInterfaces: 2, maxInterfaces: 48 },
   router: { role: 'routing', sfpSlots: 1, defaultInterfaces: 2, minInterfaces: 2, maxInterfaces: 8 },
@@ -44,5 +61,20 @@ export function hasRoutingTable(type: DeviceType): boolean {
 
 /** Geräte, die in ein Rack eingebaut werden können. */
 export function isRackable(type: DeviceType): boolean {
-  return type === 'switch' || type === 'l3switch' || type === 'router' || type === 'modem';
+  return type === 'switch' || type === 'l3switch' || type === 'router' || type === 'modem' || type === 'server';
+}
+
+/** Endgeräte mit Diensten (DHCP, DNS, Web, Mail): Server, und Rechner als Kompromiss für einfache Netze. */
+export function canHostServices(type: DeviceType): boolean {
+  return type === 'server' || type === 'pc';
+}
+
+/** Endgeräte, die per WLAN verbunden werden können. */
+export function isWifiCapable(type: DeviceType): boolean {
+  return type === 'notebook' || type === 'pc';
+}
+
+/** Geräte mit dynamischem Routing (OSPF, BGP, RIP). */
+export function canRouteDynamically(type: DeviceType): boolean {
+  return type === 'router' || type === 'l3switch' || type === 'internet';
 }

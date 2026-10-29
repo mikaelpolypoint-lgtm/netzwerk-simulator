@@ -88,15 +88,20 @@ export const STATUS_TEXT: Record<number, string> = {
   405: 'Method Not Allowed',
 };
 
-export function buildResponse(status: number, body: string): string {
+/**
+ * Antwort als «Binärtext» (ein Zeichen = ein Byte): Texte werden UTF-8-kodiert,
+ * Bilder in ihren Bytes übertragen; Content-Length zählt Bytes wie bei echtem HTTP.
+ */
+export function buildResponse(status: number, body: string, contentType = 'text/html; charset=utf-8'): string {
+  const bytes = contentType.startsWith('text/') || contentType.includes('svg') ? encodeUtf8(body) : body;
   return [
     `HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? ''}`,
     'Server: Netzwerk-Simulator',
-    'Content-Type: text/html; charset=utf-8',
-    `Content-Length: ${body.length}`,
+    `Content-Type: ${contentType}`,
+    `Content-Length: ${bytes.length}`,
     'Connection: close',
     '',
-    body,
+    bytes,
   ].join(CRLF);
 }
 
@@ -104,7 +109,103 @@ export interface HttpResponse {
   status: number;
   reason: string;
   headers: Record<string, string>;
+  /** Text der Antwort (bei Bildern leer). */
   body: string;
+  /** Bilder: als data:-URL zum Anzeigen. */
+  dataUrl?: string;
+  /** Grösse des Inhalts in Bytes. */
+  size: number;
+}
+
+/** Text → UTF-8 als Binärtext. */
+export function encodeUtf8(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    if (c < 0x80) out += ch;
+    else if (c < 0x800) out += String.fromCharCode(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out += String.fromCharCode(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else out += String.fromCharCode(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+
+/** UTF-8-Binärtext → Text; ungültige Folgen bleiben als einzelne Zeichen stehen. */
+export function decodeUtf8(bytes: string): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes.charCodeAt(i);
+    const need = b >= 0xf0 ? 3 : b >= 0xe0 ? 2 : b >= 0xc0 ? 1 : 0;
+    if (need === 0 || i + need >= bytes.length) {
+      out += String.fromCharCode(b);
+      continue;
+    }
+    let c = b & (0x3f >> need);
+    let valid = true;
+    for (let k = 1; k <= need; k++) {
+      const n = bytes.charCodeAt(i + k);
+      if ((n & 0xc0) !== 0x80) valid = false;
+      c = (c << 6) | (n & 0x3f);
+    }
+    if (!valid) {
+      out += String.fromCharCode(b);
+      continue;
+    }
+    out += String.fromCodePoint(c);
+    i += need;
+  }
+  return out;
+}
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+export function base64ToBinary(base64: string): string {
+  const clean = base64.replace(/[^A-Za-z0-9+/]/g, '');
+  let out = '';
+  for (let i = 0; i < clean.length; i += 4) {
+    const n = [0, 1, 2, 3].map((k) => B64.indexOf(clean[i + k] ?? 'A'));
+    const v = (n[0]! << 18) | (n[1]! << 12) | (n[2]! << 6) | n[3]!;
+    out += String.fromCharCode((v >> 16) & 255);
+    if (clean[i + 2] !== undefined) out += String.fromCharCode((v >> 8) & 255);
+    if (clean[i + 3] !== undefined) out += String.fromCharCode(v & 255);
+  }
+  return out;
+}
+
+export function binaryToBase64(binary: string): string {
+  let out = '';
+  for (let i = 0; i < binary.length; i += 3) {
+    const a = binary.charCodeAt(i);
+    const b = i + 1 < binary.length ? binary.charCodeAt(i + 1) : 0;
+    const c = i + 2 < binary.length ? binary.charCodeAt(i + 2) : 0;
+    const v = (a << 16) | (b << 8) | c;
+    out += B64[(v >> 18) & 63]! + B64[(v >> 12) & 63]! + (i + 1 < binary.length ? B64[(v >> 6) & 63]! : '=') + (i + 2 < binary.length ? B64[v & 63]! : '=');
+  }
+  return out;
+}
+
+const TYPES: Record<string, string> = {
+  html: 'text/html; charset=utf-8',
+  htm: 'text/html; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  txt: 'text/plain; charset=utf-8',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+};
+
+/** Bilder werden als data:-URL gespeichert; alles andere ist Text. */
+export function isImageContent(content: string): boolean {
+  return /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,/.test(content);
+}
+
+export function contentTypeOf(path: string, content: string): string {
+  const fromData = /^data:([^;,]+)/.exec(content)?.[1];
+  if (fromData && isImageContent(content)) return fromData;
+  return TYPES[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'text/html; charset=utf-8';
 }
 
 /** Liefert die Antwort, sobald Kopf und (laut Content-Length) der ganze Inhalt da sind. */
@@ -116,7 +217,17 @@ export function parseResponse(text: string, complete = false): HttpResponse | nu
   const length = h['content-length'] !== undefined ? Number(h['content-length']) : undefined;
   if (length !== undefined && head.body.length < length && !complete) return null;
   if (length === undefined && !complete) return null;
-  return { status: Number(statusText), reason: reason.join(' '), headers: h, body: length === undefined ? head.body : head.body.slice(0, length) };
+  const bytes = length === undefined ? head.body : head.body.slice(0, length);
+  const type = h['content-type'] ?? 'text/html';
+  const image = type.startsWith('image/') && !type.includes('svg');
+  return {
+    status: Number(statusText),
+    reason: reason.join(' '),
+    headers: h,
+    body: image ? '' : decodeUtf8(bytes),
+    size: bytes.length,
+    ...(type.startsWith('image/') ? { dataUrl: `data:${type.split(';')[0]};base64,${binaryToBase64(bytes)}` } : {}),
+  };
 }
 
 /** "/" bedeutet die Startseite "/index.html". */
@@ -130,10 +241,32 @@ export function isValidPath(path: string): boolean {
 }
 
 /** Antwort des Webservers auf eine Anfrage; Fehlerseiten wie bei echten Servern auf Englisch. */
-export function serve(files: readonly WebFile[], request: HttpRequest): { status: number; body: string } {
-  if (request.method !== 'GET') return { status: 405, body: '<h1>405 Method Not Allowed</h1>' };
+export function serve(files: readonly WebFile[], request: HttpRequest): { status: number; body: string; type: string } {
+  const html = 'text/html; charset=utf-8';
+  if (request.method !== 'GET') return { status: 405, body: '<h1>405 Method Not Allowed</h1>', type: html };
   const path = normalizePath(request.path);
   const file = files.find((f) => f.path === path);
-  if (file) return { status: 200, body: file.content };
-  return { status: 404, body: `<h1>404 Not Found</h1><p>The requested URL ${path} was not found on this server.</p>` };
+  if (file) {
+    const type = contentTypeOf(file.path, file.content);
+    // Bilder: Bytes aus der data:-URL (SVG ist Text und wird UTF-8-kodiert).
+    if (isImageContent(file.content)) {
+      const binary = base64ToBinary(file.content.slice(file.content.indexOf(',') + 1));
+      return { status: 200, body: type.includes('svg') ? decodeUtf8(binary) : binary, type };
+    }
+    return { status: 200, body: file.content, type };
+  }
+  return { status: 404, body: `<h1>404 Not Found</h1><p>The requested URL ${path} was not found on this server.</p>`, type: html };
+}
+
+/** Bilder, die eine Seite einbindet (<img src="…">), als Pfade auf demselben Server. */
+export function imagePaths(html: string, base: string): string[] {
+  const paths = new Set<string>();
+  for (const m of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+    const src = m[1]!;
+    if (/^[a-z]+:/i.test(src) || src.startsWith('//')) continue;
+    const dir = base.slice(0, base.lastIndexOf('/') + 1) || '/';
+    const path = src.startsWith('/') ? src : `${dir}${src}`;
+    if (isValidPath(path)) paths.add(path);
+  }
+  return [...paths].slice(0, 4);
 }

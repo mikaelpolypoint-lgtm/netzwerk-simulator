@@ -1,7 +1,9 @@
 import { DEVICE_SPECS, isDeviceType } from '../model/devices';
 import { maskToText, parseIp, parseMask } from '../net/ipv4';
 import { MAC_PATTERN } from '../model/mac';
-import { MAX_NAME_LENGTH, deviceSeq, findSwitchLoop } from '../model/topology';
+import { MAX_NAME_LENGTH, MAX_WEB_FILE, deviceSeq } from '../model/topology';
+import { MAX_GROUP_SIZE } from '../model/devices';
+import { checkBgp, checkOspf, checkRip, normalizeBgp, normalizeOspf, normalizeRip } from '../net/dynamic';
 import { logicalInterfaces } from '../net/routing';
 import type {
   Cable,
@@ -19,8 +21,13 @@ import type {
   TagColor,
   Topology,
   WebFile,
+  Medium,
+  ModemKind,
+  RedistributeSource,
+  RoutedNetwork,
+  VlanDef,
 } from '../model/types';
-import { SFP_MODULES } from '../model/types';
+import { MEDIA, MODEM_KINDS, SFP_MODULES } from '../model/types';
 import { isValidName, normalizeName } from '../net/dns';
 import { isValidPath } from '../net/http';
 import { checkMailAccount } from '../net/mail';
@@ -107,12 +114,7 @@ export function parseProject(text: string): ParseResult {
     if (e instanceof Invalid) return failure('invalidStructure', { path: e.path });
     throw e;
   }
-  // Eine Schleife zwischen Switches würde die Simulation mit einem Broadcast-Sturm lahmlegen.
-  const loop = findSwitchLoop(topology);
-  if (loop) {
-    const name = (id: string) => topology.devices.find((d) => d.id === id)?.name ?? id;
-    return failure('switchLoop', { a: name(loop.a.device), b: name(loop.b.device) });
-  }
+  // Schleifen zwischen Switches ohne Spanning Tree sind erlaubt: Die Simulation zeigt dann den Broadcast-Sturm.
   return { ok: true, topology, ...(tasks ? { tasks } : {}), ...(snapshots?.length ? { snapshots } : {}) };
 }
 
@@ -240,8 +242,8 @@ function readTopology(v: unknown): Topology {
       if (loss > 0) cable.loss = loss;
     }
     if (o.medium !== undefined) {
-      if (o.medium !== 'tp' && o.medium !== 'fiber' && o.medium !== 'wireless') throw new Invalid(`${path}.medium`);
-      if (o.medium !== 'tp') cable.medium = o.medium;
+      if (!(MEDIA as readonly unknown[]).includes(o.medium)) throw new Invalid(`${path}.medium`);
+      if (o.medium !== 'tp') cable.medium = o.medium as Medium;
     }
     return cable;
   });
@@ -269,11 +271,22 @@ function readTopology(v: unknown): Topology {
     if (o.vlan !== undefined) area.vlan = vlanNumber(o.vlan, `${path}.vlan`);
     if (o.note !== undefined) area.note = text(o.note, `${path}.note`, 2000);
     if (o.floor !== undefined) area.floor = int(o.floor, `${path}.floor`);
+    if (o.public !== undefined && bool(o.public, `${path}.public`)) area.public = true;
     return area;
   });
   const floors = t.floors === undefined ? [] : arr(t.floors, 'topology.floors').map((raw, i): Floor => ({
     name: text(obj(raw, `topology.floors[${i}]`).name, `topology.floors[${i}].name`, 40),
   }));
+
+  const vlanIds = new Set<number>();
+  const vlans = t.vlans === undefined ? [] : arr(t.vlans, 'topology.vlans').map((raw, i): VlanDef => {
+    const path = `topology.vlans[${i}]`;
+    const o = obj(raw, path);
+    const id = vlanNumber(o.id, `${path}.id`);
+    if (vlanIds.has(id)) throw new Invalid(`${path}.id`);
+    vlanIds.add(id);
+    return { id, color: color(o.color, `${path}.color`), ...(o.name !== undefined ? { name: text(o.name, `${path}.name`, 32) } : {}) };
+  });
 
   const highest = Math.max(0, ...devices.map((d) => deviceSeq(d.id)), ...cables.map((c) => deviceSeq(c.id)));
   // Geräte verweisen nur auf vorhandene Racks.
@@ -282,7 +295,14 @@ function readTopology(v: unknown): Topology {
   }
   const highestAll = Math.max(highest, ...areas.map((a) => deviceSeq(a.id)));
   const nextId = typeof t.nextId === 'number' && Number.isInteger(t.nextId) && t.nextId > highestAll ? t.nextId : highestAll + 1;
-  return { devices, cables, nextId, ...(areas.length ? { areas } : {}), ...(floors.length ? { floors } : {}) };
+  return {
+    devices,
+    cables,
+    nextId,
+    ...(areas.length ? { areas } : {}),
+    ...(floors.length ? { floors } : {}),
+    ...(vlans.length ? { vlans: vlans.sort((a, b) => a.id - b.id) } : {}),
+  };
 }
 
 function readDevice(v: unknown, path: string): Device {
@@ -338,6 +358,23 @@ function readDevice(v: unknown, path: string): Device {
     if (io.sfp !== undefined) {
       if (!iface.sfpSlot || !(SFP_MODULES as readonly unknown[]).includes(io.sfp)) throw new Invalid(`${p}.sfp`);
       iface.sfp = io.sfp as SfpModule;
+    }
+    if (io.serial !== undefined && bool(io.serial, `${p}.serial`)) {
+      if (type !== 'router' || iface.sfpSlot) throw new Invalid(`${p}.serial`);
+      iface.serial = true;
+    }
+    if (io.encapsulation !== undefined) {
+      if (!iface.serial || (io.encapsulation !== 'hdlc' && io.encapsulation !== 'ppp')) throw new Invalid(`${p}.encapsulation`);
+      if (io.encapsulation === 'ppp') iface.encapsulation = 'ppp';
+    }
+    if (io.ospfCost !== undefined) {
+      const cost = int(io.ospfCost, `${p}.ospfCost`);
+      if (cost < 1 || cost > 65535) throw new Invalid(`${p}.ospfCost`);
+      if (cost !== 10) iface.ospfCost = cost;
+    }
+    if (io.cgnat !== undefined && bool(io.cgnat, `${p}.cgnat`)) {
+      if (type !== 'internet') throw new Invalid(`${p}.cgnat`);
+      iface.cgnat = true;
     }
     return iface;
   });
@@ -401,7 +438,7 @@ function readDevice(v: unknown, path: string): Device {
       const f = obj(raw, fp);
       const filePath = str(f.path, `${fp}.path`);
       if (!isValidPath(filePath)) throw new Invalid(`${fp}.path`);
-      return { path: filePath, content: str(f.content, `${fp}.content`) };
+      return { path: filePath, content: text(f.content, `${fp}.content`, MAX_WEB_FILE) };
     });
     device.webServer = { files };
   }
@@ -548,6 +585,77 @@ function readDevice(v: unknown, path: string): Device {
     if (!/^a\d+$/.test(rack)) throw new Invalid(`${path}.rack`);
     device.rack = rack;
   }
+  if (o.groupSize !== undefined) {
+    const size = int(o.groupSize, `${path}.groupSize`);
+    if (type !== 'clientgroup' || size < 2 || size > MAX_GROUP_SIZE) throw new Invalid(`${path}.groupSize`);
+    device.groupSize = size;
+  }
+  if (type === 'clientgroup') {
+    device.dhcp = true;
+    device.groupSize ??= 20;
+  }
+  if (o.modem !== undefined) {
+    const m = obj(o.modem, `${path}.modem`);
+    if (type !== 'modem' || !(MODEM_KINDS as readonly unknown[]).includes(m.kind)) throw new Invalid(`${path}.modem`);
+    device.modem = { kind: m.kind as ModemKind };
+  }
+  if (o.variant !== undefined) {
+    const variant = text(o.variant, `${path}.variant`, 24);
+    if (!/^[a-z0-9-]+$/.test(variant)) throw new Invalid(`${path}.variant`);
+    device.variant = variant;
+  }
+  if (o.staticNat !== undefined) {
+    if (type !== 'router') throw new Invalid(`${path}.staticNat`);
+    device.staticNat = arr(o.staticNat, `${path}.staticNat`).map((raw, i) => {
+      const r = obj(raw, `${path}.staticNat[${i}]`);
+      return { inside: ip(r.inside, `${path}.staticNat[${i}].inside`), outside: ip(r.outside, `${path}.staticNat[${i}].outside`) };
+    });
+  }
+  if (o.cgnatAddress !== undefined) {
+    if (type !== 'internet') throw new Invalid(`${path}.cgnatAddress`);
+    device.cgnatAddress = ip(o.cgnatAddress, `${path}.cgnatAddress`);
+  }
+  if (o.ospf !== undefined) {
+    const p = `${path}.ospf`;
+    const c = obj(o.ospf, p);
+    const config = {
+      ...(c.routerId !== undefined ? { routerId: ip(c.routerId, `${p}.routerId`) } : {}),
+      networks: arr(c.networks, `${p}.networks`).map((raw, i) => ({ ...readNetwork(raw, `${p}.networks[${i}]`), area: int(obj(raw, `${p}.networks[${i}]`).area, `${p}.networks[${i}].area`) })),
+      ...(c.passive !== undefined ? { passive: arr(c.passive, `${p}.passive`).map((v, i) => int(v, `${p}.passive[${i}]`)) } : {}),
+      ...(c.defaultOriginate !== undefined && bool(c.defaultOriginate, `${p}.defaultOriginate`) ? { defaultOriginate: true } : {}),
+      ...(c.redistribute !== undefined ? { redistribute: readRedistribute(c.redistribute, `${p}.redistribute`) } : {}),
+    };
+    if (checkOspf(config)) throw new Invalid(p);
+    device.ospf = normalizeOspf(config);
+  }
+  if (o.bgp !== undefined) {
+    const p = `${path}.bgp`;
+    const c = obj(o.bgp, p);
+    const config = {
+      asn: int(c.asn, `${p}.asn`),
+      ...(c.routerId !== undefined ? { routerId: ip(c.routerId, `${p}.routerId`) } : {}),
+      neighbors: arr(c.neighbors, `${p}.neighbors`).map((raw, i) => {
+        const n = obj(raw, `${p}.neighbors[${i}]`);
+        return { ip: ip(n.ip, `${p}.neighbors[${i}].ip`), remoteAs: int(n.remoteAs, `${p}.neighbors[${i}].remoteAs`) };
+      }),
+      networks: arr(c.networks, `${p}.networks`).map((raw, i) => readNetwork(raw, `${p}.networks[${i}]`)),
+      ...(c.redistribute !== undefined ? { redistribute: readRedistribute(c.redistribute, `${p}.redistribute`) } : {}),
+    };
+    if (checkBgp(config)) throw new Invalid(p);
+    device.bgp = normalizeBgp(config);
+  }
+  if (o.rip !== undefined) {
+    const p = `${path}.rip`;
+    const c = obj(o.rip, p);
+    const config = {
+      networks: arr(c.networks, `${p}.networks`).map((raw, i) => readNetwork(raw, `${p}.networks[${i}]`)),
+      ...(c.passive !== undefined ? { passive: arr(c.passive, `${p}.passive`).map((v, i) => int(v, `${p}.passive[${i}]`)) } : {}),
+      ...(c.defaultOriginate !== undefined && bool(c.defaultOriginate, `${p}.defaultOriginate`) ? { defaultOriginate: true } : {}),
+      ...(c.redistribute !== undefined ? { redistribute: readRedistribute(c.redistribute, `${p}.redistribute`) } : {}),
+    };
+    if (checkRip(config)) throw new Invalid(p);
+    device.rip = normalizeRip(config);
+  }
   // Routen dürfen auch auf Subinterfaces und SVIs zeigen.
   if (device.routes) {
     const valid = logicalInterfaces(device);
@@ -556,6 +664,20 @@ function readDevice(v: unknown, path: string): Device {
     });
   }
   return device;
+}
+
+function readNetwork(v: unknown, path: string): RoutedNetwork {
+  const o = obj(v, path);
+  const prefix = parseMask(str(o.mask, `${path}.mask`));
+  if (prefix === null) throw new Invalid(`${path}.mask`);
+  return { network: ip(o.network, `${path}.network`), mask: maskToText(prefix) };
+}
+
+function readRedistribute(v: unknown, path: string): RedistributeSource[] {
+  return arr(v, path).map((raw, i) => {
+    if (raw !== 'connected' && raw !== 'static' && raw !== 'ospf' && raw !== 'bgp' && raw !== 'rip') throw new Invalid(`${path}[${i}]`);
+    return raw;
+  });
 }
 
 function readAddress(o: Record<string, unknown>, path: string): { ip?: string; mask?: string; dhcpRelay?: string } {

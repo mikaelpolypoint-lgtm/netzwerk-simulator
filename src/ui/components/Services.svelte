@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Device } from '../../core';
   import { t } from '../../i18n';
+  import { ui } from '../state/ui.svelte';
   import DhcpServerForm from './DhcpServerForm.svelte';
   import DnsServerForm from './DnsServerForm.svelte';
   import MailServerForm from './MailServerForm.svelte';
@@ -9,17 +10,19 @@
   /** Entwurfsmodus, Rechner: Server-Dienste, jeweils aufklappbar. */
   let { device }: { device: Device } = $props();
 
-  const services = $derived([
-    { key: 'dhcp', active: !!device.dhcpServer },
-    { key: 'dns', active: !!device.dnsServer },
-    { key: 'web', active: !!device.webServer },
-    { key: 'mail', active: !!device.mailServer },
-  ]);
+  const services = $derived(
+    [
+      { key: 'dhcp', active: !!device.dhcpServer },
+      { key: 'dns', active: !!device.dnsServer },
+      { key: 'web', active: !!device.webServer },
+      { key: 'mail', active: !!device.mailServer },
+    ].filter((s) => s.active || ui.has(`service.${s.key}`)),
+  );
 </script>
 
-<h3>{t('services.title')}</h3>
+{#if services.length}<h3>{t('services.title')}</h3>{/if}
 {#each services as service (service.key)}
-  <details open={service.active}>
+  <details open={service.active} data-help={service.key === 'dhcp' ? 'dhcp' : service.key === 'dns' ? 'dns' : service.key === 'web' ? 'web' : 'mail'}>
     <summary>
       {t(`services.${service.key}`)}
       <span class="badge" class:on={service.active}>{t(service.active ? 'services.on' : 'services.off')}</span>

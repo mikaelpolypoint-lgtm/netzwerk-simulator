@@ -7,7 +7,7 @@
   /** Dokumentationsmodus: Titel, Farbe, Netz (mit berechneten Infos), VLAN und Notiz eines Bereichs. */
   let { area }: { area: DocArea } = $props();
 
-  const canEdit = $derived(editor.documenting || editor.editable);
+  const canEdit = $derived(editor.editable);
   const info = $derived(area.network ? networkInfo(area.network) : null);
   const floors = $derived(floorsOf(editor.topology));
 

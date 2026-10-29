@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { serializeProject } from '../../core';
+  import { emptyTopology, serializeProject } from '../../core';
   import { locale, t } from '../../i18n';
   import { editor } from '../state/editor.svelte';
   import { session, ApiError } from '../state/session.svelte';
-  import { usesProFeatures, ui } from '../state/ui.svelte';
+  import { ensureProjectFeatures } from '../actions';
   import Modal from './Modal.svelte';
 
   /**
@@ -43,7 +43,7 @@
     run(async () => {
       const loaded = await session.open(resumeCode);
       editor.replace(loaded.topology, { undoable: true, tasks: loaded.tasks ?? null, snapshots: loaded.snapshots ?? [] });
-      if (usesProFeatures(loaded.topology) && ui.policy.pro) ui.setLevel('pro');
+      ensureProjectFeatures();
       resumeCode = '';
       return t('session.resumed', { code: session.code ?? '' });
     });
@@ -57,7 +57,9 @@
 
   const fresh = () =>
     run(async () => {
+      // Neue Session: Es beginnt leer (der alte Stand bleibt unter dem alten Code erreichbar).
       session.detach();
+      editor.replace(emptyTopology(), { undoable: false, tasks: null, snapshots: [] });
       const code = await session.create(project(), null);
       return t('session.created', { code });
     });

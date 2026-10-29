@@ -1,5 +1,5 @@
 import { cableAt, getDevice } from './topology';
-import type { Cable, Device, Endpoint, Medium, Topology } from './types';
+import type { Cable, Device, Endpoint, Medium, ModemKind, Topology } from './types';
 
 /**
  * Zustand einer Verbindung, wie ihn die LEDs an echten Geräten zeigen:
@@ -16,7 +16,9 @@ export type LinkDownReason =
   | 'wirelessUnsupported'
   | 'noSfp'
   | 'sfpMismatch'
-  | 'wrongPort';
+  | 'wrongPort'
+  | 'encapsulationMismatch'
+  | 'wrongMedium';
 
 export interface LinkStatus {
   up: boolean;
@@ -43,6 +45,30 @@ export function isRadioPort(device: Device, iface: number): boolean {
 export function canUseWifi(device: Device): boolean {
   return device.type === 'notebook' || device.type === 'pc';
 }
+
+/** Medium des WAN-Anschlusses je Zugangstechnik. */
+export const WAN_MEDIUM: Record<ModemKind, Medium> = { cable: 'coax', fiber: 'fiber', mobile: 'cellular', adsl: 'dsl', vdsl: 'dsl' };
+
+/** Anschluss 1 eines Modems ist die WAN-Seite (zum Provider), Anschluss 0 die LAN-Buchse. */
+export const MODEM_WAN = 1;
+
+export function isModemWan(device: Device, iface: number): boolean {
+  return device.type === 'modem' && iface === MODEM_WAN;
+}
+
+/** Medium, das an diesem Anschluss passt (null = beliebig/mehrere). */
+export function portMedium(device: Device, iface: number): Medium | null {
+  const port = device.interfaces[iface];
+  if (!port) return null;
+  if (port.serial) return 'serial';
+  if (port.sfpSlot) return 'fiber';
+  if (device.type === 'accesspoint') return iface === 0 ? 'tp' : 'wireless';
+  if (device.type === 'modem' && device.modem) return iface === MODEM_WAN ? WAN_MEDIUM[device.modem.kind] : 'tp';
+  return null;
+}
+
+/** Provider-Seite: Das Internet nimmt jedes Zugangsmedium an (DSLAM, CMTS, OLT, Mobilfunkmast sind darin enthalten). */
+const isProvider = (device: Device) => device.type === 'internet';
 
 export function signalBetween(a: Device, b: Device): number {
   const dx = a.position.x - b.position.x;
@@ -84,6 +110,32 @@ export function linkStatus(t: Topology, cable: Cable): LinkStatus {
   const ib = b.interfaces[cable.b.iface];
   if (ia?.shutdown || ib?.shutdown) return { up: false, reason: 'shutdown' };
   const medium = mediumOf(cable);
+  // Feste Anschlüsse (Modem-WAN, serielle Ports) verlangen ihr Medium.
+  for (const [device, iface] of [[a, cable.a.iface], [b, cable.b.iface]] as const) {
+    const fixed = portMedium(device, iface);
+    if (fixed && fixed !== medium) return { up: false, reason: fixed === 'fiber' || medium === 'fiber' ? 'wrongPort' : 'wrongMedium' };
+  }
+  if (medium === 'serial') {
+    if (!ia?.serial || !ib?.serial) return { up: false, reason: 'wrongPort' };
+    if ((ia.encapsulation ?? 'hdlc') !== (ib.encapsulation ?? 'hdlc')) return { up: false, reason: 'encapsulationMismatch' };
+    return { up: true };
+  }
+  if (medium === 'coax' || medium === 'dsl' || medium === 'cellular') {
+    // Zugangsleitungen verbinden ein Modem passender Technik mit dem Provider.
+    const modem = a.type === 'modem' ? a : b.type === 'modem' ? b : null;
+    const other = modem === a ? b : a;
+    if (!modem || !isProvider(other)) return { up: false, reason: 'wrongMedium' };
+    return { up: true };
+  }
+  if (medium === 'fiber' && (isProvider(a) || isProvider(b))) {
+    // Glasfaser zum Provider: Das ONT-Modem hat einen festen PON-Anschluss, Router brauchen ein SFP-Modul.
+    const customer = isProvider(a) ? b : a;
+    const port = isProvider(a) ? ib : ia;
+    if (isModemWan(customer, isProvider(a) ? cable.b.iface : cable.a.iface)) return { up: true };
+    if (!port?.sfpSlot) return { up: false, reason: 'wrongPort' };
+    if (!port.sfp) return { up: false, reason: 'noSfp' };
+    return { up: true };
+  }
   if (medium === 'fiber') {
     // Glasfaser: beide Enden im SFP-Einschub, mit Modul, und zwar demselben Typ.
     if (!ia?.sfpSlot || !ib?.sfpSlot) return { up: false, reason: 'wrongPort' };

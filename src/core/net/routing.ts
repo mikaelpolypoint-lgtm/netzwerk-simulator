@@ -65,7 +65,7 @@ export function relayOf(device: Device, id: number): string | undefined {
   return device.svis?.find((s) => s.vlan === ref.vlan)?.dhcpRelay;
 }
 
-export type RouteKind = 'connected' | 'static' | 'default';
+export type RouteKind = 'connected' | 'static' | 'default' | 'ospf' | 'rip' | 'bgp';
 
 export interface Route {
   network: number;
@@ -74,7 +74,14 @@ export interface Route {
   /** Nächster Router; null = Ziel liegt im direkt angeschlossenen Netz. */
   via: number | null;
   kind: RouteKind;
+  /** Metrik des Protokolls (OSPF-Kosten, RIP-Hops, BGP-Pfadlänge). */
+  metric?: number;
+  /** Administrative Distanz: Bei gleichem Präfix gewinnt die kleinere (wie bei FRRouting). */
+  distance?: number;
 }
+
+/** Administrative Distanzen wie bei FRRouting/Cisco. */
+export const ADMIN_DISTANCE = { connected: 0, static: 1, ebgp: 20, ospf: 110, rip: 120, ibgp: 200 } as const;
 
 /** Alle Anschlüsse eines Geräts mit gültiger IP-Konfiguration. */
 export function interfaceAddresses(device: Device): IfaceAddress[] {
@@ -93,12 +100,12 @@ export function interfaceAddresses(device: Device): IfaceAddress[] {
   ];
 }
 
-/** Längster Präfix gewinnt; bei Gleichstand die zuerst eingetragene Route. */
+/** Längster Präfix gewinnt; bei Gleichstand die kleinere administrative Distanz, dann die zuerst eingetragene. */
 export function lookupRoute(routes: readonly Route[], dst: number): Route | undefined {
   let best: Route | undefined;
   for (const route of routes) {
     if (networkOf(dst, route.prefix) !== route.network) continue;
-    if (!best || route.prefix > best.prefix) best = route;
+    if (!best || route.prefix > best.prefix || (route.prefix === best.prefix && (route.distance ?? 0) < (best.distance ?? 0))) best = route;
   }
   return best;
 }
@@ -140,7 +147,7 @@ export function buildRoutes(device: Device): { routes: Route[]; unusable: number
     const iface = gateway !== null ? (r.iface ?? lookupRoute(connected, gateway)?.iface) : r.iface;
     const ifaceOk = iface !== undefined && connected.some((c) => c.iface === iface);
     if (!ifaceOk) return void unusable.push(n);
-    routes.push({ network: networkOf(network, prefix), prefix, iface, via: gateway, kind: 'static' });
+    routes.push({ network: networkOf(network, prefix), prefix, iface, via: gateway, kind: 'static', distance: ADMIN_DISTANCE.static });
   });
   return { routes, unusable };
 }

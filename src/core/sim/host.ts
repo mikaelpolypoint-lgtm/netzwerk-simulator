@@ -1,4 +1,6 @@
-import { deviceSeq } from '../model/topology';
+import { cableAt, deviceSeq, getDevice, otherEnd } from '../model/topology';
+import { toLink, wlanRun, wlanStepIndex, wlanSteps, type WlanStep } from './wlan';
+import type { EthernetFrame } from './frames';
 import type { Device } from '../model/types';
 import { formatIp, parseIp } from '../net/ipv4';
 import { lookupRoute } from '../net/routing';
@@ -44,6 +46,12 @@ export interface HostState {
 }
 
 type Command = 'ping' | 'tracert';
+
+interface WlanSession {
+  steps: WlanStep[];
+  done: boolean;
+  onDone: () => void;
+}
 
 /** Endgerät: IP-Stack plus Anwendungen und Dienste. */
 export class HostNode extends IpNode {
@@ -109,6 +117,7 @@ export class HostNode extends IpNode {
       else if (datagram.srcPort === DNS_PORT) this.resolver.onResponse(msg);
       return;
     }
+    if (msg.kind !== 'dhcp') return;
     if (datagram.dstPort === DHCP_CLIENT_PORT) {
       this.dhcpClient.onMessage(msg);
       // Den Server kennen wir aus seinem Ack; Erneuern und Freigeben brauchen so kein ARP.
@@ -121,6 +130,75 @@ export class HostNode extends IpNode {
 
   protected override onTcp(packet: Ipv4Packet, segment: TcpSegment) {
     this.tcp.receive(packet.src, packet.dst, segment);
+  }
+
+  #wlan: WlanSession | null = null;
+
+  boot() {
+    if (this.#wirelessPeer() && !this.#wlan) this.wlanConnect(false, () => this.ensureDhcp());
+    else this.ensureDhcp();
+  }
+
+  /** Access Point und dessen Funkplatz, falls das Gerät per WLAN verbunden ist. */
+  #wirelessPeer(): { mac: string } | null {
+    const device = this.ctx.device();
+    if (!device?.wifi) return null;
+    const topology = this.ctx.topology();
+    const cable = cableAt(topology, { device: device.id, iface: 0 });
+    if (!cable || cable.medium !== 'wireless' || !this.ctx.isConnected(0)) return null;
+    const end = otherEnd(cable, device.id);
+    const mac = getDevice(topology, end.device)?.interfaces[end.iface]?.mac;
+    return mac ? { mac } : null;
+  }
+
+  /**
+   * Beim Access Point anmelden (802.11 + WPA2-Handshake). `reassociation` beim
+   * Roaming; danach meldet sich der Client mit einem Gratuitous ARP, damit die
+   * Switches seinen neuen Weg lernen.
+   */
+  wlanConnect(reassociation: boolean, onDone: () => void = () => this.announce()) {
+    const device = this.ctx.device();
+    if (!device?.wifi || !this.#wirelessPeer()) return;
+    const steps = wlanSteps(!!device.wifi.password, reassociation, device.wifi.ssid);
+    this.#wlan = { steps, done: false, onDone };
+    this.#wlanSend(0);
+  }
+
+  #wlanSend(index: number) {
+    const wlan = this.#wlan;
+    const peer = this.#wirelessPeer();
+    if (!wlan || !peer) return;
+    const run = wlanRun(wlan.steps, index, 'sta');
+    let delay = 0;
+    run.forEach((step, i) => {
+      delay += 1;
+      this.ctx.schedule(delay, () => {
+        if (this.#wlan !== wlan) return;
+        this.ctx.transmit(0, { src: this.macOf(0) ?? '', dst: peer.mac, payload: toLink(step) });
+        if (index + i === wlan.steps.length - 1) this.#wlanDone(wlan);
+      });
+    });
+  }
+
+  #wlanDone(wlan: WlanSession) {
+    if (wlan.done) return;
+    wlan.done = true;
+    this.ctx.print('wlan.connected', { ssid: this.ctx.device()?.wifi?.ssid ?? '' });
+    wlan.onDone();
+  }
+
+  override receive(port: number, frame: EthernetFrame) {
+    const control = frame.payload;
+    if (control.kind === 'link') {
+      const wlan = this.#wlan;
+      if (!wlan || control.tech !== 'wlan') return;
+      const index = wlanStepIndex(wlan.steps, control, 'ap');
+      if (index < 0) return;
+      if (index === wlan.steps.length - 1) this.#wlanDone(wlan);
+      else this.#wlanSend(index + 1);
+      return;
+    }
+    super.receive(port, frame);
   }
 
   /** Beim Start der Simulation: DHCP-Clients beziehen ihre Adresse. */

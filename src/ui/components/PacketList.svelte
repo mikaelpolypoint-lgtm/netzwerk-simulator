@@ -1,9 +1,11 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { t } from '../../i18n';
-  import { protocolOf, toRow } from '../packets';
+  import { exportPcap } from '../actions';
+  import { parseFilter, protocolOf, toRow } from '../packets';
   import { editor } from '../state/editor.svelte';
   import { simStore } from '../state/sim.svelte';
+  import { ui } from '../state/ui.svelte';
   import PacketDetails from './PacketDetails.svelte';
 
   /**
@@ -14,6 +16,10 @@
   const OVERSCAN = 10;
 
   let protocol = $state('');
+  let expression = $state('');
+  /** Schnellfilter: ein Klick setzt einen typischen Ausdruck. */
+  const CHIPS = ['arp', 'dhcp', 'dns', 'icmp', 'http', 'tcp', 'stp', 'broadcast', 'not arp and not stp', 'lost'];
+  const parsedFilter = $derived(parseFilter(expression));
   let device = $state('');
   let direction = $state<'' | 'sent' | 'received'>('');
   let scroller: HTMLDivElement;
@@ -28,6 +34,7 @@
   const selected = $derived(selectedId === null ? undefined : log.find((e) => e.id === selectedId));
   const filtered = $derived(
     log.filter((entry) => {
+      if (parsedFilter.ok && parsedFilter.test && !parsedFilter.test(entry, editor.topology)) return false;
       if (protocol && protocolOf(entry.frame) !== protocol) return false;
       if (!device) return true;
       if (direction === 'sent') return entry.from.device === device;
@@ -81,8 +88,31 @@
         <option value="received">{t('packets.received')}</option>
       </select>
     </label>
+    {#if ui.has('tool.pcap')}
+      <button class="clear" onclick={exportPcap} disabled={log.length === 0} title={t('pcap.tip')}>{t('pcap.export')}</button>
+    {/if}
     <button class="clear" onclick={() => simStore.clearPacketLog()} disabled={log.length === 0}>{t('packets.clear')}</button>
   </header>
+  <div class="filterbar">
+    <label class="expr">
+      <span class="visually-hidden">{t('filter.label')}</span>
+      <input
+        type="search"
+        bind:value={expression}
+        placeholder={t('filter.placeholder')}
+        title={t('filter.help')}
+        class:invalid={!parsedFilter.ok}
+        aria-invalid={!parsedFilter.ok}
+        aria-describedby="filter-error"
+        spellcheck="false"
+        autocomplete="off"
+      />
+    </label>
+    {#each CHIPS as chip (chip)}
+      <button class="chip" class:on={expression === chip} onclick={() => (expression = expression === chip ? '' : chip)}>{chip}</button>
+    {/each}
+    <span id="filter-error" class="error" role="status">{parsedFilter.ok ? '' : parsedFilter.error}</span>
+  </div>
 
   <div class="body">
   <div class="scroller" bind:this={scroller} bind:clientHeight={viewport} onscroll={() => (scrollTop = scroller.scrollTop)}>
@@ -146,6 +176,35 @@
 </section>
 
 <style>
+  .filterbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .expr input {
+    width: min(320px, 50vw);
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.78rem;
+  }
+  .expr input.invalid {
+    outline: 2px solid var(--danger, #c0392b);
+  }
+  .chip {
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    border-radius: 999px;
+  }
+  .chip.on {
+    background: var(--accent);
+    color: var(--accent-contrast, #fff);
+  }
+  .error {
+    color: var(--danger, #c0392b);
+    font-size: 0.72rem;
+  }
   .packets {
     display: flex;
     flex-direction: column;

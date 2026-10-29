@@ -1,8 +1,12 @@
 <script lang="ts">
   import { checkHostConfig, maskToText, parseMask, type Device } from '../../core';
   import { t } from '../../i18n';
+  import { dialogs } from '../state/dialogs.svelte';
   import { editor } from '../state/editor.svelte';
+  import { ui } from '../state/ui.svelte';
   import { subnetSummary } from '../subnet';
+  import Icon from './Icon.svelte';
+  import ScopeBadge from './ScopeBadge.svelte';
 
   let { device }: { device: Device } = $props();
 
@@ -37,6 +41,18 @@
   });
 
   const networkInfo = $derived(subnetSummary(saved.ip, saved.mask));
+
+  /** IP-Rechner mit den aktuellen Werten öffnen; «Übernehmen» füllt Adresse, Maske und Gateway. */
+  function calc() {
+    dialogs.ipCalculator({
+      ip: draft.ip || undefined,
+      mask: draft.mask || undefined,
+      apply: (v) => {
+        draft = { ...draft, ip: v.ip, mask: v.mask, gateway: v.gateway };
+        dhcp = false;
+      },
+    });
+  }
 
   function apply(event: SubmitEvent) {
     event.preventDefault();
@@ -83,12 +99,17 @@
   {#if error && !error.field}
     <p class="error" role="alert">{error.text}</p>
   {/if}
-  <button type="submit" disabled={!dirty}>{t('config.apply')}</button>
+  <div class="buttons">
+    <button type="submit" disabled={!dirty}>{t('config.apply')}</button>
+    {#if ui.has('tool.ipCalculator') && !dhcp}
+      <button type="button" class="calc" onclick={calc} title={t('ipcalc.openHint')}><Icon name="calc" size={15} /> {t('menu.tool.ipcalc')}</button>
+    {/if}
+  </div>
 
   {#if device.dhcp}
     <!-- Adresse steht erst im Aktionsmodus fest. -->
   {:else if networkInfo}
-    <p class="muted">{networkInfo}</p>
+    <p class="muted">{#if ui.has('tool.addressBadges')}<ScopeBadge ip={saved.ip} /> {/if}{networkInfo}</p>
   {:else}
     <p class="muted">{t('config.none')}</p>
   {/if}
@@ -100,6 +121,16 @@
 <style>
   .config {
     margin: 8px 0 12px;
+  }
+  .buttons {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .calc {
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
   .mode {
     display: flex;

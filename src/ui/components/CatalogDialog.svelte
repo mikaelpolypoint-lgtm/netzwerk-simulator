@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { usedFeatures } from '../features';
   import { t } from '../../i18n';
   import { CATALOG, type CatalogEntry } from '../catalog';
   import { editor } from '../state/editor.svelte';
@@ -16,7 +17,7 @@
     const { topology, tasks } = entry.build();
     editor.setMode('design');
     editor.replace(topology, { undoable: true, tasks, snapshots: [] });
-    if (entry.pro) ui.setLevel('pro');
+    ui.ensure([...(entry.features ?? []), ...usedFeatures(topology)]);
     editor.notify(t('catalog.started', { title: tasks.title }));
     onclose();
   }
@@ -26,12 +27,12 @@
   <p class="muted">{t('catalog.intro')}</p>
   <ul>
     {#each entries as { entry, preview } (entry.id)}
-      {@const locked = entry.pro && !ui.policy.pro}
+      {@const locked = (entry.features ?? []).some((f: string) => !ui.permitted(f))}
       <li>
         <div class="stars"><Stars n={entry.stars} /></div>
         <div class="text">
           <strong>{preview.tasks.title}</strong>
-          {#if entry.pro}<span class="badge">{t('catalog.pro')}</span>{/if}
+          {#if entry.level}<span class="badge">{t('catalog.level', { level: entry.level })}</span>{/if}
           <p class="muted">{preview.tasks.description}</p>
           <span class="muted small">{t('catalog.goals', { n: preview.tasks.goals.length })}</span>
         </div>

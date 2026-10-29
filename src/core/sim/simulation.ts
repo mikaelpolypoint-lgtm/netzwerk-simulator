@@ -1,21 +1,34 @@
 import { DEVICE_SPECS } from '../model/devices';
 import { linkStatus } from '../model/links';
 import { cableAt, getCable, getDevice, otherEnd } from '../model/topology';
-import type { Device, Endpoint, Topology } from '../model/types';
+import type { Device, Endpoint, Medium, Topology } from '../model/types';
 import { runCommand } from './commands';
 import type { LeaseRecord } from './dhcp';
-import type { EthernetFrame } from './frames';
+import type { AccessTech, EthernetFrame } from './frames';
+import { ACCESS_PROFILES } from './access';
+import { MODEM_WAN } from '../model/links';
 import type { DnsCacheEntry } from './dns';
 import { HostNode, type AddressState, type ConnectionInfo } from './host';
+import { ClientGroupNode, type GroupMemberState } from './group';
 import type { BrowserState } from './http';
 import type { MailClientState } from './mail';
-import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
+import { InternetNode, IpNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
+import type { Route } from '../net/routing';
+import type { OspfState } from './ospf';
+import type { BgpPeerInfo } from './bgp';
+import type { PppStatus } from './ppp';
 import { EventQueue } from './queue';
 import { L3SwitchNode } from './l3switch';
-import { ModemNode, SwitchNode, type MacEntry, type StpState } from './switch';
+import { ModemNode, SwitchNode, type MacEntry, type ModemState, type StormState, type StpState } from './switch';
 
 /** Übertragungszeit pro Kabel in Millisekunden (virtuelle Zeit). */
 export const LINK_DELAY = 1;
+/**
+ * Verzögerung je Medium: Zugangsleitungen sind langsamer als das LAN
+ * (Interleaving bei DSL, Funkstrecke bei LTE, Zeitschlitze bei DOCSIS).
+ * Die Werte sind gerundete typische Laufzeiten, damit Traceroute sie zeigt.
+ */
+export const MEDIUM_DELAY: Record<Medium, number> = { tp: 1, fiber: 1, wireless: 1, serial: 5, coax: 4, dsl: 8, cellular: 15 };
 const LOG_LIMIT = 5000;
 const CONSOLE_LIMIT = 500;
 
@@ -65,6 +78,17 @@ export interface DeviceState {
   mailboxes?: { user: string; count: number }[];
   nat?: NatEntry[];
   stp?: StpState;
+  /** Switch im Broadcast-Sturm (Schleife ohne Spanning Tree). */
+  storm?: StormState;
+  /** Client-Gruppe: Adressen der einzelnen Rechner. */
+  group?: GroupMemberState[];
+  /** Modem: Zustand der Zugangsleitung. */
+  modem?: ModemState;
+  ospf?: OspfState;
+  bgp?: BgpPeerInfo[];
+  /** Wirksame Routingtabelle (Router, Layer-3-Switches), inklusive gelernter Routen. */
+  routes?: Route[];
+  ppp?: PppStatus[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -83,6 +107,8 @@ export interface NodeContext {
 export interface SimNode {
   receive(iface: number, frame: EthernetFrame): void;
   state(): Omit<DeviceState, 'console'>;
+  /** Start bzw. Neustart nach Änderungen an der Topologie (wiederholbar). */
+  boot?(): void;
 }
 
 /**
@@ -125,16 +151,17 @@ export class Simulation {
     this.#bootDhcpClients();
   }
 
-  /** Wie beim Einschalten: Switches mit STP beginnen BPDUs zu senden, DHCP-Clients fragen nach einer Adresse. */
+  /**
+   * Wie beim Einschalten: Switches mit STP senden BPDUs, Router handeln PPP
+   * aus und starten Routingprotokolle, Modems bauen ihre Zugangsleitung auf,
+   * DHCP-Clients fragen nach einer Adresse. `boot` ist wiederholbar und
+   * startet nur, was noch nicht läuft.
+   */
   #bootDhcpClients() {
-    for (const device of this.#topology.devices) {
-      if ((device.type === 'switch' || device.type === 'l3switch') && device.stp) {
-        const node = this.#node(device.id);
-        if (node instanceof SwitchNode) node.start();
-      }
-    }
-    for (const device of this.#topology.devices) {
-      if (device.dhcp && DEVICE_SPECS[device.type].role === 'endpoint') this.#host(device.id)?.ensureDhcp();
+    const order = (d: Device) => (DEVICE_SPECS[d.type].role === 'endpoint' ? 1 : 0);
+    for (const device of [...this.#topology.devices].sort((a, b) => order(a) - order(b))) {
+      if (DEVICE_SPECS[device.type].role === 'endpoint' && !device.dhcp && !device.wifi) continue;
+      this.#node(device.id)?.boot?.();
     }
   }
 
@@ -185,6 +212,20 @@ export class Simulation {
     return [...this.#inFlight];
   }
 
+  /** Wirksame Routingtabelle eines Routers, Layer-3-Switches oder Endgeräts (inkl. dynamisch gelernter Routen). */
+  getRoutes(id: string): Route[] {
+    const node = getDevice(this.#topology, id) ? this.#node(id) : undefined;
+    if (node instanceof L3SwitchNode) return node.router.routes();
+    if (node instanceof IpNode) return node.routes();
+    if (node instanceof ClientGroupNode) return node.member(1)?.routes() ?? [];
+    return [];
+  }
+
+  /** Switches, die gerade einen Broadcast-Sturm erleben (für die Warnung in der Oberfläche). */
+  stormingDevices(): string[] {
+    return [...this.#nodes.entries()].filter(([, node]) => node instanceof SwitchNode && node.storm).map(([id]) => id);
+  }
+
   clearPacketLog() {
     this.#log = [];
   }
@@ -200,15 +241,16 @@ export class Simulation {
   }
 
   /** Startet "ping <ziel>" auf einem Endgerät oder (aus der Befehlszeile) auf einem Router/Layer-3-Switch. */
-  ping(deviceId: string, target: string) {
+  ping(deviceId: string, target: string, member = 1) {
     const node = this.#node(deviceId);
     if (node instanceof HostNode) node.ping(target);
+    else if (node instanceof ClientGroupNode) node.member(member)?.ping(target);
     else if (node instanceof RouterNode) node.ping(target);
     else if (node instanceof L3SwitchNode) node.router.ping(target);
   }
 
-  traceroute(deviceId: string, target: string) {
-    this.#host(deviceId)?.traceroute(target);
+  traceroute(deviceId: string, target: string, member = 1) {
+    this.#host(deviceId, member)?.traceroute(target);
   }
 
   /** Ruft im Webbrowser des Geräts eine URL auf, z.B. "http://webserver1/index.html". */
@@ -240,14 +282,29 @@ export class Simulation {
     this.#host(deviceId)?.ssh.close();
   }
 
+  /** WLAN-Client hat den Access Point gewechselt: neu anmelden (Reassociation) und Gratuitous ARP. */
+  reassociate(deviceId: string) {
+    this.#host(deviceId)?.wlanConnect(true);
+  }
+
   /** Führt eine Zeile der simulierten Befehlszeile aus, z.B. "ipconfig /renew". */
-  runCommand(deviceId: string, line: string) {
-    const host = this.#host(deviceId);
+  runCommand(deviceId: string, line: string, member = 1) {
+    const host = this.#host(deviceId, member);
     if (host) runCommand(host, line);
   }
 
-  #host(id: string): HostNode | undefined {
+  /** Endgerät; bei einer Client-Gruppe deren erstes (oder gewähltes) Mitglied. */
+  #accessOn(a: Endpoint, b: Endpoint): AccessTech | undefined {
+    for (const end of [a, b]) {
+      const device = getDevice(this.#topology, end.device);
+      if (device?.type === 'modem' && device.modem && end.iface === MODEM_WAN) return ACCESS_PROFILES[device.modem.kind].data;
+    }
+    return undefined;
+  }
+
+  #host(id: string, member = 1): HostNode | undefined {
     const node = this.#node(id);
+    if (node instanceof ClientGroupNode) return node.member(member);
     return node instanceof HostNode ? node : undefined;
   }
 
@@ -268,7 +325,9 @@ export class Simulation {
             ? new RouterNode(ctx)
             : device.type === 'internet'
               ? new InternetNode(ctx)
-              : new HostNode(ctx);
+              : device.type === 'clientgroup'
+                ? new ClientGroupNode(ctx)
+                : new HostNode(ctx);
     this.#nodes.set(id, node);
     return node;
   }
@@ -296,15 +355,18 @@ export class Simulation {
     };
   }
 
-  #transmit(from: Endpoint, frame: EthernetFrame): boolean {
+  #transmit(from: Endpoint, original: EthernetFrame): boolean {
     const cable = cableAt(this.#topology, from);
     // Abgeschaltete Anschlüsse und Funkverbindungen ohne Anmeldung übertragen nichts.
     if (!cable || !linkStatus(this.#topology, cable).up) return false;
     const to = otherEnd(cable, from.device);
+    // Auf der Zugangsleitung eines Modems reisen Nutzdaten in dessen Technik (DOCSIS, GPON, PPPoE, LTE).
+    const access = original.payload.kind === 'link' ? undefined : this.#accessOn(from, to);
+    const frame = access ? { ...original, access } : original;
     const entry: PacketLogEntry = {
       id: this.#nextLogId++,
       sent: this.#now,
-      arrives: this.#now + LINK_DELAY,
+      arrives: this.#now + MEDIUM_DELAY[cable.medium ?? 'tp'],
       from,
       to,
       cable: cable.id,

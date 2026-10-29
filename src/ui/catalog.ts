@@ -26,7 +26,10 @@ export interface CatalogEntry {
   id: string;
   stars: 1 | 2 | 3 | 4 | 5;
   /** Braucht den Pro-Modus (VLANs, Layer-3-Switch …). */
-  pro?: boolean;
+  /** Funktionen, die die Aufgabe braucht (werden beim Start eingeschaltet). */
+  features?: string[];
+  /** Empfohlenes Profil (Lehrjahr). */
+  level?: number;
   build(): { topology: Topology; tasks: TaskSet };
 }
 
@@ -206,7 +209,7 @@ export const CATALOG: CatalogEntry[] = [
   {
     id: 'vlans',
     stars: 4,
-    pro: true,
+    features: ['net.vlan', 'net.stp', 'net.subinterfaces', 'device.l3switch'],
     build() {
       const s = new Start()
         .add('switch', 'Switch', 0, -120)
@@ -236,7 +239,7 @@ export const CATALOG: CatalogEntry[] = [
   {
     id: 'router-on-a-stick',
     stars: 4,
-    pro: true,
+    features: ['net.vlan', 'net.stp', 'net.subinterfaces', 'device.l3switch'],
     build() {
       const s = new Start()
         .add('router', 'Router', 0, -230)
@@ -261,7 +264,7 @@ export const CATALOG: CatalogEntry[] = [
   {
     id: 'l3-campus',
     stars: 5,
-    pro: true,
+    features: ['net.vlan', 'net.stp', 'net.subinterfaces', 'device.l3switch'],
     build() {
       const s = new Start()
         .add('l3switch', 'Core', 0, -200)

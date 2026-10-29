@@ -1,7 +1,34 @@
-export type DeviceType = 'notebook' | 'pc' | 'switch' | 'l3switch' | 'router' | 'accesspoint' | 'modem' | 'internet';
+export type DeviceType =
+  | 'notebook'
+  | 'pc'
+  | 'server'
+  | 'clientgroup'
+  | 'switch'
+  | 'l3switch'
+  | 'router'
+  | 'accesspoint'
+  | 'modem'
+  | 'internet';
 
-/** Übertragungsmedium einer Verbindung. */
-export type Medium = 'tp' | 'fiber' | 'wireless';
+/**
+ * Übertragungsmedium einer Verbindung.
+ * tp: Twisted-Pair (RJ45), fiber: Glasfaser, wireless: WLAN,
+ * serial: serielle WAN-Leitung zwischen Routern, coax: Koaxialkabel (Kabelnetz/DOCSIS),
+ * dsl: Telefon-Kupferleitung (ADSL/VDSL), cellular: Mobilfunk (LTE/5G).
+ */
+export type Medium = 'tp' | 'fiber' | 'wireless' | 'serial' | 'coax' | 'dsl' | 'cellular';
+export const MEDIA: readonly Medium[] = ['tp', 'fiber', 'wireless', 'serial', 'coax', 'dsl', 'cellular'];
+
+/** Zugangstechnik eines Modems; bestimmt das Medium des WAN-Anschlusses und die Simulation. */
+export type ModemKind = 'cable' | 'fiber' | 'mobile' | 'adsl' | 'vdsl';
+export const MODEM_KINDS: readonly ModemKind[] = ['cable', 'fiber', 'mobile', 'adsl', 'vdsl'];
+
+export interface ModemConfig {
+  kind: ModemKind;
+}
+
+/** Kapselung einer seriellen Leitung: Cisco-HDLC oder PPP (RFC 1661). Beide Enden müssen gleich sein. */
+export type SerialEncapsulation = 'hdlc' | 'ppp';
 
 /** Farbmarkierung für Anschlüsse und Bereiche (Dokumentationsmodus). */
 export type TagColor = 'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'gray';
@@ -39,6 +66,14 @@ export interface NetInterface {
   sfpSlot?: boolean;
   /** Eingestecktes SFP-Modul; ohne Modul funktioniert der Einschub nicht. */
   sfp?: SfpModule;
+  /** Nur Router: serieller WAN-Anschluss statt Ethernet (kein ARP, Punkt-zu-Punkt). */
+  serial?: boolean;
+  /** Serielle Anschlüsse: Kapselung; fehlt = HDLC. */
+  encapsulation?: SerialEncapsulation;
+  /** OSPF-Kosten dieses Anschlusses; fehlt = 10. */
+  ospfCost?: number;
+  /** Nur Internet (Provider): Kunden an diesem Anschluss erhalten CGNAT (100.64.0.0/10 wird übersetzt). */
+  cgnat?: boolean;
 }
 
 /**
@@ -126,6 +161,75 @@ export interface Device {
   vlanNames?: VlanName[];
   /** In diesem Rack (Bereich der Art «rack») eingebaut. */
   rack?: string;
+  /** Nur Client-Gruppe: Anzahl Rechner, die sich den Anschluss teilen (alle per DHCP). */
+  groupSize?: number;
+  /** Nur Modem: Zugangstechnik. */
+  modem?: ModemConfig;
+  /** Nur Router: statisches NAT 1:1 (Source-NAT mit Rückweg). */
+  staticNat?: StaticNat[];
+  /** Nur Internet (Provider): öffentliche Adresse, hinter der CGNAT-Kunden erscheinen. */
+  cgnatAddress?: string;
+  /** Dynamisches Routing (Router und Layer-3-Switches). */
+  ospf?: OspfConfig;
+  bgp?: BgpConfig;
+  rip?: RipConfig;
+  /** Shop-Variante, z.B. «rack» beim Server; bestimmt Preis und Symbol. */
+  variant?: string;
+}
+
+/** Statisches NAT: Der interne Rechner erscheint aussen unter einer eigenen öffentlichen Adresse. */
+export interface StaticNat {
+  inside: string;
+  outside: string;
+}
+
+export interface RoutedNetwork {
+  network: string;
+  /** Maske in Punktschreibweise. */
+  mask: string;
+}
+
+export type RedistributeSource = 'connected' | 'static' | 'ospf' | 'bgp' | 'rip';
+
+export interface OspfConfig {
+  /** Router-ID; fehlt = höchste Interface-Adresse. */
+  routerId?: string;
+  /** Interfaces in diesen Netzen nehmen an OSPF teil (Area). */
+  networks: (RoutedNetwork & { area: number })[];
+  /** Diese Anschlüsse senden keine Hellos (Netz wird trotzdem bekanntgegeben). */
+  passive?: number[];
+  /** Standardroute an alle OSPF-Nachbarn verteilen («default-information originate»). */
+  defaultOriginate?: boolean;
+  redistribute?: RedistributeSource[];
+}
+
+export interface BgpNeighbor {
+  ip: string;
+  remoteAs: number;
+}
+
+export interface BgpConfig {
+  /** Autonomes System (1–4294967295; privat 64512–65534). */
+  asn: number;
+  routerId?: string;
+  neighbors: BgpNeighbor[];
+  /** Diese Netze werden angekündigt, sofern sie in der Routingtabelle stehen. */
+  networks: RoutedNetwork[];
+  redistribute?: RedistributeSource[];
+}
+
+export interface RipConfig {
+  networks: RoutedNetwork[];
+  passive?: number[];
+  defaultOriginate?: boolean;
+  redistribute?: RedistributeSource[];
+}
+
+/** Dokumentiertes VLAN mit Farbe; Switch-Anschlüsse im VLAN erscheinen in dieser Farbe. */
+export interface VlanDef {
+  id: number;
+  name?: string;
+  color: TagColor;
 }
 
 export interface VlanName {
@@ -185,6 +289,7 @@ export interface DnsServerConfig {
 export interface WebFile {
   /** Pfad mit führendem Schrägstrich, z.B. "/index.html". */
   path: string;
+  /** Text (HTML, CSS …) oder bei Bildern eine data:-URL (image/jpeg, image/png, image/svg+xml, image/gif, image/webp). */
   content: string;
 }
 
@@ -282,6 +387,8 @@ export interface DocArea {
   vlan?: number;
   /** Freitext, z.B. Zweck, Gateway, Verantwortliche. */
   note?: string;
+  /** Öffentliches Netz (im Internet geroutete Adressen) statt privates Firmennetz. */
+  public?: boolean;
   /** Stockwerk, auf dem der Bereich liegt; fehlt = auf allen sichtbar. */
   floor?: number;
 }
@@ -300,4 +407,6 @@ export interface Topology {
   areas?: DocArea[];
   /** Stockwerke; fehlt = nur ein Stockwerk. */
   floors?: Floor[];
+  /** Dokumentierte VLANs mit Farbe. */
+  vlans?: VlanDef[];
 }

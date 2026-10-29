@@ -179,6 +179,13 @@
                           <option value={type}>{typeLabel(type)}</option>
                         {/each}
                       </select>
+                    {:else if spec.kind === 'choice'}
+                      <select bind:value={goal.fields[spec.key]}>
+                        {#if spec.optional}<option value="">{t('taskForm.any')}</option>{/if}
+                        {#each spec.options ?? [] as option (option)}
+                          <option value={option}>{t(`taskForm.option.${option}`)}</option>
+                        {/each}
+                      </select>
                     {:else}
                       <input
                         bind:value={goal.fields[spec.key]}

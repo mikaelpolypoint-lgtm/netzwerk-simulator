@@ -98,10 +98,12 @@ test('Admin: Anmeldung, Einstellungen, Klassen, Rückmeldungen', async () => {
   const { token } = (await call('POST', '/api/admin/login', { password: 'test-admin-passwort' })).data;
   assert.ok(token);
 
-  const saved = await call('PUT', '/api/admin/settings', { modes: { action: false }, pro: false, sessionHours: 48 }, token);
+  const saved = await call('PUT', '/api/admin/settings', { modes: { simulation: false }, maxLevel: 3, defaultLevel: 4, disabled: ['routing.bgp', 'kein gültiger Name'], sessionHours: 48 }, token);
   assert.equal(saved.data.sessionHours, 48);
   const config = (await call('GET', '/api/config')).data;
-  assert.deepEqual(config.policy, { modes: { design: true, action: false, doc: true }, pro: false, sessionHours: 48 });
+  assert.deepEqual(config.policy, { modes: { design: true, simulation: false }, maxLevel: 3, defaultLevel: 3, disabled: ['routing.bgp'], sessionHours: 48 });
+  // Release-Prüfungen: ohne Bericht 404, sonst JSON.
+  assert.ok([200, 404].includes((await call('GET', '/api/admin/checks', null, token)).status));
 
   const cls = (await call('POST', '/api/admin/classes', { label: 'INF22a' }, token)).data;
   assert.equal((await call('POST', '/api/classes/join', { classCode: cls.code })).data.label, 'INF22a');

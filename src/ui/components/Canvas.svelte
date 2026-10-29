@@ -1,11 +1,13 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { getDevice, isDeviceType, type Device, type DocArea, type Point, type SfpModule, type TagColor } from '../../core';
+  import { getDevice, type Device, type DocArea, type Point, type TagColor } from '../../core';
   import { t } from '../../i18n';
-  import { AREA_PRESETS, presetArea } from '../areaPresets';
-  import { AREA_MIME, DEVICE_MIME, SFP_MIME } from '../dnd';
+  import { presetArea } from '../areaPresets';
+  import { SHOP_MIME } from '../dnd';
+  import { SHOP } from '../shop';
   import { protocolOf } from '../packets';
   import { GRID, editor } from '../state/editor.svelte';
+  import { shop } from '../state/shop.svelte';
   import { simStore } from '../state/sim.svelte';
   import { ui } from '../state/ui.svelte';
   import { TAG_ORDER } from '../tags';
@@ -97,7 +99,7 @@
       return;
     }
     editor.select({ kind: 'device', id: device.id });
-    if (!editor.editable) return;
+    // Auch in der Simulation verschiebbar: WLAN-Geräte wechseln dann den Access Point (Roaming).
     const p = world(event);
     drag = { id: device.id, offset: { x: device.position.x - p.x, y: device.position.y - p.y } };
     editor.beginDrag();
@@ -185,10 +187,7 @@
 
   function onDragOver(event: DragEvent) {
     const types = event.dataTransfer?.types ?? [];
-    const fits =
-      (editor.editable && (types.includes(DEVICE_MIME) || types.includes(SFP_MIME))) ||
-      ((editor.editable || editor.documenting) && types.includes(AREA_MIME));
-    if (!fits || !event.dataTransfer) return;
+    if (!editor.editable || !types.includes(SHOP_MIME) || !event.dataTransfer) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }
@@ -198,30 +197,25 @@
     return editor.topology.devices.find((d) => !offFloor(d) && Math.abs(d.position.x - p.x) <= 40 && Math.abs(d.position.y - p.y) <= 34);
   }
 
+  /** Artikel aus dem Shop an der Mausposition einsetzen (Module auf das Gerät darunter). */
   function onDrop(event: DragEvent) {
     const data = event.dataTransfer;
     if (!data) return;
+    const item = SHOP.find((i) => i.id === data.getData(SHOP_MIME));
+    if (!item) return;
+    event.preventDefault();
     const p = world(event);
     const floor = ui.floor === 'all' ? undefined : ui.floor;
-    const type = data.getData(DEVICE_MIME);
-    if (isDeviceType(type)) {
-      event.preventDefault();
-      editor.addDevice(type, p, floor ?? 0);
-      return;
-    }
-    const sfp = data.getData(SFP_MIME);
-    if (sfp) {
-      event.preventDefault();
+    if (item.kind === 'device') {
+      editor.addDevice(item.type, p, floor ?? 0, item.options ?? {}, item.prepare, item.options?.groupSize ? t('defaultName.clientgroup') : undefined);
+    } else if (item.kind === 'sfp') {
       const target = deviceAt(p);
-      if (target) editor.insertSfp(sfp as SfpModule, target.id);
+      if (target) editor.insertSfp(item.module, target.id);
       else editor.notify(t('sfp.dropOnDevice'), 'error');
-      return;
+    } else if (item.kind === 'area') {
+      editor.addArea(presetArea(item.preset, p, areas.length + 1, floor));
     }
-    const preset = AREA_PRESETS.find((a) => a.key === data.getData(AREA_MIME));
-    if (preset) {
-      event.preventDefault();
-      editor.addArea(presetArea(preset, p, areas.length + 1, floor));
-    }
+    shop.close();
   }
 </script>
 
@@ -257,7 +251,7 @@
       {#each areas as area (area.id)}
         <AreaShape
           {area}
-          interactive={editor.documenting && editor.tool === 'select'}
+          interactive={editor.editable && editor.tool === 'select'}
           faded={areaOffFloor(area)}
           onmove={(e, a) => onAreaPointerDown(e, a, 'move')}
           onresize={(e, a) => onAreaPointerDown(e, a, 'resize')}
@@ -297,8 +291,6 @@
     </p>
   {:else if editor.tool === 'area'}
     <p class="hint" role="status">{t('canvas.areaDraw')}</p>
-  {:else if editor.documenting && areas.length === 0}
-    <p class="hint" role="status">{t('canvas.docHint')}</p>
   {/if}
 </div>
 

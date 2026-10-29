@@ -2,7 +2,7 @@
   import type { DeviceType } from '../../core';
 
   // Eigene, schlichte Symbole (keine Grafiken aus dem Vorbild, siehe Konzept 7.6).
-  let { type }: { type: DeviceType } = $props();
+  let { type, variant }: { type: DeviceType; variant?: string } = $props();
 </script>
 
 <g class="icon" aria-hidden="true">
@@ -14,6 +14,23 @@
     <path class="line" d="M-9 4 V10 M-15 11 H-3" />
     <rect x="11" y="-18" width="13" height="30" rx="2" />
     <path class="line" d="M14 -12 H21 M14 -7 H21" />
+  {:else if type === 'server'}
+    {#if variant === 'rack'}
+      <rect x="-24" y="-13" width="48" height="11" rx="2" />
+      <rect x="-24" y="1" width="48" height="11" rx="2" />
+      <path class="line" d="M-18 -7.5 H-6 M-18 6.5 H-6" />
+      <circle class="fill" cx="17" cy="-7.5" r="1.8" />
+      <circle class="fill" cx="17" cy="6.5" r="1.8" />
+    {:else}
+      <rect x="-13" y="-20" width="26" height="40" rx="3" />
+      <path class="line" d="M-8 -13 H8 M-8 -7 H8 M-8 -1 H8" />
+      <circle class="fill" cx="0" cy="12" r="2.2" />
+    {/if}
+  {:else if type === 'clientgroup'}
+    <rect x="-8" y="-20" width="26" height="18" rx="2" />
+    <rect x="-16" y="-12" width="26" height="18" rx="2" />
+    <rect x="-24" y="-4" width="26" height="18" rx="2" />
+    <path class="line" d="M-11 14 V19 M-17 19 H-5" />
   {:else if type === 'switch'}
     <rect x="-25" y="-12" width="50" height="24" rx="4" />
     <path class="line" d="M-14 -5 H14 M9 -8 L14 -5 L9 -2 M14 5 H-14 M-9 2 L-14 5 L-9 8" />

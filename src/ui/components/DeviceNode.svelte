@@ -52,10 +52,10 @@
     else editor.select({ kind: 'device', id: device.id });
   }
 
-  /** Doppelklick: im Aktionsmodus Desktop des Endgeräts; Router und Switches öffnen ihre Befehlszeile. */
+  /** Doppelklick: in der Simulation Desktop des Endgeräts; Router und Switches öffnen ihre Befehlszeile. */
   function ondblclick() {
-    if (editor.mode === 'action' && isEndpoint) openDesktop(device.id);
-    else if (hasCli(device.type) && editor.mode !== 'doc') openCli(device.id);
+    if (editor.acting && isEndpoint) openDesktop(device.id);
+    else if (hasCli(device.type) && ui.has('net.cli')) openCli(device.id);
   }
 </script>
 

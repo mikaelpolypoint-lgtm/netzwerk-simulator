@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
-import { connect } from '../model/topology';
+import { connect, wouldLoopWithoutStp } from '../model/topology';
 import { parseProject, serializeProject } from '../io/project';
 import { buildRoutes } from '../net/routing';
 import { Simulation } from './simulation';
@@ -150,17 +150,18 @@ group('Switch mit Lerntabelle', () => {
     ]);
   });
 
-  it('verhindert Schleifen zwischen Switches', () => {
+  it('erlaubt Schleifen zwischen Switches, warnt aber ohne STP', () => {
     const net = new NetBuilder();
     const s1 = net.add('switch', 'S1');
     const s2 = net.add('switch', 'S2');
     const s3 = net.add('switch', 'S3');
     net.link(s1, s2);
     net.link(s2, s3);
-    expect(connect(net.topology, s3, s1)).toMatchObject({ ok: false, error: { code: 'switchLoop' } });
+    expect(wouldLoopWithoutStp(net.topology, s3, s1)).toBe(true);
+    expect(connect(net.topology, s3, s1).ok).toBe(true);
   });
 
-  it('lehnt Projektdateien mit Switch-Schleife ab', () => {
+  it('liest Projektdateien mit Switch-Schleife (Broadcast-Sturm als Übung)', () => {
     const net = new NetBuilder();
     const s1 = net.add('switch', 'S1');
     const s2 = net.add('switch', 'S2');
@@ -169,7 +170,7 @@ group('Switch mit Lerntabelle', () => {
     net.link(s2, s3);
     const file = JSON.parse(serializeProject(net.topology));
     file.topology.cables.push({ id: 'c99', a: { device: s3, iface: 1 }, b: { device: s1, iface: 1 } });
-    expect(parseProject(JSON.stringify(file))).toMatchObject({ ok: false, error: { code: 'switchLoop' } });
+    expect(parseProject(JSON.stringify(file)).ok).toBe(true);
   });
 
   it('lässt Router zwischen Switches zu, auch im Ring', () => {
