@@ -18,6 +18,8 @@
   const wire = $derived(dissect(entry.frame, medium));
   const OSI: readonly OsiLayer[] = [7, 6, 5, 4, 3, 2, 1];
   const byLayer = $derived(new Map(OSI.map((n) => [n, wire.layers.filter((l) => l.osi === n)])));
+  /** Hat der Rahmen überhaupt Anwendungsdaten (Schicht 4 oder höher)? Sonst sind 5 und 6 einfach leer. */
+  const hasUpper = $derived(wire.layers.some((l) => l.osi >= 4));
 
   let marked = $state<{ start: number; length: number } | null>(null);
   $effect(() => {
@@ -62,7 +64,7 @@
         </div>
         <div class="osi-body">
           {#if layers.length === 0}
-            <span class="muted">{t(n >= 5 && n <= 6 ? 'wire.inApplication' : 'wire.emptyLayer')}</span>
+            <span class="muted">{t(n >= 5 && n <= 6 && hasUpper ? 'wire.inApplication' : 'wire.emptyLayer')}</span>
           {/if}
           {#each layers as layer, li (li)}
             <details open>
@@ -165,7 +167,7 @@
   }
   .osi {
     display: grid;
-    grid-template-columns: 74px 1fr;
+    grid-template-columns: 96px 1fr;
     margin-bottom: 4px;
     border: 1px solid var(--border);
     border-left: 4px solid var(--osi);
@@ -174,6 +176,19 @@
   }
   .osi.empty {
     opacity: 0.55;
+    font-size: 0.7rem;
+  }
+  .osi.empty .osi-label {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    padding: 1px 6px;
+  }
+  .osi.empty .osi-label strong {
+    font-size: 0.75rem;
+  }
+  .osi.empty .osi-body {
+    padding: 1px 6px;
   }
   .osi-label {
     display: flex;

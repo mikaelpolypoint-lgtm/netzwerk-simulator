@@ -33,7 +33,7 @@
 </script>
 
 {#if shop.category}
-  <div id="shop-flyout" class="flyout" role="dialog" aria-label={t(`shop.category.${shop.category}`)} {onkeydown}>
+  <div id="shop-flyout" class="flyout" role="dialog" tabindex="-1" aria-label={t(`shop.category.${shop.category}`)} {onkeydown}>
     <header>
       <h3>{t(`shop.category.${shop.category}`)}</h3>
       <button class="close" onclick={() => shop.close()} aria-label={t('about.close')}><Icon name="close" size={16} /></button>
