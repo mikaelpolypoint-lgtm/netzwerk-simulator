@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
-import { connect, removeCable, setPortTrunk, setPortVlan, setStp, setStpPriority } from '../model/topology';
+import { connect, wouldLoopWithoutStp, removeCable, setPortTrunk, setPortVlan, setStp, setStpPriority } from '../model/topology';
 import { Simulation } from './simulation';
 import { NetBuilder, describe, unwrap } from './testing';
 
@@ -74,15 +74,16 @@ group('Spanning Tree', () => {
     return { net, pc1, pc2, s1, s2, s3, closing };
   }
 
-  it('erlaubt Schleifen nur, wenn alle beteiligten Switches STP haben', () => {
+  it('warnt vor Schleifen nur, solange nicht alle beteiligten Switches STP haben', () => {
     const net = new NetBuilder();
     const [s1, s2, s3] = ['S1', 'S2', 'S3'].map((name) => net.add('switch', name)) as [string, string, string];
     net.link(s1, s2);
     net.link(s2, s3);
-    expect(connect(net.topology, s3, s1)).toMatchObject({ ok: false, error: { code: 'switchLoop' } });
+    expect(wouldLoopWithoutStp(net.topology, s3, s1)).toBe(true);
     for (const sw of [s1, s2, s3]) net.topology = unwrap(setStp(net.topology, sw, true));
+    expect(wouldLoopWithoutStp(net.topology, s3, s1)).toBe(false);
     net.link(s3, s1);
-    expect(setStp(net.topology, s2, false)).toMatchObject({ ok: false, error: { code: 'stpNeededForLoop' } });
+    expect(setStp(net.topology, s2, false).ok).toBe(true);
   });
 
   it('wählt eine Root-Bridge, blockiert einen Port und verhindert so den Broadcast-Sturm', () => {

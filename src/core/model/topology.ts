@@ -4,7 +4,8 @@ import { isValidPath } from '../net/http';
 import { checkMailAccount, checkMailbox } from '../net/mail';
 import { checkHostConfig, maskToText, parseIp, parseMask, type HostConfigInput } from '../net/ipv4';
 import { checkStaticRoute, decodeIface, normalizeRoute } from '../net/routing';
-import { DEVICE_SPECS, hasRoutingTable, isRackable, isSwitchType } from './devices';
+import { DEFAULT_GROUP_SIZE, DEVICE_SPECS, MAX_GROUP_SIZE, canHostServices, canRouteDynamically, hasRoutingTable, isRackable, isSwitchType, isWifiCapable } from './devices';
+import { portMedium } from './links';
 import { macFor } from './mac';
 import type {
   Cable,
@@ -12,6 +13,7 @@ import type {
   DeviceType,
   DocArea,
   Medium,
+  ModemKind,
   SfpModule,
   TagColor,
   CliConfig,
@@ -31,9 +33,19 @@ import type {
   Svi,
   Topology,
   WebFile,
+  BgpConfig,
+  OspfConfig,
+  RipConfig,
+  SerialEncapsulation,
+  StaticNat,
+  VlanDef,
 } from './types';
+import { checkBgp, checkOspf, checkRip, normalizeBgp, normalizeOspf, normalizeRip } from '../net/dynamic';
 
 export const MAX_NAME_LENGTH = 32;
+/** Grösse einer Webserver-Datei in Zeichen (Bilder als data:-URL, also etwa 4/3 der Bytes). */
+export const MAX_WEB_FILE = 160_000;
+export const MAX_WEB_TOTAL = 300_000;
 
 export type ErrorCode =
   | 'unknownDevice'
@@ -105,7 +117,20 @@ export type ErrorCode =
   | 'fiberNeedsSfp'
   | 'copperNeedsRj45'
   | 'notRackable'
-  | 'notARack';
+  | 'notARack'
+  | 'mediumNotSupported'
+  | 'accessLineNeedsModem'
+  | 'notSerialCapable'
+  | 'invalidGroupSize'
+  | 'notAModem'
+  | 'invalidAsn'
+  | 'duplicateNeighbor'
+  | 'duplicateNetwork'
+  | 'invalidArea'
+  | 'invalidCost'
+  | 'duplicateNat'
+  | 'fileTooLarge'
+  | 'invalidVlanColor';
 
 /** Fehler tragen nur Code und Parameter; die Oberfläche übersetzt sie. */
 export interface TopologyError {
@@ -186,16 +211,21 @@ function makeInterfaces(seq: number, from: number, to: number): NetInterface[] {
   return list;
 }
 
-/** Neues Gerät: RJ45-Anschlüsse, danach die SFP-Einschübe. */
-function initialInterfaces(seq: number, type: DeviceType): NetInterface[] {
-  const spec = DEVICE_SPECS[type];
-  const copper = makeInterfaces(seq, 0, spec.defaultInterfaces);
-  const slots = makeInterfaces(seq, spec.defaultInterfaces, spec.defaultInterfaces + (spec.sfpSlots ?? 0)).map((i) => ({ ...i, sfpSlot: true }));
-  return [...copper, ...slots];
-}
-
 function updateDevice(t: Topology, id: string, change: (d: Device) => Device): Topology {
   return { ...t, devices: t.devices.map((d) => (d.id === id ? change(d) : d)) };
+}
+
+/** Ausstattung eines neuen Geräts, wie sie im Shop gewählt wird. */
+export interface DeviceOptions {
+  /** Anzahl RJ45-Anschlüsse statt des Standards. */
+  ports?: number;
+  /** Zusätzliche serielle Anschlüsse (nur Router). */
+  serialPorts?: number;
+  /** SFP-Einschübe statt des Standards. */
+  sfpSlots?: number;
+  modem?: ModemKind;
+  groupSize?: number;
+  variant?: string;
 }
 
 export function addDevice(
@@ -203,17 +233,32 @@ export function addDevice(
   type: DeviceType,
   name: string,
   position: Point,
+  options: DeviceOptions = {},
 ): Result<{ topology: Topology; id: string }> {
   const checked = checkName(t, name);
   if (!checked.ok) return checked;
+  const spec = DEVICE_SPECS[type];
   const seq = t.nextId;
+  const copperCount = Math.min(spec.maxInterfaces, Math.max(spec.minInterfaces, options.ports ?? spec.defaultInterfaces));
+  const serialCount = type === 'router' ? Math.max(0, Math.min(4, spec.maxInterfaces - copperCount, options.serialPorts ?? 0)) : 0;
+  const slotCount = Math.max(0, Math.min(8, options.sfpSlots ?? spec.sfpSlots ?? 0));
+  // Reihenfolge: Ethernet-Buchsen, serielle Anschlüsse, SFP-Einschübe.
+  const ethernet = makeInterfaces(seq, 0, copperCount);
+  const serial = makeInterfaces(seq, copperCount, copperCount + serialCount).map((i) => ({ ...i, serial: true }));
+  const slots = makeInterfaces(seq, copperCount + serialCount, copperCount + serialCount + slotCount).map((i) => ({ ...i, sfpSlot: true }));
   const device: Device = {
     id: `d${seq}`,
     type,
     name: checked.value,
     position: { ...position },
-    interfaces: initialInterfaces(seq, type),
+    interfaces: [...ethernet, ...serial, ...slots],
+    ...(options.variant ? { variant: options.variant } : {}),
   };
+  if (type === 'clientgroup') {
+    device.dhcp = true;
+    device.groupSize = Math.min(MAX_GROUP_SIZE, Math.max(2, options.groupSize ?? DEFAULT_GROUP_SIZE));
+  }
+  if (type === 'modem' && options.modem) device.modem = { kind: options.modem };
   return ok({ topology: { ...t, devices: [...t.devices, device], nextId: seq + 1 }, id: device.id });
 }
 
@@ -242,22 +287,45 @@ export function removeDevice(t: Topology, id: string): Result<Topology> {
   });
 }
 
-/** Passender freier Anschluss für ein Medium: Funk nur an Funk-Ports des Access Points, Kabel nur an Buchsen. */
+/**
+ * Passt ein Medium an einen Anschluss? Feste Anschlüsse (SFP-Einschub, serieller
+ * Port, Funkplatz des Access Points, WAN des Modems) verlangen ihr Medium;
+ * normale Buchsen nehmen TP-Kabel. Das Internet (Provider) nimmt jede Zugangsleitung.
+ */
+export function portAccepts(device: Device, iface: number, medium: Medium): boolean {
+  const port = device.interfaces[iface];
+  if (!port) return false;
+  const fixed = portMedium(device, iface);
+  if (fixed) return fixed === medium && (!port.sfpSlot || !!port.sfp);
+  if (device.type === 'internet') return medium !== 'wireless';
+  return medium === 'tp' || (medium === 'wireless' && isWifiCapable(device.type));
+}
+
+/** Passender freier Anschluss für ein Medium. */
 export function freeInterfaceFor(t: Topology, device: Device, medium: Medium): NetInterface | undefined {
-  return device.interfaces.find((i) => {
-    if (cableAt(t, { device: device.id, iface: i.index })) return false;
-    // Glasfaser nur in SFP-Einschüben mit Modul, Kupfer und Funk nie dort.
-    if (medium === 'fiber') return !!i.sfpSlot && !!i.sfp;
-    if (i.sfpSlot) return false;
-    if (device.type !== 'accesspoint') return true;
-    return medium === 'wireless' ? i.index > 0 : i.index === 0;
+  return device.interfaces.find((i) => !cableAt(t, { device: device.id, iface: i.index }) && portAccepts(device, i.index, medium));
+}
+
+/** Warum kein Anschluss frei ist: Medium passt nirgends, SFP-Modul fehlt oder alles belegt. */
+function noPortError(t: Topology, device: Device, medium: Medium): ErrorCode {
+  if (medium === 'fiber' && device.interfaces.some((i) => i.sfpSlot && !i.sfp)) return 'noSfpModule';
+  const anyPort = device.interfaces.some((i) => {
+    if (portAccepts(device, i.index, medium)) return true;
+    return medium === 'fiber' && !!i.sfpSlot;
   });
+  return anyPort ? 'noFreeInterface' : 'mediumNotSupported';
 }
 
 function checkMedium(a: Device, b: Device, medium: Medium): ErrorCode | null {
-  if (medium !== 'wireless') return null;
-  const wifiCapable = (d: Device) => d.type === 'accesspoint' || d.type === 'notebook' || d.type === 'pc';
-  if (!(a.type === 'accesspoint' || b.type === 'accesspoint') || !wifiCapable(a) || !wifiCapable(b)) return 'wirelessNeedsAccessPoint';
+  if (medium === 'wireless') {
+    const wifiCapable = (d: Device) => d.type === 'accesspoint' || isWifiCapable(d.type);
+    if (!(a.type === 'accesspoint' || b.type === 'accesspoint') || !wifiCapable(a) || !wifiCapable(b)) return 'wirelessNeedsAccessPoint';
+  }
+  if (medium === 'coax' || medium === 'dsl' || medium === 'cellular') {
+    const modem = a.type === 'modem' ? a : b.type === 'modem' ? b : null;
+    const other = modem === a ? b : a;
+    if (!modem || other.type !== 'internet') return 'accessLineNeedsModem';
+  }
   return null;
 }
 
@@ -271,13 +339,11 @@ export function connect(t: Topology, aId: string, bId: string, medium: Medium = 
   if (direct) return fail('alreadyConnected', { a: a.name, b: b.name });
   const mediumIssue = checkMedium(a, b, medium);
   if (mediumIssue) return fail(mediumIssue);
-  if (isBridge(a) && isBridge(b) && bridged(t, a.id, b.id) && !stpProtects(t, a.id)) {
-    return fail('switchLoop', { a: a.name, b: b.name });
-  }
+  // Schleifen zwischen Switches sind erlaubt: Ohne Spanning Tree zeigt die Simulation den Broadcast-Sturm.
   const ia = freeInterfaceFor(t, a, medium);
-  if (!ia) return fail(medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface', { device: a.name });
+  if (!ia) return fail(noPortError(t, a, medium), { device: a.name });
   const ib = freeInterfaceFor(t, b, medium);
-  if (!ib) return fail(medium === 'fiber' ? 'noSfpModule' : 'noFreeInterface', { device: b.name });
+  if (!ib) return fail(noPortError(t, b, medium), { device: b.name });
   const cable: Cable = {
     id: `c${t.nextId}`,
     a: { device: a.id, iface: ia.index },
@@ -287,7 +353,14 @@ export function connect(t: Topology, aId: string, bId: string, medium: Medium = 
   return ok({ topology: { ...t, cables: [...t.cables, cable], nextId: t.nextId + 1 }, id: cable.id });
 }
 
-/** Medium einer bestehenden Verbindung ändern (Kabel ↔ Glasfaser; Funk nur, wo es passt). */
+/** Würde eine Verbindung eine Schleife zwischen Switches ohne Spanning Tree schliessen? (für Warnungen) */
+export function wouldLoopWithoutStp(t: Topology, aId: string, bId: string): boolean {
+  const a = getDevice(t, aId);
+  const b = getDevice(t, bId);
+  return !!a && !!b && isBridge(a) && isBridge(b) && bridged(t, a.id, b.id) && !stpProtects(t, a.id);
+}
+
+/** Medium einer bestehenden Verbindung ändern, sofern beide Anschlüsse es annehmen. */
 export function setCableMedium(t: Topology, id: string, medium: Medium): Result<Topology> {
   const cable = getCable(t, id);
   if (!cable) return fail('unknownCable');
@@ -297,14 +370,14 @@ export function setCableMedium(t: Topology, id: string, medium: Medium): Result<
   const issue = checkMedium(a, b, medium);
   if (issue) return fail(issue);
   for (const [d, iface] of [[a, cable.a.iface], [b, cable.b.iface]] as const) {
-    const slot = !!d.interfaces[iface]?.sfpSlot;
-    if (medium === 'fiber' && !slot) return fail('fiberNeedsSfp', { device: d.name });
-    if (medium !== 'fiber' && slot) return fail('copperNeedsRj45', { device: d.name });
+    const port = d.interfaces[iface];
+    if (portAccepts(d, iface, medium)) continue;
+    if (medium === 'fiber' && !port?.sfpSlot && d.type !== 'internet') return fail('fiberNeedsSfp', { device: d.name });
+    if (medium === 'fiber' && port?.sfpSlot && !port.sfp) return fail('noSfpModule', { device: d.name });
+    if (medium !== 'fiber' && port?.sfpSlot) return fail('copperNeedsRj45', { device: d.name });
+    if (d.type === 'accesspoint') return fail('radioPortNeedsWireless');
+    return fail('mediumNotSupported', { device: d.name });
   }
-  const radio = (d: Device, iface: number) => d.type === 'accesspoint' && iface > 0;
-  const wantsRadio = medium === 'wireless';
-  if (radio(a, cable.a.iface) !== wantsRadio && a.type === 'accesspoint') return fail('radioPortNeedsWireless');
-  if (radio(b, cable.b.iface) !== wantsRadio && b.type === 'accesspoint') return fail('radioPortNeedsWireless');
   return ok({
     ...t,
     cables: t.cables.map((c) => {
@@ -434,7 +507,7 @@ export function setStp(t: Topology, id: string, enabled: boolean): Result<Topolo
     const { stp: _s, ...rest } = d;
     return enabled ? { ...rest, stp: true } : rest;
   });
-  if (!enabled && findSwitchLoop(next)) return fail('stpNeededForLoop', { name: device.value.name });
+  // Ohne STP bleibt eine Schleife erlaubt; die Simulation zeigt dann den Broadcast-Sturm.
   return ok(next);
 }
 
@@ -802,7 +875,7 @@ export function removePortForward(t: Topology, id: string, index: number): Resul
 function serverDevice(t: Topology, id: string): Result<Device> {
   const device = getDevice(t, id);
   if (!device) return fail('unknownDevice');
-  if (device.type !== 'pc') return fail('notAServer');
+  if (!canHostServices(device.type)) return fail('notAServer');
   return ok(device);
 }
 
@@ -860,6 +933,11 @@ export function saveWebFile(t: Topology, id: string, file: WebFile, previousPath
     return { ok: false, error: { code: 'duplicatePath', params: { path }, field: 'path' } };
   }
   const others = config.files.filter((f) => f.path !== (previousPath ?? path));
+  // Projektdateien bleiben klein: pro Datei und pro Webserver gibt es eine Obergrenze.
+  const total = others.reduce((sum, f) => sum + f.content.length, 0) + file.content.length;
+  if (file.content.length > MAX_WEB_FILE || total > MAX_WEB_TOTAL) {
+    return { ok: false, error: { code: 'fileTooLarge', params: { max: Math.round(MAX_WEB_FILE / 1000) }, field: 'content' } };
+  }
   const files = [...others, { path, content: file.content }].sort((a, b) => a.path.localeCompare(b.path));
   return ok(updateDevice(t, id, (d) => ({ ...d, webServer: { files } })));
 }
@@ -1320,4 +1398,165 @@ export function rackAt(t: Topology, x: number, y: number, floor?: number): DocAr
       (floor === undefined || a.floor === undefined || a.floor === floor) &&
       x >= a.x && x <= a.x + a.width && y >= a.y && y <= a.y + a.height,
   );
+}
+
+// --- Neue Gerätefunktionen (v0.4) ----------------------------------------------
+
+function changePort(t: Topology, id: string, index: number, change: (i: NetInterface) => NetInterface): Topology {
+  return updateDevice(t, id, (d) => ({ ...d, interfaces: d.interfaces.map((i) => (i.index === index ? change(i) : i)) }));
+}
+
+function without<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
+  const { [key]: _removed, ...rest } = value;
+  return rest;
+}
+
+/** Router: Anschluss zwischen Ethernet und seriell umstellen (nur ohne Kabel). */
+export function setPortSerial(t: Topology, id: string, index: number, serial: boolean): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notSerialCapable');
+  const port = device.interfaces[index];
+  if (!port) return fail('unknownInterface');
+  if (port.sfpSlot) return fail('notSerialCapable');
+  if (!!port.serial === serial) return ok(t);
+  if (cableAt(t, { device: id, iface: index })) return fail('interfaceConnected', { device: device.name, index });
+  return ok(
+    changePort(t, id, index, (i) => {
+      const base = without(without(i, 'serial'), 'encapsulation');
+      // Serielle Leitungen kennen kein NAT-Flag für Ethernet-Heimrouter nicht – Adresse bleibt erhalten.
+      return serial ? { ...base, serial: true } : base;
+    }),
+  );
+}
+
+export function setEncapsulation(t: Topology, id: string, index: number, encapsulation: SerialEncapsulation): Result<Topology> {
+  const device = getDevice(t, id);
+  const port = device?.interfaces[index];
+  if (!device || !port) return fail('unknownInterface');
+  if (!port.serial) return fail('notSerialCapable');
+  return ok(changePort(t, id, index, (i) => (encapsulation === 'hdlc' ? without(i, 'encapsulation') : { ...i, encapsulation })));
+}
+
+export function setOspfCost(t: Topology, id: string, index: number, cost: number | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device?.interfaces[index]) return fail('unknownInterface');
+  if (cost !== null && (!Number.isInteger(cost) || cost < 1 || cost > 65535)) return fail('invalidCost');
+  return ok(changePort(t, id, index, (i) => (cost === null || cost === 10 ? without(i, 'ospfCost') : { ...i, ospfCost: cost })));
+}
+
+export function setGroupSize(t: Topology, id: string, size: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'clientgroup') return fail('invalidGroupSize');
+  if (!Number.isInteger(size) || size < 2 || size > MAX_GROUP_SIZE) return fail('invalidGroupSize', { max: MAX_GROUP_SIZE });
+  return ok(updateDevice(t, id, (d) => ({ ...d, groupSize: size })));
+}
+
+export function setModemKind(t: Topology, id: string, kind: ModemKind | null): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'modem') return fail('notAModem');
+  return ok(updateDevice(t, id, (d) => (kind ? { ...d, modem: { kind } } : without(d, 'modem'))));
+}
+
+export function addStaticNat(t: Topology, id: string, rule: StaticNat): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'router') return fail('notARouter');
+  const inside = rule.inside.trim();
+  const outside = rule.outside.trim();
+  if (parseIp(inside) === null) return { ok: false, error: { code: 'invalidIp', params: { value: inside }, field: 'inside' } };
+  if (parseIp(outside) === null) return { ok: false, error: { code: 'invalidIp', params: { value: outside }, field: 'outside' } };
+  const list = device.staticNat ?? [];
+  if (list.some((r) => r.inside === inside || r.outside === outside)) return { ok: false, error: { code: 'duplicateNat', field: 'inside' } };
+  return ok(updateDevice(t, id, (d) => ({ ...d, staticNat: [...list, { inside, outside }] })));
+}
+
+export function removeStaticNat(t: Topology, id: string, index: number): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device?.staticNat?.[index]) return fail('unknownRoute');
+  const list = device.staticNat.filter((_, i) => i !== index);
+  return ok(updateDevice(t, id, (d) => (list.length ? { ...d, staticNat: list } : without(d, 'staticNat'))));
+}
+
+/** Provider: CGNAT pro Kundenanschluss und die öffentliche Adresse dafür. */
+export function setCgnat(t: Topology, id: string, index: number, enabled: boolean): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'internet') return fail('notARouter');
+  if (!device.interfaces[index]) return fail('unknownInterface');
+  return ok(changePort(t, id, index, (i) => (enabled ? { ...i, cgnat: true } : without(i, 'cgnat'))));
+}
+
+export function setCgnatAddress(t: Topology, id: string, address: string): Result<Topology> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (device.type !== 'internet') return fail('notARouter');
+  const value = address.trim();
+  if (value && parseIp(value) === null) return { ok: false, error: { code: 'invalidIp', params: { value }, field: 'cgnatAddress' } };
+  return ok(updateDevice(t, id, (d) => (value ? { ...d, cgnatAddress: value } : without(d, 'cgnatAddress'))));
+}
+
+function routingDevice(t: Topology, id: string): Result<Device> {
+  const device = getDevice(t, id);
+  if (!device) return fail('unknownDevice');
+  if (!canRouteDynamically(device.type)) return fail('notARouter');
+  return ok(device);
+}
+
+export function setOspf(t: Topology, id: string, config: OspfConfig | null): Result<Topology> {
+  const device = routingDevice(t, id);
+  if (!device.ok) return device;
+  if (config) {
+    const issue = checkOspf(config);
+    if (issue) return { ok: false, error: issue };
+  }
+  return ok(updateDevice(t, id, (d) => (config ? { ...d, ospf: normalizeOspf(config) } : without(d, 'ospf'))));
+}
+
+export function setBgp(t: Topology, id: string, config: BgpConfig | null): Result<Topology> {
+  const device = routingDevice(t, id);
+  if (!device.ok) return device;
+  if (config) {
+    const issue = checkBgp(config);
+    if (issue) return { ok: false, error: issue };
+  }
+  return ok(updateDevice(t, id, (d) => (config ? { ...d, bgp: normalizeBgp(config) } : without(d, 'bgp'))));
+}
+
+export function setRip(t: Topology, id: string, config: RipConfig | null): Result<Topology> {
+  const device = routingDevice(t, id);
+  if (!device.ok) return device;
+  if (config) {
+    const issue = checkRip(config);
+    if (issue) return { ok: false, error: issue };
+  }
+  return ok(updateDevice(t, id, (d) => (config ? { ...d, rip: normalizeRip(config) } : without(d, 'rip'))));
+}
+
+/** Dokumentiertes VLAN mit Farbe anlegen oder ändern; die Farbe erscheint an allen Switch-Ports dieses VLANs. */
+export function setVlanDef(t: Topology, vlan: VlanDef): Result<Topology> {
+  if (!Number.isInteger(vlan.id) || vlan.id < 1 || vlan.id > 4094) return fail('invalidVlan');
+  const name = vlan.name?.trim().slice(0, 32);
+  const entry: VlanDef = { id: vlan.id, color: vlan.color, ...(name ? { name } : {}) };
+  const list = (t.vlans ?? []).filter((v) => v.id !== vlan.id);
+  return ok({ ...t, vlans: [...list, entry].sort((a, b) => a.id - b.id) });
+}
+
+export function removeVlanDef(t: Topology, id: number): Result<Topology> {
+  const list = (t.vlans ?? []).filter((v) => v.id !== id);
+  if (list.length === (t.vlans ?? []).length) return ok(t);
+  const { vlans: _v, ...rest } = t;
+  return ok(list.length ? { ...t, vlans: list } : rest);
+}
+
+/** Farbe eines VLANs: aus der VLAN-Liste, sonst vom Dokumentationsbereich mit dieser VLAN-Nummer. */
+export function vlanColor(t: Topology, vlan: number): TagColor | undefined {
+  return t.vlans?.find((v) => v.id === vlan)?.color ?? t.areas?.find((a) => a.vlan === vlan && a.kind !== 'rack')?.color;
+}
+
+/** Name eines VLANs aus der Dokumentation (VLAN-Liste oder Bereichstitel). */
+export function vlanLabel(t: Topology, vlan: number): string | undefined {
+  return t.vlans?.find((v) => v.id === vlan)?.name ?? t.areas?.find((a) => a.vlan === vlan && a.kind !== 'rack')?.title;
 }

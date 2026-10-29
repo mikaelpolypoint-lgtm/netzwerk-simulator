@@ -1,4 +1,5 @@
 import type { Device, DhcpScope, DhcpServerConfig } from '../model/types';
+import { canHostServices } from '../model/devices';
 import { broadcastOf, formatIp, maskToText, networkOf, parseIp, parseMask } from './ipv4';
 
 export const DEFAULT_LEASE_TIME = 3600;
@@ -13,7 +14,7 @@ export interface DhcpIssue {
 
 /** Ein DHCP-Server vergibt Adressen aus seinem eigenen Netz; dafür braucht er selbst eine feste Adresse. */
 export function checkDhcpServer(device: Device, config: DhcpServerConfig): DhcpIssue | null {
-  if (device.type !== 'pc') return { code: 'notAServer', field: 'server' };
+  if (!canHostServices(device.type)) return { code: 'notAServer', field: 'server' };
   const ownIp = device.interfaces[0]?.ip ? parseIp(device.interfaces[0].ip) : null;
   const prefix = device.interfaces[0]?.mask ? parseMask(device.interfaces[0].mask) : null;
   if (device.dhcp || ownIp === null || prefix === null) return { code: 'dhcpServerNeedsAddress', field: 'server' };
