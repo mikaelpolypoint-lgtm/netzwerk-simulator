@@ -12,7 +12,11 @@ import { HostNode, type AddressState, type ConnectionInfo } from './host';
 import { ClientGroupNode, type GroupMemberState } from './group';
 import type { BrowserState } from './http';
 import type { MailClientState } from './mail';
-import { InternetNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
+import { InternetNode, IpNode, RouterNode, type ArpEntry, type NatEntry } from './ip';
+import type { Route } from '../net/routing';
+import type { OspfState } from './ospf';
+import type { BgpPeerInfo } from './bgp';
+import type { PppStatus } from './ppp';
 import { EventQueue } from './queue';
 import { L3SwitchNode } from './l3switch';
 import { ModemNode, SwitchNode, type MacEntry, type ModemState, type StormState, type StpState } from './switch';
@@ -80,6 +84,9 @@ export interface DeviceState {
   group?: GroupMemberState[];
   /** Modem: Zustand der Zugangsleitung. */
   modem?: ModemState;
+  ospf?: OspfState;
+  bgp?: BgpPeerInfo[];
+  ppp?: PppStatus[];
 }
 
 /** Was ein Gerät von der Simulation sehen und auslösen darf. */
@@ -201,6 +208,15 @@ export class Simulation {
   /** Rahmen, die gerade über ein Kabel unterwegs sind (für die Animation). */
   getInFlight(): PacketLogEntry[] {
     return [...this.#inFlight];
+  }
+
+  /** Wirksame Routingtabelle eines Routers, Layer-3-Switches oder Endgeräts (inkl. dynamisch gelernter Routen). */
+  getRoutes(id: string): Route[] {
+    const node = getDevice(this.#topology, id) ? this.#node(id) : undefined;
+    if (node instanceof L3SwitchNode) return node.router.routes();
+    if (node instanceof IpNode) return node.routes();
+    if (node instanceof ClientGroupNode) return node.member(1)?.routes() ?? [];
+    return [];
   }
 
   /** Switches, die gerade einen Broadcast-Sturm erleben (für die Warnung in der Oberfläche). */

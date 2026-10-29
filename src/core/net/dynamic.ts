@@ -106,7 +106,7 @@ export function normalizeRip(c: RipConfig): RipConfig {
 }
 
 /** Liegt die Adresse in einem der Netze? (Interfaces nehmen dann am Protokoll teil.) */
-export function inNetworks(ip: number, list: readonly RoutedNetwork[]): RoutedNetwork | undefined {
+export function inNetworks<T extends RoutedNetwork>(ip: number, list: readonly T[]): T | undefined {
   return list.find((n) => {
     const net = parseIp(n.network);
     const prefix = parseMask(n.mask);

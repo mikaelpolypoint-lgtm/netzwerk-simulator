@@ -11,6 +11,7 @@ import {
   type IcmpMessage,
   type Ipv4Packet,
   type PppControl,
+  type OspfPacket,
   type TcpSegment,
   type UdpDatagram,
 } from './frames';
@@ -18,11 +19,16 @@ import type { NodeContext, SimNode } from './simulation';
 import { cableAt, deviceSeq, getDevice, otherEnd } from '../model/topology';
 import { MODEM_WAN } from '../model/links';
 import type { ModemKind } from '../model/types';
+import { BGP_PORT, OSPF_ALL_ROUTERS, RIP_MULTICAST, RIP_PORT } from './frames';
 import { ACCESS_PROFILES, nextSteps, stepIndex } from './access';
 import { PingRun, type IcmpApp } from './apps';
 import { SSH_PORT, startSshServer } from './ssh';
 import { TcpStack } from './tcp';
 import { PppLinks } from './ppp';
+import { Ospf } from './ospf';
+import { Rip } from './rip';
+import { Bgp } from './bgp';
+import type { RoutingHost } from './routing-host';
 
 export const ARP_TIMEOUT = 1000;
 export const ARP_ATTEMPTS = 2;
@@ -140,8 +146,22 @@ export class IpNode implements SimNode {
   }
 
   /** Router hören zusätzlich auf Multicast ihrer Routingprotokolle (OSPF, RIP). */
-  protected acceptsMulticast(_mac: string): boolean {
+  protected acceptsMulticast(mac: string): boolean {
+    return mac.startsWith('01:00:5E:') && this.joinedGroup(`224.0.0.${parseInt(mac.slice(-2), 16)}`);
+  }
+
+  /** Mitglied der Multicast-Gruppe (z.B. 224.0.0.5 für OSPF)? */
+  protected joinedGroup(_group: string): boolean {
     return false;
+  }
+
+  /** Multicast im lokalen Netz senden (TTL 1), z.B. OSPF-Hello an 224.0.0.5. */
+  sendMulticast(index: number, group: string, payload: Ipv4Packet['payload']) {
+    const iface = this.interfaces().find((i) => i.index === index);
+    if (!iface) return;
+    const last = Number(group.split('.')[3] ?? 0);
+    const mac = `01:00:5E:00:00:${last.toString(16).toUpperCase().padStart(2, '0')}`;
+    this.sendFrame(index, { src: iface.mac, dst: mac, payload: { kind: 'ipv4', src: formatIp(iface.ip), dst: group, ttl: 1, id: ++this.#ipId, payload } });
   }
 
   /** Serieller Anschluss? (nur physische Ports von Routern) */
@@ -274,6 +294,11 @@ export class IpNode implements SimNode {
     const dst = parseIp(packet.dst);
     if (dst === null) return;
     const iface = this.interfaces().find((i) => i.index === index);
+    // Multicast (224.0.0.0/4) wird nie weitergeleitet; Router nehmen OSPF/RIP-Gruppen an.
+    if (dst >>> 28 === 0xe) {
+      if (this.joinedGroup(packet.dst)) this.#deliver(packet, true, index, srcMac);
+      return;
+    }
     const broadcast = dst === LIMITED_BROADCAST || (iface !== undefined && dst === broadcastOf(iface.ip, iface.prefix));
     // NAT: Antworten an die Internet-Adresse des Routers gehen an den internen Rechner weiter.
     const translated = this.forwarding && iface ? this.inbound(iface, packet) : null;
@@ -336,7 +361,9 @@ export class IpNode implements SimNode {
 
   #deliver(packet: Ipv4Packet, broadcast: boolean, index: number, srcMac = '') {
     const payload = packet.payload;
-    if (payload.kind === 'udp') {
+    if (payload.kind === 'ospf') {
+      this.onOspf(packet, payload, index);
+    } else if (payload.kind === 'udp') {
       this.onUdp(packet, payload, index, srcMac);
     } else if (payload.kind === 'tcp') {
       this.onTcp(packet, payload);
@@ -346,6 +373,9 @@ export class IpNode implements SimNode {
       this.onIcmp(packet);
     }
   }
+
+  /** OSPF-Pakete (IP-Protokoll 89) für Router. */
+  protected onOspf(_packet: Ipv4Packet, _ospf: OspfPacket, _index: number) {}
 
   /** Anwendungen hängen sich hier ein (Ping, Traceroute). */
   protected onIcmp(_packet: Ipv4Packet) {}
@@ -519,11 +549,99 @@ export class PatTable {
   }
 }
 
-/** Vermittlungsrechner: leitet weiter, kann als DHCP-Relay arbeiten und Adressen übersetzen (NAT). */
-export class RouterNode extends IpNode {
-  protected override readonly forwarding = true;
-  /** TCP nur für die Verwaltung per SSH. */
+/**
+ * Gemeinsame Basis von Routern und Provider: leitet weiter und spricht
+ * dynamische Routingprotokolle (OSPF, RIP, BGP). Deren Routen ergänzen die
+ * direkt verbundenen Netze und statischen Routen; bei gleichem Präfix
+ * entscheidet die administrative Distanz.
+ */
+export class ForwardingNode extends IpNode {
+  protected override readonly forwarding: boolean = true;
   readonly tcp: TcpStack;
+  readonly ospf: Ospf;
+  readonly rip: Rip;
+  readonly bgp: Bgp;
+  #version = 0;
+  #cache: { device: Device | undefined; version: number; routes: Route[] } | null = null;
+
+  constructor(ctx: NodeContext) {
+    super(ctx);
+    this.tcp = new TcpStack(this, deviceSeq(ctx.device()?.id ?? 'd0'));
+    const host: RoutingHost = {
+      ctx,
+      tcp: this.tcp,
+      device: () => ctx.device(),
+      interfaces: () => this.interfaces(),
+      routesExcept: (kind) => this.#combine(kind),
+      sendMulticast: (index, group, payload) => this.sendMulticast(index, group, payload),
+      sendIp: (dst, payload, options, onError) => this.sendIp(dst, payload, options, onError),
+      ifaceUp: (index) => this.ifaceUp(index),
+      routesChanged: () => {
+        this.#version++;
+      },
+    };
+    this.ospf = new Ospf(host);
+    this.rip = new Rip(host);
+    this.bgp = new Bgp(host);
+  }
+
+  /** Physische Verbindung eines logischen Interfaces; VLAN-Interfaces (SVI) gelten als verbunden. */
+  ifaceUp(index: number): boolean {
+    const ref = decodeIface(index);
+    return ref.kind === 'svi' ? true : this.ctx.isConnected(ref.port);
+  }
+
+  boot() {
+    this.ospf.boot();
+    this.rip.boot();
+    this.bgp.boot();
+  }
+
+  #combine(except: 'ospf' | 'rip' | 'bgp' | null): Route[] {
+    const routes = [...super.routes()];
+    if (except !== 'ospf') routes.push(...this.ospf.routes());
+    if (except !== 'rip') routes.push(...this.rip.routes());
+    if (except !== 'bgp') routes.push(...this.bgp.routes());
+    return routes;
+  }
+
+  override routes(): Route[] {
+    const device = this.ctx.device();
+    if (this.#cache && this.#cache.device === device && this.#cache.version === this.#version) return this.#cache.routes;
+    const routes = this.#combine(null);
+    this.#cache = { device, version: this.#version, routes };
+    return routes;
+  }
+
+  protected override joinedGroup(group: string): boolean {
+    const device = this.ctx.device();
+    return (group === OSPF_ALL_ROUTERS && !!device?.ospf) || (group === RIP_MULTICAST && !!device?.rip);
+  }
+
+  protected override onOspf(packet: Ipv4Packet, ospf: OspfPacket, index: number) {
+    this.ospf.receive(packet, ospf, index);
+  }
+
+  protected override onUdp(packet: Ipv4Packet, datagram: UdpDatagram, index: number, _srcMac: string) {
+    if (datagram.payload.kind === 'rip' && datagram.dstPort === RIP_PORT) this.rip.receive(packet, datagram.payload, index);
+  }
+
+  protected override onTcp(packet: Ipv4Packet, segment: TcpSegment) {
+    if (segment.dstPort === BGP_PORT || segment.srcPort === BGP_PORT) this.tcp.receive(packet.src, packet.dst, segment);
+  }
+
+  override state(): object {
+    const device = this.ctx.device();
+    return {
+      ...super.state(),
+      ...(device?.ospf ? { ospf: this.ospf.state() } : {}),
+      ...(device?.bgp ? { bgp: this.bgp.peers() } : {}),
+    };
+  }
+}
+
+/** Vermittlungsrechner: leitet weiter, kann als DHCP-Relay arbeiten und Adressen übersetzen (NAT). */
+export class RouterNode extends ForwardingNode {
   readonly nat: PatTable;
 
   #ping: IcmpApp | null = null;
@@ -533,7 +651,6 @@ export class RouterNode extends IpNode {
   constructor(ctx: NodeContext) {
     super(ctx);
     const seq = deviceSeq(ctx.device()?.id ?? 'd0');
-    this.tcp = new TcpStack(this, seq);
     this.nat = new PatTable(ctx, 'pat');
     startSshServer(this, ctx);
     this.ppp = new PppLinks(
@@ -544,8 +661,9 @@ export class RouterNode extends IpNode {
     );
   }
 
-  boot() {
+  override boot() {
     this.start();
+    super.boot();
   }
 
   /** Beim Start und nach Änderungen: PPP-Leitungen aushandeln bzw. zurücksetzen. */
@@ -578,10 +696,10 @@ export class RouterNode extends IpNode {
     this.#ping?.onIcmp(packet);
   }
 
-  /** Nur SSH (Port 22); alles andere an den Router selbst verwirft er still, wie Heimrouter. */
+  /** Verwaltung per SSH (Port 22) und BGP (179); alles andere an den Router selbst verwirft er still, wie Heimrouter. */
   protected override onTcp(packet: Ipv4Packet, segment: TcpSegment) {
-    if (segment.dstPort !== SSH_PORT) return;
-    this.tcp.receive(packet.src, packet.dst, segment);
+    if (segment.dstPort === SSH_PORT) this.tcp.receive(packet.src, packet.dst, segment);
+    else super.onTcp(packet, segment);
   }
 
   #isNat(index: number) {
@@ -641,7 +759,7 @@ export class RouterNode extends IpNode {
   }
 
   override state(): object {
-    return { ...super.state(), nat: this.natEntries() };
+    return { ...super.state(), nat: this.natEntries(), ...(this.ppp.status().length ? { ppp: this.ppp.status() } : {}) };
   }
 
   /**
@@ -649,8 +767,9 @@ export class RouterNode extends IpNode {
    * eingetragenen Server, mit der eigenen Interface-Adresse als giaddr;
    * Antworten des Servers verteilt der Router wieder im Netz des Clients.
    */
-  protected override onUdp(_packet: Ipv4Packet, datagram: UdpDatagram, index: number) {
+  protected override onUdp(packet: Ipv4Packet, datagram: UdpDatagram, index: number, srcMac: string) {
     const msg = datagram.payload;
+    if (msg.kind === 'rip') return super.onUdp(packet, datagram, index, srcMac);
     if (msg.kind !== 'dhcp' || datagram.dstPort !== DHCP_SERVER_PORT) return;
     const fromClient = msg.op === 'discover' || msg.op === 'request' || msg.op === 'release';
     if (fromClient) {
@@ -680,8 +799,7 @@ export class RouterNode extends IpNode {
  * Adresse (`cgnatAddress`). Viele Kunden teilen sich so eine Adresse –
  * Portweiterleitungen von aussen sind dann nicht möglich.
  */
-export class InternetNode extends IpNode {
-  protected override readonly forwarding = true;
+export class InternetNode extends ForwardingNode {
   readonly cgnat: PatTable;
   /** Zugangsleitungen, deren Aufbau begonnen hat (Kabel-ID), damit er nicht doppelt startet. */
   #access = new Set<string>();
@@ -704,7 +822,8 @@ export class InternetNode extends IpNode {
   }
 
   /** Provider-Seite der Zugangsleitungen: beginnt den Aufbau, wo die Norm es so vorsieht. */
-  boot() {
+  override boot() {
+    super.boot();
     const device = this.ctx.device();
     if (!device) return;
     const topology = this.ctx.topology();
