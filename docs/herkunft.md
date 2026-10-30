@@ -1,6 +1,6 @@
 # Herkunft und Rechte
 
-Dieses Dokument hält fest, woher Code, Texte und Grafiken stammen. Es dient als Nachweis für Schulen und als Grundlage für die Lizenz. Stand: Oktober 2026, Version 0.4.
+Dieses Dokument hält fest, woher Code, Texte und Grafiken stammen. Es dient als Nachweis für Schulen und als Grundlage für die Lizenz. Stand: Oktober 2026, Version 0.5 (leyoNET).
 
 > Technische Bestandesaufnahme, keine Rechtsberatung.
 
@@ -21,7 +21,7 @@ Dieses Dokument hält fest, woher Code, Texte und Grafiken stammen. Es dient als
 
 Nicht ausgeliefert, nur zum Bauen und Testen: Vite, TypeScript, Vitest, Playwright, svelte-check, vite-plugin-singlefile, Tauri-CLI. Diese Werkzeuge stehen ebenfalls unter freien Lizenzen. Die Release-Prüfung listet sie unter `licenses.tools`.
 
-Alle diese Lizenzen sind mit MIT und mit (A)GPL-3.0 verträglich.
+Alle diese Lizenzen sind mit der AGPL-3.0, unter der leyoNET steht, verträglich.
 
 ## Eigene Bestandteile
 
@@ -30,14 +30,15 @@ Alle diese Lizenzen sind mit MIT und mit (A)GPL-3.0 verträglich.
 | Simulationskern (`src/core`) | eigene Implementierung nach öffentlichen Standards (RFCs, IEEE 802, ITU-T), siehe [protokolle.md](protokolle.md) |
 | Oberfläche (`src/ui`) | eigene Implementierung |
 | Symbole (`Icon.svelte`, `DeviceIcon.svelte`) | eigene, einfache Zeichnungen als SVG-Pfade; keine Icon-Bibliothek |
-| App-Symbol (`src-tauri/app-icon/icon.svg`) | eigene Zeichnung; die PNG-Grössen daraus erzeugt |
+| Logo und Symbol (`branding/leyoNET.svg`, `branding/favicon.svg`) | eigene Gestaltung von Mark von Allmen; App-Symbole der Desktop-Version daraus erzeugt (`npx tauri icon`). Name und Logo sind nicht Teil der AGPL, siehe [NOTICE.md](../NOTICE.md) |
+| Logo-Schrift | Systemschrift «Courier New» bzw. Monospace des Geräts, nicht eingebettet |
 | Schriften | keine eingebetteten Schriften, es werden die Systemschriften genutzt |
 | Texte, Hilfe, Übungen, Beispiele | eigene Texte |
 | Server (`server/`) | eigene Implementierung, nur Node.js-Bordmittel |
 
 ## Vorbilder und Namen anderer
 
-- **FILIUS** (Universität Siegen) und **Cisco Packet Tracer** waren Anlass und Vorbild für die Idee: ein Netzwerk-Simulator für den Unterricht. Übernommen wurde nur die Idee, kein Code, keine Grafik, keine Texte und keine Bedienoberfläche. Ideen und Unterrichtskonzepte sind urheberrechtlich nicht geschützt.
+- **FILIUS** (Universität Siegen) und **Cisco Packet Tracer** waren Anlass und Vorbild für die Idee: ein leyoNET für den Unterricht. Übernommen wurde nur die Idee, kein Code, keine Grafik, keine Texte und keine Bedienoberfläche. Ideen und Unterrichtskonzepte sind urheberrechtlich nicht geschützt.
 - **Befehlszeile:** Die Syntax lehnt sich an FRRouting und Cisco IOS an (`show ip route`, `router ospf` …). Befehlsnamen sind allgemein übliche Fachbegriffe. Die Implementierung ist eigenständig und enthält keinen Code aus diesen Systemen. FRRouting (GPL-2.0) steht in keiner Verbindung zum Projekt.
 - **Herstellernamen** wie Cisco, Wireshark, Plesk, Windows oder macOS erscheinen nur beschreibend, etwa «Cisco-HDLC» als Name einer Kapselung oder «öffnen mit Wireshark». Sie sind Marken ihrer Inhaber.
 

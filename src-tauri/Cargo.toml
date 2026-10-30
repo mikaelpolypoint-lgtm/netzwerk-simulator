@@ -1,15 +1,15 @@
 [package]
-name = "netzwerk-simulator"
-version = "0.4.0"
-description = "Netzwerk-Simulator für den Informatik-Unterricht"
-authors = ["Mikael von Allmen", "vonam-git"]
-license = "MIT"
-repository = "https://github.com/vonam-git/netzwerk-simulator"
+name = "leyonet"
+version = "0.5.0"
+description = "leyoNET für den Informatik-Unterricht"
+authors = ["Mark von Allmen", "Mikael von Allmen"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/vonam-git/leyoNET"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "netzwerk_simulator_lib"
+name = "leyonet_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

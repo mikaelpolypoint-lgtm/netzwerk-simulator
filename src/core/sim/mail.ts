@@ -210,7 +210,7 @@ export class MailServer {
     const reply = (conn: TcpConnection, line: string) => conn.write(line + CRLF);
 
     return {
-      onOpen: (conn: TcpConnection) => reply(conn, `220 ${domain()} ESMTP Netzwerk-Simulator`),
+      onOpen: (conn: TcpConnection) => reply(conn, `220 ${domain()} ESMTP leyoNET`),
       onData: (conn: TcpConnection, chunk: string) => {
         for (const line of lines.push(chunk)) {
           if (data) {

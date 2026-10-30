@@ -22,7 +22,7 @@ export function toPcapng(topology: Topology, log: readonly PacketLogEntry[]): Ui
   };
 
   // Section Header Block
-  block(0x0a0d0d0a, [...le32(0x1a2b3c4d), ...le16(1), ...le16(0), 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, ...option(4, utf8('Netzwerk-Simulator')), ...option(0, [])]);
+  block(0x0a0d0d0a, [...le32(0x1a2b3c4d), ...le16(1), ...le16(0), 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, ...option(4, utf8('leyoNET')), ...option(0, [])]);
 
   const interfaces = new Map<number, number>();
   const interfaceFor = (linkType: number) => {

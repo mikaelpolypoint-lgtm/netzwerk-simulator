@@ -68,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('desktop-{0}', github.run_number) }}
-          releaseName: 'Netzwerk-Simulator ${{ github.ref_type == ''tag'' && github.ref_name || format(''Test {0}'', github.run_number) }}'
+          releaseName: 'leyoNET ${{ github.ref_type == ''tag'' && github.ref_name || format(''Test {0}'', github.run_number) }}'
           releaseBody: 'Installer für Windows (.msi/.exe), macOS (.dmg) und Linux (.deb/.AppImage/.rpm). Nicht signiert, siehe docs/desktop.md.'
           releaseDraft: true
           prerelease: ${{ github.ref_type != 'tag' }}

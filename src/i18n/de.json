@@ -1,5 +1,5 @@
 {
-  "app.title": "Netzwerk-Simulator",
+  "app.title": "leyoNET",
 
   "mode.label": "Betriebsmodus",
   "mode.design": "Entwurf",
@@ -724,7 +724,7 @@
   "error.invalidLoss": "Der Paketverlust muss zwischen 0 und 100 % liegen.",
 
   "error.invalidJson": "Die Datei ist keine gültige JSON-Datei.",
-  "error.notAProject": "Die Datei ist kein Projekt des Netzwerk-Simulators.",
+  "error.notAProject": "Die Datei ist kein Projekt von leyoNET.",
   "error.unsupportedVersion": "Die Datei stammt aus einer neueren Version (Format {version}, unterstützt: {supported}).",
   "error.invalidStructure": "Die Datei ist beschädigt (Problem bei {path}).",
   "error.readFailed": "Die Datei konnte nicht gelesen werden.",
@@ -811,15 +811,15 @@
   "key.delete": "Entf",
   "toolbar.language": "Sprache",
 
-  "toolbar.about": "Über",
+  "toolbar.about": "Über leyoNET",
   "about.version": "Version {version}",
-  "about.intro": "Freie Software für den Informatik-Unterricht. Läuft vollständig lokal, ohne Konten und ohne Internetverbindung.",
+  "about.intro": "Freie Software für den Informatik-Unterricht. Läuft im Browser oder installiert auf dem eigenen Gerät, ohne Konten und ohne Tracking.",
   "about.ownLicense": "Lizenz",
   "about.thirdParty": "Enthaltene Software",
-  "about.thirdPartyHint": "Diese Pakete sind in den Simulator eingebaut. Ihre Lizenzen erlauben das, sofern die folgenden Hinweise mitgegeben werden.",
+  "about.thirdPartyHint": "Diese Pakete sind in leyoNET eingebaut. Ihre Lizenzen erlauben das, sofern die folgenden Hinweise mitgegeben werden.",
   "about.devBuild": "Im Entwicklungsserver nicht verfügbar; die Liste wird beim Bauen erzeugt.",
   "about.syntaxTitle": "Nachgebildete Befehlssyntax",
-  "about.syntaxText": "Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) angelehnt. Sie ist eine eigene, vereinfachte Nachbildung für den Unterricht und enthält keinen Code und keine Texte aus FRRouting. FRRouting ist ein eigenständiges Projekt unter der GPL-2.0-Lizenz und steht in keiner Verbindung zu diesem Simulator.",
+  "about.syntaxText": "Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) und Cisco IOS angelehnt. Sie ist eine eigene, vereinfachte Nachbildung für den Unterricht und enthält keinen Code und keine Texte aus diesen Systemen. FRRouting (GPL-2.0), Cisco, Packet Tracer und FILIUS stehen in keiner Verbindung zu leyoNET; die Namen gehören ihren Inhabern.",
   "about.close": "Schliessen",
 
   "console.cmd.usage.ssh": "Aufruf: ssh <benutzer>@<IP-Adresse>",
@@ -1010,7 +1010,7 @@
   "level.proLockedProject": "Das Projekt nutzt Pro-Funktionen, der Pro-Modus ist hier aber gesperrt. Die Einstellungen wirken trotzdem.",
   "privacy.open": "Datenschutz",
   "privacy.title": "Datenschutz",
-  "privacy.intro": "Der Netzwerk-Simulator verarbeitet keine Personendaten: keine Konten, keine Namen, keine E-Mail-Adressen, kein Tracking, keine Werbung, keine externen Dienste.",
+  "privacy.intro": "leyoNET verarbeitet keine Personendaten: keine Konten, keine Namen, keine E-Mail-Adressen, kein Tracking, keine Werbung, keine externen Dienste.",
   "privacy.localTitle": "Lokal und Desktop-Version",
   "privacy.local": "Projekte bleiben auf diesem Gerät (im Browser-Speicher oder als Datei, die du selbst speicherst). Nichts wird übertragen; die Seite kann technisch keine Verbindung ins Internet aufbauen.",
   "privacy.onlineTitle": "Webversion",
@@ -1281,7 +1281,7 @@
   "features.autoEnabled": "Für dieses Projekt eingeschaltet: {list}",
   "features.blocked": "Das Projekt nutzt Funktionen, die gesperrt sind: {list}. Sie bleiben sichtbar, lassen sich aber nicht bearbeiten.",
   "features.loaded": "Funktionsauswahl «{title}» geladen.",
-  "features.invalidFile": "Die Datei ist keine Funktionsauswahl des Netzwerk-Simulators.",
+  "features.invalidFile": "Die Datei ist keine Funktionsauswahl von leyoNET.",
   "pcap.empty": "Noch keine Pakete mitgeschnitten.",
   "pcap.saved": "{count} Pakete als pcapng gespeichert (öffnen mit Wireshark).",
   "pcap.export": "pcap",
@@ -1849,7 +1849,7 @@
   "help.group.analysis": "Analyse",
   "help.group.documentation": "Dokumentation",
   "help.overview.title": "Überblick",
-  "help.overview.body": "Mit dem Netzwerk-Simulator baust du ein Netz aus Geräten und Kabeln, konfigurierst es und lässt es dann laufen. Die Geräte senden dabei echte Pakete nach den Standards (ARP, DHCP, DNS, TCP, HTTP, OSPF, BGP …), die du mitschneiden und Schicht für Schicht ansehen kannst.\n\n- Links: der **Shop** mit allen Geräten ([[shop]])\n- Mitte: die Zeichenfläche\n- Rechts: Einstellungen des gewählten Elements\n- Oben: Menüleiste und Umschalter [[modes]]\n\nAlles Gespeicherte ist reine Technik: keine Namen, keine Konten.",
+  "help.overview.body": "Mit leyoNET baust du ein Netz aus Geräten und Kabeln, konfigurierst es und lässt es dann laufen. Die Geräte senden dabei echte Pakete nach den Standards (ARP, DHCP, DNS, TCP, HTTP, OSPF, BGP …), die du mitschneiden und Schicht für Schicht ansehen kannst.\n\n- Links: der **Shop** mit allen Geräten ([[shop]])\n- Mitte: die Zeichenfläche\n- Rechts: Einstellungen des gewählten Elements\n- Oben: Menüleiste und Umschalter [[modes]]\n\nAlles Gespeicherte ist reine Technik: keine Namen, keine Konten.",
   "help.modes.title": "Entwurf und Simulation",
   "help.modes.body": "Es gibt zwei Modi, umschalten mit **M** oder **F5**.\n\n**Entwurf:** Geräte einfügen, verkabeln, konfigurieren und dokumentieren (Bereiche, Farbtags, Beschreibungen, VLAN-Farben).\n\n**Simulation:** Das Netz läuft. Endgeräte pingen, surfen oder öffnen die Befehlszeile. Geräte lassen sich verschieben (WLAN-Roaming, [[roaming]]), Ports abschalten und Pakete mitschneiden ([[sniffer]]). Neue Geräte kommen nur im Entwurf dazu.\n\nBeim Start der Simulation entsteht automatisch ein [[snapshots]].",
   "help.shop.title": "Shop",
@@ -2007,7 +2007,7 @@
   "checks.security.admin": "Admin-Zugang geschützt",
   "checks.licenses.bundled": "Eingebaute Pakete freigegeben",
   "checks.licenses.notices": "Lizenztexte eingebettet",
-  "checks.licenses.own": "Eigene Lizenz (MIT)",
+  "checks.licenses.own": "Eigene Lizenz (AGPL-3.0) und Link zum Quellcode",
   "checks.licenses.tools": "Lizenzen der Werkzeuge",
 
   "catalog.sniffArp.title": "Pakete mitschneiden",
@@ -2101,5 +2101,16 @@
   "catalog.ripChain.hint1": "Router anklicken → Routing-Protokolle → RIP einschalten → «Eigene Netze eintragen».",
 
   "features.unlocked": "Auswahl entsperrt.",
-  "features.unlockFailed": "Das ist nicht die Datei, mit der die Auswahl gesperrt wurde."
+  "features.unlockFailed": "Das ist nicht die Datei, mit der die Auswahl gesperrt wurde.",
+
+  "about.open": "Über leyoNET",
+  "about.tagline": "Netzwerke bauen, simulieren und verstehen",
+  "about.storyTitle": "Wie leyoNET entstand",
+  "about.story1": "Mark unterrichtet Netzwerktechnik. Jahrelang hat er mit seinen Klassen in Cisco Packet Tracer und FILIUS Kabel gezogen, Pings verschickt und Broadcast-Stürme heraufbeschworen (meistens absichtlich). Irgendwann war klar: Es braucht ein Werkzeug, das moderner ist, mehr kann, einfach im Browser läuft und sich trotzdem lokal installieren lässt.",
+  "about.story2": "Also klopfte Mark bei seinem Bruder Mika an. Zusammen zimmerten sie das Grundgerüst. Dann übernahm Mark das Steuer und baute Idee um Idee aus dem Schulzimmer ein, von farbigen VLANs bis BGP.",
+  "about.story3": "Ehrlich gesagt: Ohne künstliche Intelligenz gäbe es leyoNET nicht. Die eigentliche Programmierarbeit erledigt eine KI. Die Ideen, die Erfahrung aus dem Unterricht, die Entscheidungen und die Verantwortung, wenn mal ein Paket verloren geht, liegen bei Mark und Mika.",
+  "about.story4": "Und der Name? «leyo» sind die Anfangsbuchstaben von Marks Kindern. Das Symbol zeigt ein «l» und ein «y» aus Netzwerkknoten: «ly» für «love you». Jedes gute Netz braucht schliesslich starke Verbindungen.",
+  "about.license": "leyoNET ist freie Software unter der GNU Affero General Public License, Version 3 oder neuer (AGPL-3.0-or-later). Du darfst es nutzen, kopieren, verändern und weitergeben. Wer eine veränderte Fassung weitergibt oder als Webversion anbietet, muss deren Quellcode unter derselben Lizenz zugänglich machen. leyoNET kommt ohne jede Gewährleistung.",
+  "about.trademark": "Name und Logo «leyoNET» sind nicht Teil der Lizenz: Veränderte Fassungen brauchen einen eigenen Namen.",
+  "about.source": "Quellcode:"
 }

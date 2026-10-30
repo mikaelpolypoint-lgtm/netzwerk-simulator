@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="620"
+     height="180"
+     viewBox="0 0 620 180"
+     role="img"
+     aria-labelledby="logo-title">
+
+  <title id="logo-title">leyoNET</title>
+
+  <!-- Transparenter Hintergrund -->
+
+  <!-- Netzwerk-l: zwei Knoten und eine senkrechte Verbindung -->
+  <g fill="#8a8f98"
+     stroke="#8a8f98"
+     stroke-width="5"
+     stroke-linecap="round">
+    <path d="M 48,66 L 48,116" fill="none"/>
+    <circle cx="48" cy="66" r="5" stroke="none"/>
+    <circle cx="48" cy="116" r="5" stroke="none"/>
+  </g>
+
+  <!-- Kleine Buchstaben auf gemeinsamer Grundlinie -->
+  <g fill="#8a8f98"
+     font-family="'Courier New', Courier, monospace"
+     font-size="88"
+     font-weight="400">
+    <text x="76" y="120">e</text>
+    <text x="188" y="120">o</text>
+  </g>
+
+  <!--
+    Netzwerk-y:
+    Oberkante der Knoten etwa auf Höhe von e und o.
+    Der untere Knoten bildet die Unterlänge des y.
+  -->
+  <g stroke="#8a8f98"
+     stroke-width="5"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     fill="none">
+    <path d="M 140,85 L 158,110 L 180,85
+             M 158,110 L 144,136"/>
+  </g>
+
+  <g fill="#8a8f98">
+    <circle cx="140" cy="85" r="5"/>
+    <circle cx="180" cy="85" r="5"/>
+    <circle cx="144" cy="136" r="5"/>
+  </g>
+
+  <!-- Dominantes NET im Schreibmaschinenstil -->
+  <text x="244"
+        y="120"
+        fill="#000000"
+        font-family="'Courier New', Courier, monospace"
+        font-size="112"
+        font-weight="700">NET</text>
+
+</svg>

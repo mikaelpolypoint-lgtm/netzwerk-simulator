@@ -1,6 +1,6 @@
 {
-  "version": "0.4.0",
-  "date": "2026-10-30T08:44:34.712Z",
+  "version": "0.5.0",
+  "date": "2026-10-30T09:34:24.940Z",
   "checks": [
     {
       "id": "privacy.noExternal",
@@ -96,7 +96,7 @@
       "id": "licenses.own",
       "category": "licenses",
       "status": "pass",
-      "detail": "Eigener Code unter MIT (Mikael von Allmen & vonam-git)."
+      "detail": "Eigener Code unter AGPL-3.0-or-later (Mark von Allmen & Mikael von Allmen), Link zum Quellcode unter «Über»."
     },
     {
       "id": "licenses.tools",

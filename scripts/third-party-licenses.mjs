@@ -77,7 +77,7 @@ export function thirdPartyLicenses({ outFile = 'dist/third-party-licenses.json' 
         if (problems.length) throw new Error('Lizenzprüfung fehlgeschlagen:\n  ' + problems.join('\n  '));
         // Als Kommentar für alle, die die Datei im Editor öffnen …
         const comment =
-          '<!--\n  Netzwerk-Simulator – MIT-Lizenz, Copyright (c) 2026 Mikael von Allmen & vonam-git.\n' +
+          '<!--\n  leyoNET – AGPL-3.0-or-later, Copyright (C) 2026 Mark von Allmen und Mikael von Allmen.\n  Quellcode: https://github.com/vonam-git/leyoNET – Name und Logo sind nicht Teil der Lizenz.\n' +
           '  Enthält Code folgender Pakete (vollständige Lizenztexte unter «Über / Lizenzen»):\n' +
           packages.map((p) => `    ${p.name} ${p.version} (${p.license})`).join('\n') +
           '\n-->';

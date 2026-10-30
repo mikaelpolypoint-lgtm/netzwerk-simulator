@@ -1,7 +1,9 @@
 <script lang="ts">
   import { t } from '../../i18n';
   import { MENUS, command, keyLabel } from '../commands.svelte';
+  import { dialogs } from '../state/dialogs.svelte';
   import Icon from './Icon.svelte';
+  import Logo from './Logo.svelte';
   import MenuList from './MenuList.svelte';
 
   /**
@@ -57,10 +59,9 @@
 <!-- Tastatursteuerung für die enthaltenen Schaltflächen (Pfeiltasten, Escape). -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <nav class="menubar" bind:this={bar} aria-label={t('menu.label')} onkeydown={onkeydown}>
-  <span class="brand" aria-hidden="true">
-    <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="6" cy="6" r="3" fill="currentColor" /><circle cx="18" cy="6" r="3" fill="currentColor" /><circle cx="12" cy="18" r="3" fill="currentColor" /><path d="M6 6 12 18 18 6 6 6" stroke="currentColor" stroke-width="1.6" fill="none" /></svg>
-  </span>
-  <strong class="app">{t('app.title')}</strong>
+  <button class="brand" onclick={() => dialogs.show('about')} title={t('about.open')} aria-label={t('about.open')}>
+    <Logo height={26} />
+  </button>
   <ul role="menubar">
     {#each MENUS as menu (menu.id)}
       <li role="none" class="menu">
@@ -108,13 +109,18 @@
     z-index: 30;
   }
   .brand {
-    color: var(--accent);
+    all: unset;
     display: flex;
+    align-items: center;
+    margin: 0 10px 0 2px;
+    padding: 2px 4px;
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
   }
-  .app {
-    margin: 0 10px 0 4px;
-    font-size: 0.9rem;
-    white-space: nowrap;
+  .brand:hover,
+  .brand:focus-visible {
+    background: var(--hover);
   }
   ul {
     display: flex;
@@ -164,7 +170,6 @@
     border-radius: 4px;
   }
   @media (max-width: 900px) {
-    .app,
     .search span {
       display: none;
     }

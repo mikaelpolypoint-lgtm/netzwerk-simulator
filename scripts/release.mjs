@@ -1,4 +1,4 @@
-// Erzeugt release/netzwerk-simulator.html aus dem Build und prüft, dass die
+// Erzeugt release/leyonet.html aus dem Build und prüft, dass die
 // Datei ohne Internet funktioniert: keine Skripte, Stile, Schriften oder
 // Bilder von fremden Servern und eine CSP, die Netzwerkzugriffe verbietet.
 // Aufruf: npm run release (baut vorher mit "npm run verify").
@@ -10,7 +10,7 @@ import { runChecks, writeReport } from './release-checks.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = join(root, 'dist', 'index.html');
-const target = join(root, 'release', 'netzwerk-simulator.html');
+const target = join(root, 'release', 'leyonet.html');
 
 const html = readFileSync(source, 'utf8');
 const problems = [];
@@ -54,14 +54,14 @@ writeReport(report);
 const counts = report.checks.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] ?? 0) + 1 }), {});
 console.log(`Prüfungen: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')} → release/checks.json`);
 const kb = Math.round(statSync(target).size / 1024);
-console.log(`release/netzwerk-simulator.html erstellt (${kb} KB), offline geprüft.`);
+console.log(`release/leyonet.html erstellt (${kb} KB), offline geprüft.`);
 
 function notices(list) {
   const parts = [
     '# Hinweise zu enthaltener Software',
     '',
     'Diese Datei wird von `npm run release` erzeugt. Sie listet die Pakete, deren Code in',
-    '`netzwerk-simulator.html` eingebaut ist, mit ihren Lizenztexten. Dieselben Angaben zeigt',
+    '`leyonet.html` eingebaut ist, mit ihren Lizenztexten. Dieselben Angaben zeigt',
     'der Simulator unter **Über**.',
     '',
     'Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) angelehnt.',

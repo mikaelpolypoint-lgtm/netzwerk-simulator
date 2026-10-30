@@ -5,5 +5,5 @@
 pub fn run() {
     tauri::Builder::default()
         .run(tauri::generate_context!())
-        .expect("Netzwerk-Simulator konnte nicht gestartet werden");
+        .expect("leyoNET konnte nicht gestartet werden");
 }

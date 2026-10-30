@@ -1,7 +1,7 @@
 # Für Webhosting mit Apache (z.B. Plesk): Dokumentstamm auf diesen Ordner setzen.
 # Siehe docs/plesk.md. Bei reinem Nginx wird diese Datei ignoriert.
 
-DirectoryIndex netzwerk-simulator.html
+DirectoryIndex leyonet.html
 Options -Indexes
 
 <IfModule mod_headers.c>

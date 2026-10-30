@@ -49,7 +49,7 @@ export function resolveLink(base: Url, href: string): Url | UrlError {
 const CRLF = '\r\n';
 
 export function buildRequest(url: Url): string {
-  return [`GET ${url.path} HTTP/1.1`, `Host: ${url.host}`, 'User-Agent: Netzwerk-Simulator', 'Connection: close', '', ''].join(CRLF);
+  return [`GET ${url.path} HTTP/1.1`, `Host: ${url.host}`, 'User-Agent: leyoNET', 'Connection: close', '', ''].join(CRLF);
 }
 
 export interface HttpRequest {
@@ -96,7 +96,7 @@ export function buildResponse(status: number, body: string, contentType = 'text/
   const bytes = contentType.startsWith('text/') || contentType.includes('svg') ? encodeUtf8(body) : body;
   return [
     `HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? ''}`,
-    'Server: Netzwerk-Simulator',
+    'Server: leyoNET',
     `Content-Type: ${contentType}`,
     `Content-Length: ${bytes.length}`,
     'Connection: close',

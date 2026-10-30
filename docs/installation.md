@@ -1,6 +1,6 @@
 # Installation
 
-Der Netzwerk-Simulator ist **eine einzige HTML-Datei**. Sie braucht kein Internet, keinen Server und keine Installation von Programmen – ein aktueller Browser genügt (Chrome, Edge, Firefox oder Safari).
+leyoNET ist **eine einzige HTML-Datei**. Sie braucht kein Internet, keinen Server und keine Installation von Programmen – ein aktueller Browser genügt (Chrome, Edge, Firefox oder Safari).
 
 Es gibt drei Wege, je nachdem, was du vorhast:
 
@@ -19,10 +19,10 @@ Es gibt drei Wege, je nachdem, was du vorhast:
 ### Mit Git
 
 ```bash
-git clone https://github.com/vonam-git/netzwerk-simulator.git
+git clone https://github.com/vonam-git/leyoNET.git
 ```
 
-Danach im Ordner `netzwerk-simulator/release/` die Datei **`netzwerk-simulator.html`** doppelklicken. Fertig.
+Danach im Ordner `netzwerk-simulator/release/` die Datei **`leyonet.html`** doppelklicken. Fertig.
 
 Neue Versionen holen:
 
@@ -33,8 +33,8 @@ git pull
 
 ### Ohne Git
 
-1. Auf GitHub das Repository öffnen: <https://github.com/vonam-git/netzwerk-simulator>
-2. In den Ordner `release` wechseln und `netzwerk-simulator.html` anklicken.
+1. Auf GitHub das Repository öffnen: <https://github.com/vonam-git/leyoNET>
+2. In den Ordner `release` wechseln und `leyonet.html` anklicken.
 3. Oben rechts **«Download raw file»** wählen und die Datei speichern.
 
 ### An die Klasse verteilen
@@ -54,7 +54,7 @@ Der Simulator merkt sich den letzten Stand automatisch im Browser. Wird die Date
 Für den Betrieb im Schulnetz liefert ein kleiner Nginx-Container die Datei aus. Es gibt keine Datenbank, keine Konten und keine Zugriffsprotokolle.
 
 ```bash
-git clone https://github.com/vonam-git/netzwerk-simulator.git
+git clone https://github.com/vonam-git/leyoNET.git
 cd netzwerk-simulator
 docker compose up -d --build
 ```
@@ -83,7 +83,7 @@ simulator.schule.example {
 
 ### Ohne Docker
 
-Jeder Webserver kann die Datei ausliefern: `release/netzwerk-simulator.html` als `index.html` in das Webverzeichnis kopieren. Zugriffsprotokolle möglichst abschalten (Nginx: `access_log off;`) oder IP-Adressen anonymisieren.
+Jeder Webserver kann die Datei ausliefern: `release/leyonet.html` als `index.html` in das Webverzeichnis kopieren. Zugriffsprotokolle möglichst abschalten (Nginx: `access_log off;`) oder IP-Adressen anonymisieren.
 
 ---
 
@@ -92,7 +92,7 @@ Jeder Webserver kann die Datei ausliefern: `release/netzwerk-simulator.html` als
 Voraussetzung: [Node.js](https://nodejs.org/) ab Version 20 (LTS empfohlen) und Git.
 
 ```bash
-git clone https://github.com/vonam-git/netzwerk-simulator.git
+git clone https://github.com/vonam-git/leyoNET.git
 cd netzwerk-simulator
 npm ci
 npm run dev
@@ -104,7 +104,7 @@ npm run dev
 |---|---|
 | `npm test` | Tests des Simulationskerns |
 | `npm run verify` | Typprüfung, Tests und Build (vor jedem Commit) |
-| `npm run release` | baut `release/netzwerk-simulator.html` neu und prüft, dass sie ohne Internet funktioniert |
+| `npm run release` | baut `release/leyonet.html` neu und prüft, dass sie ohne Internet funktioniert |
 
 Texte der Oberfläche stehen in `src/i18n/de.json`. Englisch steht in `en.json`; eine weitere Übersetzung entsteht als neue Datei mit denselben Schlüsseln (und einem Eintrag in `src/i18n/locale.svelte.ts`).
 
@@ -114,7 +114,7 @@ Texte der Oberfläche stehen in `src/i18n/de.json`. Englisch steht in `en.json`;
 
 Textvorschlag für das Verzeichnis der Bearbeitungstätigkeiten oder die Beschreibung des Angebots:
 
-> Der Netzwerk-Simulator ist eine Lernsoftware, die vollständig im Browser der nutzenden Person läuft. Er verarbeitet keine Personendaten: Es gibt keine Benutzerkonten, keine Anmeldung, keine Cookies, kein Tracking und keine Verbindungen zu Drittanbietern. Projekte werden ausschliesslich lokal im Browser (IndexedDB) oder als Datei gespeichert, die die nutzende Person selbst verwaltet. Beim Betrieb auf einem Schulserver liefert dieser nur eine unveränderliche Datei aus; Zugriffsprotokolle sind abgeschaltet.
+> leyoNET ist eine Lernsoftware, die vollständig im Browser der nutzenden Person läuft. Er verarbeitet keine Personendaten: Es gibt keine Benutzerkonten, keine Anmeldung, keine Cookies, kein Tracking und keine Verbindungen zu Drittanbietern. Projekte werden ausschliesslich lokal im Browser (IndexedDB) oder als Datei gespeichert, die die nutzende Person selbst verwaltet. Beim Betrieb auf einem Schulserver liefert dieser nur eine unveränderliche Datei aus; Zugriffsprotokolle sind abgeschaltet.
 
 Hinweis: Passwörter von Postfächern im Simulator sind nur simuliert und stehen im Klartext in der Projektdatei. Lernende sollen dort keine echten Passwörter verwenden.
 
