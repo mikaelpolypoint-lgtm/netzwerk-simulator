@@ -106,8 +106,10 @@ export function runChecks({ html, packages }) {
   const missingText = (packages ?? []).filter((p) => !p.text);
   add('licenses', 'licenses.notices', missingText.length || !html.includes('id="third-party-licenses"') ? 'fail' : 'pass', missingText.length ? `Lizenztext fehlt: ${missingText.map((p) => p.name).join(', ')}` : 'Lizenztexte sind in der Datei eingebettet und unter «Über» sichtbar.');
 
-  const own = existsSync(join(root, 'LICENSE')) && /MIT License/.test(read('LICENSE'));
-  add('licenses', 'licenses.own', own ? 'pass' : 'fail', own ? `Eigener Code unter MIT (${pkg.author}).` : 'LICENSE fehlt oder ist nicht MIT.');
+  const own = existsSync(join(root, 'LICENSE')) && /GNU AFFERO GENERAL PUBLIC LICENSE/.test(read('LICENSE')) && pkg.license === 'AGPL-3.0-or-later';
+  // AGPL Abschnitt 13: Wer die Webversion nutzt, muss den Quellcode erreichen können.
+  const sourceLink = html.includes('github.com/vonam-git/leyoNET');
+  add('licenses', 'licenses.own', own && sourceLink ? 'pass' : 'fail', own && sourceLink ? `Eigener Code unter AGPL-3.0-or-later (${pkg.author}), Link zum Quellcode unter «Über».` : !own ? 'LICENSE fehlt oder ist nicht AGPL-3.0.' : 'Link zum Quellcode fehlt in der App (AGPL Abschnitt 13).');
 
   const dev = Object.keys(pkg.devDependencies ?? {}).flatMap((name) => {
     const file = join(root, 'node_modules', name, 'package.json');
@@ -127,7 +129,7 @@ export function writeReport(report) {
 
 // Direkt aufgerufen: gegen die bestehende Release-Datei prüfen.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const html = read('release/netzwerk-simulator.html');
+  const html = read('release/leyonet.html');
   const licenses = join(root, 'dist', 'third-party-licenses.json');
   const packages = existsSync(licenses) ? JSON.parse(readFileSync(licenses, 'utf8')) : null;
   const report = runChecks({ html, packages });

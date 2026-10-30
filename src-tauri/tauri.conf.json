@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Netzwerk-Simulator",
+  "productName": "leyoNET",
   "version": "../package.json",
-  "identifier": "ch.netzwerk-simulator.app",
+  "identifier": "app.leyonet.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173/dev.html",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Netzwerk-Simulator",
+        "title": "leyoNET",
         "width": 1400,
         "height": 900,
         "minWidth": 1000,
@@ -30,10 +30,10 @@
     "active": true,
     "targets": "all",
     "category": "Education",
-    "shortDescription": "Netzwerk-Simulator für den Informatik-Unterricht",
+    "shortDescription": "leyoNET – Netzwerke bauen, simulieren und verstehen",
     "longDescription": "Rechnernetze aufbauen, Geräte konfigurieren und den Verkehr auf Paketebene beobachten. Läuft vollständig offline.",
-    "copyright": "© 2026 Mikael von Allmen & vonam-git, MIT-Lizenz",
-    "license": "MIT",
+    "copyright": "© 2026 Mark von Allmen & Mikael von Allmen, AGPL-3.0",
+    "license": "AGPL-3.0-or-later",
     "licenseFile": "../LICENSE",
     "resources": {
       "../release/THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",

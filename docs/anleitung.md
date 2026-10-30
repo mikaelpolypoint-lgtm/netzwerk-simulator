@@ -1,6 +1,6 @@
 # Anleitung für Lernende
 
-Diese Anleitung erklärt die Bedienung des Netzwerk-Simulators Schritt für Schritt. Im Programm selbst hilft **F1** jederzeit: Es öffnet die Hilfe zum gewählten Gerät oder Fenster. **?** zeigt alle Tastenkürzel.
+Diese Anleitung erklärt die Bedienung von leyoNET Schritt für Schritt. Im Programm selbst hilft **F1** jederzeit: Es öffnet die Hilfe zum gewählten Gerät oder Fenster. **?** zeigt alle Tastenkürzel.
 
 ## Der Bildschirm
 

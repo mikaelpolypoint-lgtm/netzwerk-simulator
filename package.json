@@ -1,7 +1,7 @@
 {
-  "name": "netzwerk-simulator",
+  "name": "leyonet",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,10 +32,12 @@
     "vite-plugin-singlefile": "^2.3.4",
     "vitest": "^4.1.12"
   },
-  "license": "MIT",
-  "author": "Mikael von Allmen & vonam-git",
+  "license": "AGPL-3.0-or-later",
+  "author": "Mark von Allmen & Mikael von Allmen",
   "contributors": [
-    "Mikael von Allmen",
-    "vonam-git"
-  ]
+    "Mark von Allmen",
+    "Mikael von Allmen"
+  ],
+  "homepage": "https://github.com/vonam-git/leyoNET",
+  "repository": { "type": "git", "url": "https://github.com/vonam-git/leyoNET.git" }
 }

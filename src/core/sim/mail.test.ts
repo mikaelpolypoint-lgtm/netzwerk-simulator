@@ -61,11 +61,11 @@ group('E-Mail im eigenen Netz', () => {
     sim.sendMail(anna, { to: ['ben@schule.example'], subject: 'x', body: 'y' });
     sim.runUntilIdle();
     const log = sim.getPacketLog().map((e) => describe(net.topology, e));
-    for (const line of ['"220 schule.example ESMTP Netzwerk-Simulator"', '"HELO anna"', '"MAIL FROM:<anna@schule.example>"', '"RCPT TO:<ben@schule.example>"', '"DATA"', '"QUIT"']) {
+    for (const line of ['"220 schule.example ESMTP leyoNET"', '"HELO anna"', '"MAIL FROM:<anna@schule.example>"', '"RCPT TO:<ben@schule.example>"', '"DATA"', '"QUIT"']) {
       expect(log.some((l) => l.includes(line))).toBe(true);
     }
     const dialog = mailState(sim, anna).steps.filter((s) => s.code === 'mail.dialog').map((s) => `${s.params?.dir}: ${s.params?.line}`);
-    expect(dialog.slice(0, 4)).toEqual(['S: 220 schule.example ESMTP Netzwerk-Simulator', 'C: HELO anna', 'S: 250 schule.example', 'C: MAIL FROM:<anna@schule.example>']);
+    expect(dialog.slice(0, 4)).toEqual(['S: 220 schule.example ESMTP leyoNET', 'C: HELO anna', 'S: 250 schule.example', 'C: MAIL FROM:<anna@schule.example>']);
   });
 
   it('weist unbekannte Postfächer ab', () => {

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  netzwerk_simulator_lib::run();
+  leyonet_lib::run();
 }

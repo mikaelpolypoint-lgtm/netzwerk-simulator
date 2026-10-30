@@ -1,12 +1,12 @@
-# Netzwerk-Simulator im Schulnetz (Variante B).
+# leyoNET im Schulnetz (Variante B).
 # Start:  docker compose up -d --build
 # Danach: http://<servername>:8080
 services:
-  netzwerk-simulator:
+  leyonet:
     build:
       context: .
       dockerfile: deploy/Dockerfile
-    image: netzwerk-simulator:latest
+    image: leyonet:latest
     ports:
       - "8080:80"
     restart: unless-stopped

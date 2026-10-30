@@ -977,7 +977,7 @@ export function complete(session: CliSession, line: string, env: CliEnv): string
 
 function showVersion(device: Device): string[] {
   return [
-    'Netzwerk-Simulator – simulated network operating system',
+    'leyoNET – simulated network operating system',
     'Command syntax modelled on FRRouting (vtysh); not FRRouting software.',
     `Device: ${device.name} (${device.type}), ${device.interfaces.length} ports`,
   ];
@@ -1206,7 +1206,7 @@ function showSpanningTree(device: Device, env: CliEnv): string[] {
 // --- running-config ------------------------------------------------------------
 
 export function runningConfig(device: Device): string[] {
-  const lines = ['!', '! Netzwerk-Simulator – running configuration', '!', `hostname ${hostname(device)}`];
+  const lines = ['!', '! leyoNET – running configuration', '!', `hostname ${hostname(device)}`];
   const cli = device.cli;
   for (const u of cli?.users ?? []) lines.push(`username ${u.name} password ${u.password}`);
   if (cli?.enableSecret) lines.push(`enable secret ${cli.enableSecret}`);

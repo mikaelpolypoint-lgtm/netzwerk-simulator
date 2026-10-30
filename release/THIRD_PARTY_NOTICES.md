@@ -1,7 +1,7 @@
 # Hinweise zu enthaltener Software
 
 Diese Datei wird von `npm run release` erzeugt. Sie listet die Pakete, deren Code in
-`netzwerk-simulator.html` eingebaut ist, mit ihren Lizenztexten. Dieselben Angaben zeigt
+`leyonet.html` eingebaut ist, mit ihren Lizenztexten. Dieselben Angaben zeigt
 der Simulator unter **Über**.
 
 Die Befehlszeile der Router und Switches ist an die Syntax von FRRouting (vtysh) angelehnt.

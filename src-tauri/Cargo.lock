@@ -1834,8 +1834,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "netzwerk-simulator"
-version = "0.4.0"
+name = "leyonet"
+version = "0.5.0"
 dependencies = [
  "tauri",
  "tauri-build",

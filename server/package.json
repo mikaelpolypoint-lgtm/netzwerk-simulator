@@ -1,8 +1,8 @@
 {
-  "name": "netzwerk-simulator-server",
+  "name": "leyonet-server",
   "private": true,
   "description": "Server der Webversion: Sessions, Klassen, Rückmeldungen, Admin. Ohne Abhängigkeiten.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "type": "commonjs",
   "main": "start.cjs",
   "engines": { "node": ">=18" },

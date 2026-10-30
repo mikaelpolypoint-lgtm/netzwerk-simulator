@@ -1,6 +1,6 @@
 # Datenschutz
 
-Der Netzwerk-Simulator ist so gebaut, dass er **keine Personendaten** braucht und keine speichert. Dieses Dokument beschreibt, was wo verarbeitet wird, und dient Schulen als Grundlage für ihre eigene Datenschutzerklärung. Der Text im Simulator (**Hilfe → Datenschutz**) fasst dasselbe für Lernende zusammen.
+leyoNET ist so gebaut, dass er **keine Personendaten** braucht und keine speichert. Dieses Dokument beschreibt, was wo verarbeitet wird, und dient Schulen als Grundlage für ihre eigene Datenschutzerklärung. Der Text im Simulator (**Hilfe → Datenschutz**) fasst dasselbe für Lernende zusammen.
 
 > Hinweis: Dies ist eine technische Beschreibung, keine Rechtsberatung. Verantwortlich im Sinne von revDSG und DSGVO ist, wer eine Webversion betreibt (in der Regel die Schule). Bei Unsicherheit die kantonale bzw. schulinterne Datenschutzstelle beiziehen.
 
@@ -74,7 +74,7 @@ Auch ein vorgeschaltetes CDN oder ein Reverse-Proxy kann protokollieren.
 |---|---|
 | Datenschutz | keine externen Ressourcen in der HTML-Datei; CSP `connect-src 'none'`; keine Analyse-, Tracking- oder Werbedienste; keine Cookies; Browser-Speicher nur mit technischen Schlüsseln; IP-Adressen nur gesalzen gehasht im Arbeitsspeicher, kein Zugriffsprotokoll; automatische Löschfristen |
 | Sicherheit | Server ohne npm-Pakete; keine Laufzeitabhängigkeiten; `npm audit` der Build-Werkzeuge; Sicherheits-Header (CSP, nosniff, no-referrer, kein Einbetten); kein `eval`; Admin nur mit Passwort, Vergleich in konstanter Zeit |
-| Lizenzen | eingebaute Pakete nur mit freigegebener Lizenz; Lizenztexte eingebettet; eigener Code unter MIT; Lizenzen der Build-Werkzeuge |
+| Lizenzen | eingebaute Pakete nur mit freigegebener Lizenz; Lizenztexte eingebettet; eigener Code unter AGPL-3.0 mit Link zum Quellcode in der App; Lizenzen der Build-Werkzeuge |
 
 Die Prüfung ersetzt keine rechtliche Beurteilung, verhindert aber, dass sich unbemerkt ein Tracker, eine externe Schrift oder eine unpassende Lizenz einschleicht.
 
@@ -88,4 +88,4 @@ Da keine Daten einer bestimmten Person zugeordnet werden, gibt es in der Regel n
 
 ## Vorlage für die Datenschutzerklärung der Schule
 
-> **Netzwerk-Simulator.** Die Webversion des Netzwerk-Simulators unter *‹Adresse›* wird von *‹Schule›* betrieben. Sie speichert nur technische Netzwerk-Konfigurationen unter einem Zufallscode, ohne Namen, Konten oder E-Mail-Adressen. Arbeitsstände werden nach *‹24 Stunden›* ohne Änderung automatisch gelöscht, Klassen nach *‹14 Tagen›*, Rückmeldungen nach *‹30 Tagen›*. Der Simulator setzt keine Cookies, nutzt keine Analyse- oder Werbedienste und speichert keine IP-Adressen. Der Webserver führt Zugriffsprotokolle, die nach *‹7 Tagen›* gelöscht werden. Kontakt: *‹Adresse der Datenschutzverantwortlichen›*.
+> **leyoNET.** Die Webversion von leyoNET unter *‹Adresse›* wird von *‹Schule›* betrieben. Sie speichert nur technische Netzwerk-Konfigurationen unter einem Zufallscode, ohne Namen, Konten oder E-Mail-Adressen. Arbeitsstände werden nach *‹24 Stunden›* ohne Änderung automatisch gelöscht, Klassen nach *‹14 Tagen›*, Rückmeldungen nach *‹30 Tagen›*. Der Simulator setzt keine Cookies, nutzt keine Analyse- oder Werbedienste und speichert keine IP-Adressen. Der Webserver führt Zugriffsprotokolle, die nach *‹7 Tagen›* gelöscht werden. Kontakt: *‹Adresse der Datenschutzverantwortlichen›*.

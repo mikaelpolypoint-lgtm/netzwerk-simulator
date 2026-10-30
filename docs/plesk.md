@@ -1,6 +1,6 @@
 # Webversion auf Plesk (Node.js)
 
-Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn von GitHub und startet den kleinen Node.js-Server aus `server/`. Er liefert die fertige Datei `release/netzwerk-simulator.html` aus und bietet zusätzlich Sessions mit Code, Klassen-Sessions, Rückmeldungen und die Admin-Konsole. Auf dem Server wird nichts gebaut, und es werden keine npm-Pakete installiert: Der Server nutzt nur Node.js-Bordmittel.
+Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn von GitHub und startet den kleinen Node.js-Server aus `server/`. Er liefert die fertige Datei `release/leyonet.html` aus und bietet zusätzlich Sessions mit Code, Klassen-Sessions, Rückmeldungen und die Admin-Konsole. Auf dem Server wird nichts gebaut, und es werden keine npm-Pakete installiert: Der Server nutzt nur Node.js-Bordmittel.
 
 ```
 Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)──►  simulator-test.deine-domain.ch
@@ -12,8 +12,8 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
 1. **Subdomain anlegen**, z.B. `simulator-test.deine-domain.ch` (Websites & Domains → Subdomain hinzufügen).
 2. **Git hinzufügen**: bei der Subdomain auf **Git** klicken.
    - Repository: **Remote-Git-Hosting**
-   - URL: `https://github.com/vonam-git/netzwerk-simulator.git`
-     (bei einem privaten Repository die SSH-URL `git@github.com:vonam-git/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
+   - URL: `https://github.com/vonam-git/leyoNET.git`
+     (bei einem privaten Repository die SSH-URL `git@github.com:vonam-git/leyoNET.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
    - Bereitstellungsmodus: **Automatisch**
    - Serverpfad: **`/httpdocs`** (nicht der Dokumentstamm `/httpdocs/server/public`: sonst landet das ganze Repository im öffentlichen Ordner)
    - Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
@@ -82,14 +82,14 @@ Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Ber
 git switch develop
 git pull                 # Stand von GitHub holen
 # … ändern …
-npm run release          # Tests, Build, release/netzwerk-simulator.html neu erzeugen
+npm run release          # Tests, Build, release/leyonet.html neu erzeugen
 npm run test:server      # Server-Tests
 git add -A
 git commit -m "Was geändert wurde"
 git push                 # Plesk zieht den neuen Stand
 ```
 
-Wichtig: Der Server liefert die **eingecheckte** Datei `release/netzwerk-simulator.html` aus. Ohne `npm run release` vor dem Commit bleibt die Webversion auf dem alten Stand. Die CI auf GitHub meldet das mit einem roten Kreuz.
+Wichtig: Der Server liefert die **eingecheckte** Datei `release/leyonet.html` aus. Ohne `npm run release` vor dem Commit bleibt die Webversion auf dem alten Stand. Die CI auf GitHub meldet das mit einem roten Kreuz.
 
 Lokal lässt sich die Webversion so ausprobieren:
 
@@ -107,7 +107,7 @@ Bietet das Hosting kein Node.js, kann die Datei auch rein statisch ausgeliefert 
 
 Plesk mit **reinem Nginx** (ohne Apache) liest `.htaccess` nicht. Dann unter *Apache & nginx-Einstellungen → Zusätzliche nginx-Anweisungen* eintragen:
 ```
-index netzwerk-simulator.html;
+index leyonet.html;
 add_header Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'" always;
 ```
 

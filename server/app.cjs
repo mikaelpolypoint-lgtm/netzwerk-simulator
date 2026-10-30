@@ -1,8 +1,8 @@
 'use strict';
 /**
- * Server der Webversion des Netzwerk-Simulators.
+ * Server der Webversion von leyoNET.
  *
- * Liefert die fertige Datei release/netzwerk-simulator.html aus und bietet eine
+ * Liefert die fertige Datei release/leyonet.html aus und bietet eine
  * kleine JSON-API für
  *   - Sessions: technische Projektstände unter einem Zufallscode, die nach
  *     einer einstellbaren Zeit automatisch gelöscht werden,
@@ -26,7 +26,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(ROOT, 'data'));
-const RELEASE_FILE = path.join(ROOT, 'release', 'netzwerk-simulator.html');
+const RELEASE_FILE = path.join(ROOT, 'release', 'leyonet.html');
 const NOTICES_FILE = path.join(ROOT, 'release', 'THIRD_PARTY_NOTICES.md');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const MAX_BODY = 2 * 1024 * 1024;

@@ -5,5 +5,5 @@ const { createServer, ADMIN_PASSWORD } = require('./app.cjs');
 
 const port = Number(process.env.PORT) || 3000;
 createServer().listen(port, () => {
-  console.log(`Netzwerk-Simulator läuft auf Port ${port}${ADMIN_PASSWORD ? '' : ' (Admin gesperrt: ADMIN_PASSWORD fehlt)'}`);
+  console.log(`leyoNET läuft auf Port ${port}${ADMIN_PASSWORD ? '' : ' (Admin gesperrt: ADMIN_PASSWORD fehlt)'}`);
 });

@@ -4,6 +4,6 @@
 FROM nginx:1.27-alpine
 
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY release/netzwerk-simulator.html /usr/share/nginx/html/index.html
+COPY release/leyonet.html /usr/share/nginx/html/index.html
 
 EXPOSE 80

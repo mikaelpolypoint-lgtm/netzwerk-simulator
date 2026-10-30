@@ -1,8 +1,12 @@
-# Netzwerk-Simulator
+<p align="center"><img src="branding/leyoNET.svg" alt="leyoNET" width="420" /></p>
 
-[![CI](https://github.com/vonam-git/netzwerk-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/vonam-git/netzwerk-simulator/actions/workflows/ci.yml)
+# leyoNET
 
-Webbasierter Simulator für Rechnernetze im Informatik-Unterricht (Informatik EFZ). Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste. Oberfläche auf Deutsch und Englisch, mit hellem und dunklem Design.
+**Netzwerke bauen, simulieren und verstehen.**
+
+[![CI](https://github.com/vonam-git/leyoNET/actions/workflows/ci.yml/badge.svg)](https://github.com/vonam-git/leyoNET/actions/workflows/ci.yml)
+
+leyoNET ist ein Simulator für Rechnernetze im Informatik-Unterricht, vom ersten Lehrjahr (Informatik EFZ) bis zur Fachhochschule. Lernende bauen Topologien auf, konfigurieren Geräte und beobachten den Verkehr auf Paketebene. Läuft vollständig im Browser, offline, ohne Konten und ohne externe Dienste. Oberfläche auf Deutsch und Englisch, mit hellem und dunklem Design.
 
 Die ursprüngliche Anforderungsbeschreibung steht in [docs/konzept.md](docs/konzept.md).
 
@@ -11,10 +15,10 @@ Die ursprüngliche Anforderungsbeschreibung steht in [docs/konzept.md](docs/konz
 ## Sofort loslegen
 
 ```bash
-git clone https://github.com/vonam-git/netzwerk-simulator.git
+git clone https://github.com/vonam-git/leyoNET.git
 ```
 
-Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md), dazu die [Webversion mit Node.js auf Plesk](docs/plesk.md) (Sessions mit Code, Klassen, Rückmeldungen, Admin-Konsole) und die [Desktop-Version für Windows, macOS und Linux](docs/desktop.md).
+Dann **`release/leyonet.html`** doppelklicken – fertig, ohne Installation und ohne Internet. Alle Wege (Datei verteilen, Schulserver mit Docker, selbst bauen) beschreibt [docs/installation.md](docs/installation.md), dazu die [Webversion mit Node.js auf Plesk](docs/plesk.md) (Sessions mit Code, Klassen, Rückmeldungen, Admin-Konsole) und die [Desktop-Version für Windows, macOS und Linux](docs/desktop.md).
 
 ## Stand
 
@@ -41,6 +45,7 @@ Dann **`release/netzwerk-simulator.html`** doppelklicken – fertig, ohne Instal
 | v0.4 | Serielle Leitungen (HDLC/PPP), statisches NAT, CGNAT, OSPF, RIP, BGP, Modems (DOCSIS, GPON, LTE, ADSL, VDSL) | ✅ |
 | v0.4 | WLAN-Roaming, Broadcast-Sturm ohne STP, VLAN-Farben, Adressanzeige privat/öffentlich, IP-Rechner | ✅ |
 | v0.4 | Sniffer nach OSI mit echten Bytes, Hex-Ansicht, Filtersprache, pcapng-Export; Release-Prüfung Datenschutz/Sicherheit/Lizenzen | ✅ |
+| v0.5 | Neuer Name **leyoNET** mit Logo, Lizenz AGPL-3.0, Herkunftsnachweis | ✅ |
 
 ## Entwicklung
 
@@ -57,7 +62,7 @@ npm run server   # Webversion lokal auf http://localhost:3000 (ADMIN_PASSWORD se
 npm run check    # Typprüfung (UI und DOM-freier Kern)
 npm run build    # erzeugt dist/index.html
 npm run verify   # alles zusammen: Typprüfung, Tests, Server-Tests, Build (vor jedem Commit)
-npm run release  # verify + release/netzwerk-simulator.html neu erzeugen und offline prüfen
+npm run release  # verify + release/leyonet.html neu erzeugen und offline prüfen
 npm run e2e      # Oberflächentests (Playwright) gegen den Build
 npm run desktop:dev    # Desktop-Fenster (Tauri, braucht Rust)
 npm run desktop:build  # Installer für das eigene System
@@ -65,9 +70,9 @@ npm run desktop:build  # Installer für das eigene System
 
 Die Oberflächentests laden keine eigenen Browser herunter, sondern nutzen den installierten: unter Windows Edge, sonst Chrome (anderer Kanal mit `PW_CHANNEL`, z.B. `PW_CHANNEL=chromium` nach `npx playwright install chromium`, oder ein beliebiges Chromium mit `PW_EXECUTABLE=/pfad/zu/chromium`).
 
-`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/netzwerk-simulator.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und führt die Release-Prüfung aus (`scripts/release-checks.mjs`): Sie bricht ab, falls die Datei externe Ressourcen, Tracker oder Cookies enthält, die CSP fehlt, Sicherheits-Header fehlen oder eine Lizenz nicht freigegeben ist, und schreibt den Bericht nach `release/checks.json` (sichtbar in der Admin-Konsole). **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
+`npm run build` erzeugt **eine einzige Datei** `dist/index.html`, die alle Skripte und Stile enthält. `npm run release` kopiert sie nach `release/leyonet.html` (diese Datei ist eingecheckt, damit sie ohne Node.js nutzbar ist) und führt die Release-Prüfung aus (`scripts/release-checks.mjs`): Sie bricht ab, falls die Datei externe Ressourcen, Tracker oder Cookies enthält, die CSP fehlt, Sicherheits-Header fehlen oder eine Lizenz nicht freigegeben ist, und schreibt den Bericht nach `release/checks.json` (sichtbar in der Admin-Konsole). **Nach Änderungen am Code vor dem Push `npm run release` ausführen**, sonst bleibt die verteilte Datei auf dem alten Stand.
 
-GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` (inklusive Server-Tests) und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/netzwerk-simulator.html` nicht zum Code passt.
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) führt bei jedem Push `npm run release` (inklusive Server-Tests) und die Oberflächentests aus und schlägt fehl, wenn die eingecheckte `release/leyonet.html` nicht zum Code passt.
 
 Schulserver: `docker compose up -d --build` (siehe [docs/installation.md](docs/installation.md#b-schulserver-mit-docker)).
 
@@ -147,12 +152,24 @@ Ausgelegt auf revDSG und DSGVO, Details und eine Textvorlage für Schulen in [do
 
 Klartext-JSON mit `meta` (Format und Version), `topology` (Geräte, Anschlüsse mit MAC, IP und Maske, Kabel mit Medium, Dokumentationsbereiche, Stockwerke), `configuration` (geräteübergreifende Einstellungen, derzeit leer) und optional `snapshots` (Zwischenstände). Gerätebezogene Einstellungen wie Gateway und DNS-Server liegen direkt beim Gerät. Beim Öffnen wird die Datei vollständig geprüft; unbekannte Felder werden verworfen, und Fehler nennen die betroffene Stelle (z.B. `topology.devices[2].type`).
 
+## Geschichte
+
+Mark von Allmen unterrichtet Netzwerktechnik und hat jahrelang mit Cisco Packet Tracer und FILIUS gearbeitet. Daraus entstand der Wunsch nach einem Werkzeug, das moderner ist, mehr kann, im Browser läuft und sich trotzdem lokal installieren lässt. Das Grundgerüst baute er zusammen mit seinem Bruder Mikael (Mika), danach entwickelte Mark es mit seinen Ideen aus dem Unterricht weiter. Die eigentliche Programmierarbeit erledigt eine KI; Ideen, Entscheidungen und Verantwortung liegen bei den beiden.
+
+«leyo» sind die Anfangsbuchstaben von Marks Kindern. Das Symbol zeigt ein «l» und ein «y» aus Netzwerkknoten: «ly» für «love you».
+
 ## Herkunft
 
-Die Idee orientiert sich am öffentlich dokumentierten Konzept der Lernsoftware FILIUS (Universität Siegen). Dies ist eine eigenständige Neuimplementation: Code, Grafiken und Texte des Originals werden nicht verwendet.
+leyoNET ist eine eigenständige Neuentwicklung. Von FILIUS (Universität Siegen) und Cisco Packet Tracer stammt nur die Idee; Code, Grafiken und Texte anderer Programme werden nicht verwendet. Details zu allen Bestandteilen: [docs/herkunft.md](docs/herkunft.md).
 
 ## Lizenz
 
-[MIT](LICENSE) © 2026 Mikael von Allmen & vonam-git. Freie Nutzung, Anpassung und Weitergabe, auch an andere Schulen, solange der Lizenzhinweis erhalten bleibt.
+© 2026 Mark von Allmen und Mikael von Allmen. leyoNET ist freie Software unter der [GNU Affero General Public License v3 oder neuer](LICENSE) (AGPL-3.0-or-later):
 
-Eingebaute Software anderer (z.B. die Svelte-Laufzeit) steht unter MIT-kompatiblen Lizenzen; die Hinweise liegen in [release/THIRD_PARTY_NOTICES.md](release/THIRD_PARTY_NOTICES.md) und erscheinen im Simulator unter **Über**. Der Build prüft die Lizenzen und bricht bei einer nicht freigegebenen ab. Die Desktop-Version liefert zusätzlich die Lizenzen der Rust-Pakete mit ([docs/desktop.md](docs/desktop.md)). Die Befehlszeile bildet die Syntax von FRRouting nur nach und enthält keinen Code daraus ([docs/cli.md](docs/cli.md#lizenzen)).
+- Schulen, Lehrpersonen und Lernende dürfen leyoNET frei nutzen, kopieren und weitergeben, auch als Webversion auf dem eigenen Server.
+- Wer leyoNET verändert und weitergibt oder als Webdienst anbietet, muss den Quellcode seiner Fassung unter derselben Lizenz zugänglich machen.
+- **Name und Logo** sind nicht Teil der Lizenz; veränderte Fassungen brauchen einen eigenen Namen ([NOTICE.md](NOTICE.md)).
+
+Versionen bis 0.4.0 (damals «Netzwerk-Simulator») wurden unter der MIT-Lizenz veröffentlicht.
+
+Eingebaute Software anderer (z.B. die Svelte-Laufzeit) steht unter MIT-kompatiblen Lizenzen; die Hinweise liegen in [release/THIRD_PARTY_NOTICES.md](release/THIRD_PARTY_NOTICES.md) und erscheinen unter **Über**. Der Build prüft die Lizenzen und bricht bei einer nicht freigegebenen ab. Die Desktop-Version liefert zusätzlich die Lizenzen der Rust-Pakete mit ([docs/desktop.md](docs/desktop.md)). Die Befehlszeile bildet die Syntax von FRRouting und Cisco IOS nur nach und enthält keinen Code daraus ([docs/cli.md](docs/cli.md#lizenzen)).
