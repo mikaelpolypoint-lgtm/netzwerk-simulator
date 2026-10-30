@@ -25,14 +25,38 @@ function contentSecurityPolicy(): Plugin {
   };
 }
 
-import { readFileSync } from 'node:fs';
+/**
+ * Die Quell-HTML heisst dev.html, nicht index.html: Liegt das Repository auf
+ * einem Webserver (z.B. Plesk), würde eine index.html im Hauptordner sonst als
+ * Startseite ausgeliefert und lädt /src/main.ts, das es dort nicht gibt.
+ * Im Build wird die Ausgabe wieder zu dist/index.html.
+ */
+function outputAsIndex(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'output-as-index',
+    apply: 'build',
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    closeBundle() {
+      const from = join(outDir, 'dev.html');
+      if (existsSync(from)) renameSync(from, join(outDir, 'index.html'));
+    },
+  };
+}
+
+import { existsSync, readFileSync, renameSync } from 'node:fs';
+import { join } from 'node:path';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // Eine einzige HTML-Datei, die auch per file:// (Variante A) funktioniert.
-  plugins: [svelte(), viteSingleFile(), contentSecurityPolicy(), thirdPartyLicenses()],
+  plugins: [svelte(), viteSingleFile(), contentSecurityPolicy(), thirdPartyLicenses(), outputAsIndex()],
+  build: { rollupOptions: { input: 'dev.html' } },
+  server: { open: '/dev.html' },
   test: {
     include: ['src/**/*.test.ts'],
   },
