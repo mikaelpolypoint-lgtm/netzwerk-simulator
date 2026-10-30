@@ -162,7 +162,7 @@ const SOLUTIONS: Record<string, (t: Topology) => Topology> = {
     return t;
   },
   'web-dns': (t) => {
-    t = unwrap(addDnsRecord(t, byName(t, 'DNS-Server'), { name: 'www.schule.ch', type: 'A', value: '10.1.1.80', ttl: 60 }));
+    t = unwrap(addDnsRecord(t, byName(t, 'DNS-Server'), { name: 'www.schule.example', type: 'A', value: '10.1.1.80', ttl: 60 }));
     return unwrap(configureHost(t, byName(t, 'Notebook'), { ip: '10.1.1.10', mask: '24', dns: '10.1.1.53' }));
   },
   wlan: (t) => {

@@ -273,7 +273,7 @@ export interface CliConfig {
 export type DnsType = 'A' | 'MX';
 
 export interface DnsRecord {
-  /** Name in Kleinbuchstaben, z.B. "webserver1" oder "www.schule.ch". */
+  /** Name in Kleinbuchstaben, z.B. "webserver1" oder "www.schule.example". */
   name: string;
   type: DnsType;
   /** Bei A eine IPv4-Adresse, bei MX der Name des Mailservers. */
@@ -305,7 +305,7 @@ export interface Mailbox {
 }
 
 export interface MailServerConfig {
-  /** Domain, für die der Server Post annimmt, z.B. "schule.ch". */
+  /** Domain, für die der Server Post annimmt, z.B. "schule.example". */
   domain: string;
   mailboxes: Mailbox[];
 }

@@ -51,7 +51,7 @@ const docsis: AccessStep[] = [
 
 const gpon: AccessStep[] = [
   { from: 'provider', tech: 'gpon', message: 'PLOAM Upstream_Overhead', fields: { wavelength: '1490 nm ↓ / 1310 nm ↑' } },
-  { from: 'cpe', tech: 'gpon', message: 'PLOAM Serial_Number_ONU', fields: { serialNumber: 'SMBS0A1B2C3D' }, delay: 20 },
+  { from: 'cpe', tech: 'gpon', message: 'PLOAM Serial_Number_ONU', fields: { serialNumber: 'DEMO0A1B2C3D' }, delay: 20 },
   { from: 'provider', tech: 'gpon', message: 'PLOAM Assign_ONU-ID', fields: { onuId: 7 } },
   { from: 'provider', tech: 'gpon', message: 'PLOAM Ranging_Time', fields: { equalizationDelay: '42 µs', distance: '3.1 km' }, delay: 5 },
   { from: 'provider', tech: 'gpon', message: 'PLOAM Assign_Alloc-ID', fields: { allocId: 1031 } },
@@ -78,7 +78,7 @@ function dsl(standard: 'ADSL2+' | 'VDSL2', down: number, up: number): AccessStep
     { from: 'provider', tech: 'pppoe', message: 'PPP LCP Configure-Ack' },
     { from: 'provider', tech: 'pppoe', message: 'PPP LCP Configure-Request', fields: { mru: 1492, authentication: 'PAP' } },
     { from: 'cpe', tech: 'pppoe', message: 'PPP LCP Configure-Ack' },
-    { from: 'cpe', tech: 'pppoe', message: 'PPP PAP Authenticate-Request', fields: { user: 'kunde@provider.ch' } },
+    { from: 'cpe', tech: 'pppoe', message: 'PPP PAP Authenticate-Request', fields: { user: 'kunde@provider.example' } },
     { from: 'provider', tech: 'pppoe', message: 'PPP PAP Authenticate-Ack' },
   ];
 }
@@ -86,7 +86,7 @@ function dsl(standard: 'ADSL2+' | 'VDSL2', down: number, up: number): AccessStep
 const lte: AccessStep[] = [
   { from: 'cpe', tech: 'lte', message: 'RRC Connection Request', fields: { cause: 'mo-Data' } },
   { from: 'provider', tech: 'lte', message: 'RRC Connection Setup' },
-  { from: 'cpe', tech: 'lte', message: 'RRC Setup Complete + Attach Request', fields: { imsi: '228 01 0123456789', apn: 'internet' } },
+  { from: 'cpe', tech: 'lte', message: 'RRC Setup Complete + Attach Request', fields: { imsi: '001 01 0123456789', apn: 'internet' } },
   { from: 'provider', tech: 'lte', message: 'Authentication Request', fields: { rand: '3f9a…', autn: 'c27d…' } },
   { from: 'cpe', tech: 'lte', message: 'Authentication Response', fields: { res: '8e1b…' } },
   { from: 'provider', tech: 'lte', message: 'Security Mode Command', fields: { ciphering: '128-EEA2 (AES)', integrity: '128-EIA2' } },

@@ -213,7 +213,7 @@ export const CATALOG: CatalogEntry[] = [
         tasks: task('webDns', 3, [
           goal('webDns', 1, { type: 'ping', from: 'Notebook', to: 'Webserver' }),
           goal('webDns', 2, { type: 'http', from: 'Notebook', url: 'http://10.1.1.80/index.html' }),
-          goal('webDns', 3, { type: 'http', from: 'Notebook', url: 'http://www.schule.ch/index.html' }),
+          goal('webDns', 3, { type: 'http', from: 'Notebook', url: 'http://www.schule.example/index.html' }),
         ]),
       };
     },

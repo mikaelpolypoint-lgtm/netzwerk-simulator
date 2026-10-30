@@ -7,7 +7,7 @@ export interface MailAddress {
   domain: string;
 }
 
-/** "Anna@Schule.CH" → { user: "anna", domain: "schule.ch" }. */
+/** "Anna@Schule.EXAMPLE" → { user: "anna", domain: "schule.example" }. */
 export function parseAddress(text: string): MailAddress | null {
   const match = /^([A-Za-z0-9._-]+)@([^@\s]+)$/.exec(text.trim());
   if (!match || !isValidName(match[2]!)) return null;

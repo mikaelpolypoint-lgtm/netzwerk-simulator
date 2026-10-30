@@ -54,7 +54,7 @@
               "ttl": 300
             },
             {
-              "name": "www.schule.ch",
+              "name": "www.schule.example",
               "type": "A",
               "value": "192.168.20.10",
               "ttl": 300

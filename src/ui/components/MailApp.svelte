@@ -71,7 +71,7 @@
       </div>
     {:else if view === 'compose'}
       <form class="compose" onsubmit={send}>
-        <label><span>{t('mailApp.to')}</span><input bind:value={draft.to} placeholder="ben@schule.ch" autocomplete="off" spellcheck="false" /></label>
+        <label><span>{t('mailApp.to')}</span><input bind:value={draft.to} placeholder="ben@schule.example" autocomplete="off" spellcheck="false" /></label>
         <label><span>{t('mailApp.subject')}</span><input bind:value={draft.subject} autocomplete="off" /></label>
         <label class="grow"><span>{t('mailApp.body')}</span><textarea bind:value={draft.body}></textarea></label>
         <button type="submit" disabled={!draft.to.trim() || mail?.busy}>{t('mailApp.send')}</button>
