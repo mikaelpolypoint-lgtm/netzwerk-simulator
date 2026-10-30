@@ -4,7 +4,7 @@ Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn von GitHub und st
 
 ```
 Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)──►  simulator-test.deine-domain.ch
-                                                                      └─ Node.js: server/start.cjs
+                                                                      └─ Node.js: server/start.cjs (Anwendungsstamm httpdocs/server)
 ```
 
 ## Einmalig einrichten
@@ -24,9 +24,10 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
 3. **Node.js aktivieren** (bei der Subdomain auf **Node.js**):
    - Node.js-Version: **18 oder neuer** (empfohlen: die neueste LTS)
    - Anwendungsmodus: `production`
-   - Anwendungsstamm: `/httpdocs`
+   - Anwendungsstamm: **`/httpdocs/server`** (dort liegt eine eigene `package.json` ohne Abhängigkeiten; im Hauptordner würde Plesk ab Version 18.0.81 wegen Vite eine «statische» App erkennen und den Node-Server nicht starten)
    - Dokumentstamm: `/httpdocs/server/public` (absichtlich leer, so ist der Quellcode nicht direkt erreichbar)
-   - Anwendungsstartdatei: `server/start.cjs`
+   - Anwendungsstartdatei: `start.cjs`
+   - Zeigt das Dashboard danach als Anwendungstyp «Statisch (Vite)», Node.js einmal deaktivieren und mit diesen Werten wieder aktivieren, damit Plesk neu erkennt.
    - **Benutzerdefinierte Umgebungsvariablen**:
      | Name | Wert | Zweck |
      |---|---|---|
@@ -65,10 +66,12 @@ Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Ber
 
 ## Fehlersuche
 
+- **Dashboard zeigt «Anwendungstyp: Statisch (Vite)», Status inaktiv:** Plesk hat die `package.json` im Hauptordner gelesen und hält das Projekt für eine statische Vite-Seite. Anwendungsstamm auf `/httpdocs/server` und Startdatei auf `start.cjs` stellen (siehe oben), Node.js deaktivieren und wieder aktivieren.
+
 - **Konsole meldet `…/src/main.ts` mit falschem MIME-Typ:** Der Webserver liefert die Quelldatei `index.html` aus dem Repository-Ordner aus statt der Node-App. Der **Dokumentstamm** steht falsch (meist auf `/httpdocs`). Unter *Node.js* den Dokumentstamm auf `/httpdocs/server/public` setzen und *App neu starten*. Wichtig auch für den Datenschutz: Mit `/httpdocs` als Dokumentstamm wären Quellcode und Datenordner direkt abrufbar. Der Server legt im Datenordner deshalb zusätzlich eine `.htaccess` an, die jeden Zugriff verbietet.
 
 - **Weisse Seite oder «Wird geladen …» bleibt stehen:** Das Programm startet im Browser nicht. Browser-Konsole öffnen (F12). Steht dort «Refused to execute … Content-Security-Policy», setzt das Hosting eine eigene, strengere Richtlinie. Der Node-Server liefert Skripte und Stile deshalb als eigene Dateien unter `/assets/…` aus (keine Inline-Skripte), damit die Seite auch dann läuft. Eine zusätzliche Richtlinie unter *Apache & nginx-Einstellungen* sollte trotzdem entfernt werden.
-- **`/healthz` antwortet nicht mit `ok`:** Die Node.js-App läuft nicht. Unter *Node.js* Startdatei `server/start.cjs`, Anwendungsstamm `/httpdocs` und Dokumentstamm `/httpdocs/server/public` prüfen, dann *App neu starten*; Fehler stehen unter *Protokolle anzeigen*.
+- **`/healthz` antwortet nicht mit `ok`:** Die Node.js-App läuft nicht. Unter *Node.js* Anwendungsstamm `/httpdocs/server`, Startdatei `start.cjs` und Dokumentstamm `/httpdocs/server/public` prüfen, dann *App neu starten*; Fehler stehen unter *Protokolle anzeigen*.
 - **Alter Stand:** *Git → Pull Updates*, danach *App neu starten*.
 
 ## Ablauf im Alltag
