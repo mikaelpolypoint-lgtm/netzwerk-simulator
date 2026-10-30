@@ -15,11 +15,11 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
    - URL: `https://github.com/vonam-git/netzwerk-simulator.git`
      (bei einem privaten Repository die SSH-URL `git@github.com:vonam-git/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
    - Bereitstellungsmodus: **Automatisch**
-   - Serverpfad: `/httpdocs`
+   - Serverpfad: **`/httpdocs`** (nicht der Dokumentstamm `/httpdocs/server/public`: sonst landet das ganze Repository im öffentlichen Ordner)
    - Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
    - Unter **Zusätzliche Bereitstellungsaktionen** eintragen, damit der Server nach jedem Pull neu startet:
      ```
-     mkdir -p tmp && touch tmp/restart.txt
+     mkdir -p server/tmp && touch server/tmp/restart.txt
      ```
 3. **Node.js aktivieren** (bei der Subdomain auf **Node.js**):
    - Node.js-Version: **18 oder neuer** (empfohlen: die neueste LTS)
@@ -65,6 +65,8 @@ In Plesk unter *Git → Repository-Einstellungen* steht eine **Webhook-URL**. Di
 Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Bereitstellungsaktion eingetragen ist, auf **App neu starten**).
 
 ## Fehlersuche
+
+- **Quelldateien sind öffentlich abrufbar oder `/` zeigt nicht den Simulator:** Unter *Git* prüfen, dass der **Serverpfad** `/httpdocs` ist. Steht dort `/httpdocs/server/public`, wird das Repository in den öffentlichen Ordner kopiert. Korrigieren, die Dateien unter `httpdocs/server/public` ausser `README.txt` löschen, *Pull Updates*, *App neu starten*.
 
 - **Dashboard zeigt «Anwendungstyp: Statisch (Vite)», Status inaktiv:** Plesk hat die `package.json` im Hauptordner gelesen und hält das Projekt für eine statische Vite-Seite. Anwendungsstamm auf `/httpdocs/server` und Startdatei auf `start.cjs` stellen (siehe oben), Node.js deaktivieren und wieder aktivieren.
 
