@@ -76,14 +76,14 @@ const serverPreset =
     }
     if (services.includes('dns')) {
       next = step(next, (t) => setDnsServerEnabled(t, id, true));
-      next = step(next, (t) => addDnsRecord(t, id, { name: 'www.firma.ch', type: 'A', value: services.includes('web') ? ip : '192.168.1.80', ttl: 300 }));
+      next = step(next, (t) => addDnsRecord(t, id, { name: 'www.firma.example', type: 'A', value: services.includes('web') ? ip : '192.168.1.80', ttl: 300 }));
     }
     if (services.includes('web')) {
       const name = next.devices.find((d) => d.id === id)?.name ?? '';
       next = step(next, (t) => setWebServerEnabled(t, id, true, [{ path: '/index.html', content: t_defaultPage(name) }]));
     }
     if (services.includes('mail')) {
-      next = step(next, (t) => setMailServerEnabled(t, id, true, 'firma.ch'));
+      next = step(next, (t) => setMailServerEnabled(t, id, true, 'firma.example'));
       next = step(next, (t) => addMailbox(t, id, { user: 'info', password: 'geheim' }));
     }
     return next;

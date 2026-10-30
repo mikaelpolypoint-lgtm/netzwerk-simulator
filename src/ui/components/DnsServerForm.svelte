@@ -72,7 +72,7 @@
         <span>{record.type === 'A' ? t('config.ip') : t('dnsServer.mailHost')}</span>
         <input
           bind:value={record.value}
-          placeholder={record.type === 'A' ? '192.168.0.3' : 'mail.schule.ch'}
+          placeholder={record.type === 'A' ? '192.168.0.3' : 'mail.schule.example'}
           autocomplete="off"
           spellcheck="false"
           aria-invalid={error?.field === 'value'}

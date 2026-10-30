@@ -60,8 +60,8 @@ describe('HTTP-Nachrichten', () => {
 
 describe('DNS-Namen', () => {
   it('prüft und vereinheitlicht Hostnamen', () => {
-    expect(normalizeName(' WWW.Schule.CH. ')).toBe('www.schule.ch');
-    expect(isValidName('webserver-1.schule.ch')).toBe(true);
+    expect(normalizeName(' WWW.Schule.EXAMPLE. ')).toBe('www.schule.example');
+    expect(isValidName('webserver-1.schule.example')).toBe(true);
     expect(isValidName('-web')).toBe(false);
     expect(isValidName('web server')).toBe(false);
     expect(isValidName('')).toBe(false);

@@ -951,7 +951,7 @@ export function removeWebFile(t: Topology, id: string, path: string): Result<Top
 
 // --- E-Mail ------------------------------------------------------------------
 
-export function setMailServerEnabled(t: Topology, id: string, enabled: boolean, domain = 'schule.ch'): Result<Topology> {
+export function setMailServerEnabled(t: Topology, id: string, enabled: boolean, domain = 'schule.example'): Result<Topology> {
   const device = serverDevice(t, id);
   if (!device.ok) return device;
   if (enabled === !!device.value.mailServer) return ok(t);

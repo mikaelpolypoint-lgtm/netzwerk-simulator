@@ -4,7 +4,7 @@ import { parseIp } from './ipv4';
 export const DEFAULT_DNS_TTL = 300;
 export const MAX_DNS_TTL = 86_400;
 
-/** Kleinbuchstaben, ohne abschliessenden Punkt: "WWW.Schule.CH." → "www.schule.ch". */
+/** Kleinbuchstaben, ohne abschliessenden Punkt: "WWW.Schule.EXAMPLE." → "www.schule.example". */
 export function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\.$/, '');
 }

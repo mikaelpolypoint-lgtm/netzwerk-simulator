@@ -92,16 +92,16 @@ describe('Prüfbausteine', () => {
     net.dnsRecord(server, 'www', 'A', '192.168.0.2');
     net.dnsRecord(server, 'mail', 'A', '192.168.0.2');
     net.webServer(server, { '/index.html': 'hallo' });
-    net.mailServer(server, 'schule.ch', ['anna', 'ben']);
+    net.mailServer(server, 'schule.example', ['anna', 'ben']);
     const client = net.dhcpClient('Notebook');
-    net.mailAccount(client, 'anna@schule.ch', 'mail');
+    net.mailAccount(client, 'anna@schule.example', 'mail');
     net.link(server, client);
     const t = net.topology;
     expect(evaluateGoal(t, goal({ type: 'dhcpLease', device: 'Notebook' })).passed).toBe(true);
     expect(evaluateGoal(t, goal({ type: 'http', from: 'Notebook', url: 'http://www/' })).passed).toBe(true);
     expect(evaluateGoal(t, goal({ type: 'http', from: 'Notebook', url: 'http://www/fehlt.html', status: 404 })).passed).toBe(true);
-    expect(evaluateGoal(t, goal({ type: 'mail', from: 'Notebook', to: 'ben@schule.ch' })).passed).toBe(true);
-    expect(evaluateGoal(t, goal({ type: 'mail', from: 'Notebook', to: 'niemand@schule.ch' })).passed).toBe(false);
+    expect(evaluateGoal(t, goal({ type: 'mail', from: 'Notebook', to: 'ben@schule.example' })).passed).toBe(true);
+    expect(evaluateGoal(t, goal({ type: 'mail', from: 'Notebook', to: 'niemand@schule.example' })).passed).toBe(false);
     expect(evaluateGoal(t, goal({ type: 'ping', from: 'Server', to: 'Notebook' })).passed).toBe(true);
   });
 

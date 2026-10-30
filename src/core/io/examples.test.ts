@@ -24,10 +24,10 @@ describe('Beispielprojekte', () => {
     expect(codes.filter((c) => c === 'ping.reply')).toHaveLength(4);
   });
 
-  it('web.json: Notebook bezieht per DHCP eine Adresse und ruft www.schule.ch über den Router ab', () => {
+  it('web.json: Notebook bezieht per DHCP eine Adresse und ruft www.schule.example über den Router ab', () => {
     const sim = new Simulation(load('web.json'));
     sim.runUntil(2000);
-    sim.browse('d1', 'http://www.schule.ch/stundenplan.html');
+    sim.browse('d1', 'http://www.schule.example/stundenplan.html');
     sim.runUntil(4000);
     expect(sim.getDeviceState('d1').browser).toMatchObject({ status: 'done', response: { status: 200 } });
     expect(sim.getDeviceState('d1').browser?.response?.body).toContain('Stundenplan');
@@ -35,11 +35,11 @@ describe('Beispielprojekte', () => {
 
   it('mail.json: Anna schreibt Ben, Ben holt per IMAP ab', () => {
     const sim = new Simulation(load('mail.json'));
-    sim.sendMail('d3', { to: ['ben@schule.ch'], subject: 'Hallo', body: 'Test' });
+    sim.sendMail('d3', { to: ['ben@schule.example'], subject: 'Hallo', body: 'Test' });
     sim.runUntil(2000);
     sim.fetchMail('d4');
     sim.runUntil(4000);
-    expect(sim.getDeviceState('d4').mail?.inbox).toMatchObject([{ from: 'anna@schule.ch', subject: 'Hallo' }]);
+    expect(sim.getDeviceState('d4').mail?.inbox).toMatchObject([{ from: 'anna@schule.example', subject: 'Hallo' }]);
   });
 
   it('heimnetz-nat.json: PC erreicht das Internet über NAT, Aussen erreicht das NAS über die Weiterleitung', () => {

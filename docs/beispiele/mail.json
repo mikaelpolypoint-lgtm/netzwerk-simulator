@@ -24,21 +24,21 @@
         "dnsServer": {
           "records": [
             {
-              "name": "mail.schule.ch",
+              "name": "mail.schule.example",
               "type": "A",
               "value": "192.168.0.2",
               "ttl": 300
             },
             {
-              "name": "schule.ch",
+              "name": "schule.example",
               "type": "MX",
-              "value": "mail.schule.ch",
+              "value": "mail.schule.example",
               "ttl": 300
             }
           ]
         },
         "mailServer": {
-          "domain": "schule.ch",
+          "domain": "schule.example",
           "mailboxes": [
             {
               "user": "anna",
@@ -112,10 +112,10 @@
         ],
         "dns": "192.168.0.2",
         "mailAccount": {
-          "address": "anna@schule.ch",
+          "address": "anna@schule.example",
           "password": "geheim",
-          "smtpServer": "mail.schule.ch",
-          "incomingServer": "mail.schule.ch",
+          "smtpServer": "mail.schule.example",
+          "incomingServer": "mail.schule.example",
           "protocol": "pop3"
         }
       },
@@ -137,10 +137,10 @@
         ],
         "dns": "192.168.0.2",
         "mailAccount": {
-          "address": "ben@schule.ch",
+          "address": "ben@schule.example",
           "password": "geheim",
-          "smtpServer": "mail.schule.ch",
-          "incomingServer": "mail.schule.ch",
+          "smtpServer": "mail.schule.example",
+          "incomingServer": "mail.schule.example",
           "protocol": "imap"
         }
       }
