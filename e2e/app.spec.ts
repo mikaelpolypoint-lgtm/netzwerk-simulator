@@ -31,6 +31,19 @@ test('lädt ohne eine einzige Netzwerkanfrage ausser der Seite selbst', async ({
   expect(requests).toEqual(['http://localhost:4174/']);
 });
 
+test('Startmeldung verschwindet, sobald das Programm läuft', async ({ page }) => {
+  await expect(page.getByRole('menubar')).toBeVisible();
+  await expect(page.locator('#boot')).toHaveCount(0);
+});
+
+test('zeigt statt einer weissen Seite einen Hinweis, wenn Skripte blockiert sind', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto('/');
+  await expect(page.locator('#boot')).toContainText('startet das Programm nicht');
+  await context.close();
+});
+
 test('startet leer im Entwurf', async ({ page }) => {
   await expect(page.getByRole('radio', { name: 'Entwurf' })).toBeChecked();
   await expect(page.getByRole('application').getByRole('button')).toHaveCount(0);

@@ -4,7 +4,7 @@ Der Branch `develop` ist der Entwicklungsstand. Plesk holt ihn von GitHub und st
 
 ```
 Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)──►  simulator-test.deine-domain.ch
-                                                                      └─ Node.js: server/start.cjs
+                                                                      └─ Node.js: server/start.cjs (Anwendungsstamm httpdocs/server)
 ```
 
 ## Einmalig einrichten
@@ -15,18 +15,19 @@ Rechner (du)  ──git push──►  GitHub: develop  ──Plesk Git (Pull)�
    - URL: `https://github.com/vonam-git/netzwerk-simulator.git`
      (bei einem privaten Repository die SSH-URL `git@github.com:vonam-git/netzwerk-simulator.git` und den von Plesk angezeigten SSH-Schlüssel auf GitHub unter *Settings → Deploy keys* eintragen, nur Lesezugriff)
    - Bereitstellungsmodus: **Automatisch**
-   - Serverpfad: `/httpdocs`
+   - Serverpfad: **`/httpdocs`** (nicht der Dokumentstamm `/httpdocs/server/public`: sonst landet das ganze Repository im öffentlichen Ordner)
    - Nach dem Anlegen in den Git-Einstellungen den **Branch auf `develop`** stellen.
    - Unter **Zusätzliche Bereitstellungsaktionen** eintragen, damit der Server nach jedem Pull neu startet:
      ```
-     mkdir -p tmp && touch tmp/restart.txt
+     mkdir -p server/tmp && touch server/tmp/restart.txt
      ```
 3. **Node.js aktivieren** (bei der Subdomain auf **Node.js**):
    - Node.js-Version: **18 oder neuer** (empfohlen: die neueste LTS)
    - Anwendungsmodus: `production`
-   - Anwendungsstamm: `/httpdocs`
+   - Anwendungsstamm: **`/httpdocs/server`** (dort liegt eine eigene `package.json` ohne Abhängigkeiten; im Hauptordner würde Plesk ab Version 18.0.81 wegen Vite eine «statische» App erkennen und den Node-Server nicht starten)
    - Dokumentstamm: `/httpdocs/server/public` (absichtlich leer, so ist der Quellcode nicht direkt erreichbar)
-   - Anwendungsstartdatei: `server/start.cjs`
+   - Anwendungsstartdatei: `start.cjs`
+   - Zeigt das Dashboard danach als Anwendungstyp «Statisch (Vite)», Node.js einmal deaktivieren und mit diesen Werten wieder aktivieren, damit Plesk neu erkennt.
    - **Benutzerdefinierte Umgebungsvariablen**:
      | Name | Wert | Zweck |
      |---|---|---|
@@ -62,6 +63,18 @@ In Plesk unter *Git → Repository-Einstellungen* steht eine **Webhook-URL**. Di
 - Events: *Just the push event*
 
 Ohne Webhook in Plesk einfach auf **Pull Updates** klicken (und, falls keine Bereitstellungsaktion eingetragen ist, auf **App neu starten**).
+
+## Fehlersuche
+
+- **Quelldateien sind öffentlich abrufbar oder `/` zeigt nicht den Simulator:** Unter *Git* prüfen, dass der **Serverpfad** `/httpdocs` ist. Steht dort `/httpdocs/server/public`, wird das Repository in den öffentlichen Ordner kopiert. Korrigieren, die Dateien unter `httpdocs/server/public` ausser `README.txt` löschen, *Pull Updates*, *App neu starten*.
+
+- **Dashboard zeigt «Anwendungstyp: Statisch (Vite)», Status inaktiv:** Plesk hat die `package.json` im Hauptordner gelesen und hält das Projekt für eine statische Vite-Seite. Anwendungsstamm auf `/httpdocs/server` und Startdatei auf `start.cjs` stellen (siehe oben), Node.js deaktivieren und wieder aktivieren.
+
+- **Konsole meldet `…/src/main.ts` mit falschem MIME-Typ** (ältere Stände): Seit v0.4 heisst die Quell-HTML `dev.html`, damit ein Webserver sie nie als Startseite ausliefert. Tritt die Meldung trotzdem auf: Der Webserver liefert die Quelldatei `index.html` aus dem Repository-Ordner aus statt der Node-App. Der **Dokumentstamm** steht falsch (meist auf `/httpdocs`). Unter *Node.js* den Dokumentstamm auf `/httpdocs/server/public` setzen und *App neu starten*. Wichtig auch für den Datenschutz: Mit `/httpdocs` als Dokumentstamm wären Quellcode und Datenordner direkt abrufbar. Der Server legt im Datenordner deshalb zusätzlich eine `.htaccess` an, die jeden Zugriff verbietet.
+
+- **Weisse Seite oder «Wird geladen …» bleibt stehen:** Das Programm startet im Browser nicht. Browser-Konsole öffnen (F12). Steht dort «Refused to execute … Content-Security-Policy», setzt das Hosting eine eigene, strengere Richtlinie. Der Node-Server liefert Skripte und Stile deshalb als eigene Dateien unter `/assets/…` aus (keine Inline-Skripte), damit die Seite auch dann läuft. Eine zusätzliche Richtlinie unter *Apache & nginx-Einstellungen* sollte trotzdem entfernt werden.
+- **`/healthz` antwortet nicht mit `ok`:** Die Node.js-App läuft nicht. Unter *Node.js* Anwendungsstamm `/httpdocs/server`, Startdatei `start.cjs` und Dokumentstamm `/httpdocs/server/public` prüfen, dann *App neu starten*; Fehler stehen unter *Protokolle anzeigen*.
+- **Alter Stand:** *Git → Pull Updates*, danach *App neu starten*.
 
 ## Ablauf im Alltag
 

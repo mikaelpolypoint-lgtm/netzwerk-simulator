@@ -98,7 +98,7 @@ npm ci
 npm run dev
 ```
 
-`npm run dev` startet den Simulator unter <http://localhost:5173> und lädt Änderungen sofort neu.
+`npm run dev` startet den Simulator unter <http://localhost:5173/dev.html> und lädt Änderungen sofort neu.
 
 | Befehl | Zweck |
 |---|---|

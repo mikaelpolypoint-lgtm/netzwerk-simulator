@@ -50,7 +50,7 @@ Voraussetzung: Node.js 20 oder neuer.
 
 ```bash
 npm ci
-npm run dev      # Entwicklungsserver auf http://localhost:5173
+npm run dev      # Entwicklungsserver auf http://localhost:5173/dev.html
 npm test         # Tests des Simulationskerns
 npm run test:server    # Tests des Node.js-Servers (Webversion)
 npm run server   # Webversion lokal auf http://localhost:3000 (ADMIN_PASSWORD setzen für die Admin-Konsole)
